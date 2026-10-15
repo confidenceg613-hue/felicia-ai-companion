@@ -32,12 +32,22 @@ const schema = defineSchema(
       role: v.optional(roleValidator), // role of the user. do not remove
     }).index("email", ["email"]), // index for the email. do not remove or modify
 
-    // add other tables here
+    // Every message exchanged with Felicia, per user.
+    messages: defineTable({
+      userId: v.id("users"),
+      role: v.union(v.literal("user"), v.literal("felicia")),
+      content: v.string(),
+      createdAt: v.number(),
+    }).index("by_user", ["userId"]),
 
-    // tableName: defineTable({
-    //   ...
-    //   // table fields
-    // }).index("by_field", ["field"])
+    // Photos Felicia has generated for a user, stored in Convex file storage.
+    photos: defineTable({
+      userId: v.id("users"),
+      storageId: v.id("_storage"),
+      prompt: v.string(),
+      scene: v.string(),
+      createdAt: v.number(),
+    }).index("by_user", ["userId"]),
   },
   {
     schemaValidation: false,
