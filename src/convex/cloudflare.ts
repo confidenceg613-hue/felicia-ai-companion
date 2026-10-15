@@ -17,6 +17,85 @@ import { internalAction } from "./_generated/server";
 const CHAT_MODEL = "@cf/meta/llama-3.1-8b-instruct";
 const IMAGE_MODEL = "@cf/black-forest-labs/flux-1-schnell";
 
+/**
+ * Felicia's speaking voice. Aura's feminine English speakers include asteria,
+ * athena, luna, hera and stella.
+ */
+export const FELICIA_VOICE = "asteria";
+
+/**
+ * Voice models in preference order.
+ *
+ * Aura-1 is the better voice but costs ~1,364 neurons per 1,000 characters;
+ * MeloTTS is roughly a hundred times cheaper at ~18.6 neurons per audio minute.
+ * Both share the same daily neuron budget as her photos, so the cheaper model is
+ * a genuine fallback rather than a token one.
+ *
+ * Neither model's REST response shape is documented, so the response is parsed
+ * defensively below.
+ */
+const TTS_MODELS: Array<{
+  model: string;
+  mimeType: string;
+  body: (text: string) => unknown;
+}> = [
+  {
+    model: "@cf/deepgram/aura-1",
+    mimeType: "audio/mpeg",
+    body: (text) => ({ text, speaker: FELICIA_VOICE }),
+  },
+  {
+    model: "@cf/myshell-ai/melotts",
+    mimeType: "audio/mpeg",
+    body: (text) => ({ prompt: text, lang: "en" }),
+  },
+];
+
+/** Paths where a base64 audio payload might live, most likely first. */
+const BASE64_AUDIO_PATHS: string[][] = [
+  ["result", "audio"],
+  ["result", "audio_base64"],
+  ["result", "audioBase64"],
+  ["result", "data"],
+  ["result", "output"],
+  ["result", "mp3"],
+  ["audio"],
+  ["data"],
+];
+
+/** Dig a base64 audio string out of an unknown JSON envelope. */
+function pickBase64Audio(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const root = payload as Record<string, unknown>;
+
+  for (const path of BASE64_AUDIO_PATHS) {
+    let node: unknown = root;
+    for (const key of path) {
+      if (!node || typeof node !== "object") {
+        node = undefined;
+        break;
+      }
+      node = (node as Record<string, unknown>)[key];
+    }
+    if (typeof node === "string" && node.length > 100) return node;
+  }
+
+  // Last resort: a long, unbroken string sitting under `result`.
+  const result = root.result;
+  if (result && typeof result === "object") {
+    for (const value of Object.values(result as Record<string, unknown>)) {
+      if (
+        typeof value === "string" &&
+        value.length > 200 &&
+        !/\s/.test(value.slice(0, 120))
+      ) {
+        return value;
+      }
+    }
+  }
+  return null;
+}
+
 const CONFIG_HINT =
   "Cloudflare Workers AI is not connected yet. Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in your project's Keys/API keys settings, then try again.";
 
@@ -174,5 +253,91 @@ export const generateImage = internalAction({
       new Blob([bytesView], { type: mimeType }),
     );
     return { storageId, mimeType };
+  },
+});
+
+/**
+ * Render text as speech and store it in Convex file storage.
+ *
+ * Walks the voice ladder until one model answers with usable audio; if every
+ * model fails the error lists what each one said, so a quota problem reads
+ * differently from a malformed request.
+ */
+export const speak = internalAction({
+  args: { text: v.string() },
+  returns: v.object({
+    storageId: v.id("_storage"),
+    mimeType: v.string(),
+    model: v.string(),
+  }),
+  handler: async (
+    ctx,
+    { text },
+  ): Promise<{ storageId: Id<"_storage">; mimeType: string; model: string }> => {
+    const { token, accountId } = credentials();
+    const spoken = text.trim().slice(0, 600);
+    if (!spoken) throw new Error("There is nothing to say.");
+
+    const failures: string[] = [];
+
+    for (const candidate of TTS_MODELS) {
+      let response: Response;
+      try {
+        response = await runModel(
+          accountId,
+          token,
+          candidate.model,
+          candidate.body(spoken),
+        );
+      } catch (error) {
+        failures.push(
+          `${candidate.model}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        continue;
+      }
+
+      if (!response.ok) {
+        failures.push(
+          `${candidate.model}: ${describeFailure(response.status, await response.text())}`,
+        );
+        continue;
+      }
+
+      const contentType = response.headers.get("content-type") ?? "";
+      let bytes: Buffer;
+      let mimeType: string;
+
+      try {
+        if (contentType.startsWith("audio/")) {
+          mimeType = contentType.split(";")[0]?.trim() || candidate.mimeType;
+          bytes = Buffer.from(await response.arrayBuffer());
+        } else {
+          const base64 = pickBase64Audio(await response.json());
+          if (!base64) {
+            failures.push(`${candidate.model}: unrecognised audio response`);
+            continue;
+          }
+          mimeType = candidate.mimeType;
+          bytes = Buffer.from(base64, "base64");
+        }
+      } catch (error) {
+        failures.push(
+          `${candidate.model}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        continue;
+      }
+
+      if (bytes.byteLength === 0) {
+        failures.push(`${candidate.model}: returned empty audio`);
+        continue;
+      }
+
+      const storageId = await ctx.storage.store(
+        new Blob([new Uint8Array(bytes)], { type: mimeType }),
+      );
+      return { storageId, mimeType, model: candidate.model };
+    }
+
+    throw new Error(`Felicia could not speak: ${failures.join(" | ")}`);
   },
 });

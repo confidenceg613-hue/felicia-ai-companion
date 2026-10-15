@@ -1,3 +1,4 @@
+import { FeliciaCall, type CallGreeting } from "@/components/FeliciaCall";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,9 +11,12 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import { useAuth } from "@/hooks/use-auth";
 import { FELICIA } from "@/lib/felicia";
+import { DEVELOP_MS, preloadImage } from "@/lib/photo";
 import { cn } from "@/lib/utils";
+import { playAudioUrl, sleep, speakWithBrowser } from "@/lib/voice";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { motion } from "framer-motion";
 import {
@@ -20,9 +24,11 @@ import {
   ImagePlus,
   Loader2,
   LogOut,
+  Phone,
   Send,
   Sparkles,
   Trash2,
+  Volume2,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
@@ -34,27 +40,6 @@ const OPENERS = [
   "Bad day. Tell me something good.",
   "What's playing in the studio?",
 ];
-
-/**
- * How long a photo develops before it is revealed. Felicia's picture is held back
- * until it has finished generating, been fully decoded by the browser, and is at
- * least this old — so nothing ever appears half-rendered.
- */
-const DEVELOP_MS = 6000;
-
-function sleep(ms: number) {
-  return new Promise<void>((resolve) => setTimeout(resolve, ms));
-}
-
-/** Resolve once the browser has decoded the image, not merely downloaded it. */
-function preloadImage(url: string) {
-  return new Promise<void>((resolve) => {
-    const image = new Image();
-    image.onload = () => resolve();
-    image.onerror = () => resolve();
-    image.src = url;
-  });
-}
 
 function timeLabel(ms: number) {
   return new Date(ms).toLocaleTimeString([], {
@@ -73,6 +58,8 @@ export default function Dashboard() {
   const clearConversation = useMutation(api.felicia.clearConversation);
   const sendMessage = useAction(api.felicia.sendMessage);
   const generatePhoto = useAction(api.felicia.generatePhoto);
+  const speakMessage = useAction(api.felicia.speakMessage);
+  const startCall = useAction(api.felicia.startCall);
 
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState<string | null>(null);
@@ -80,6 +67,10 @@ export default function Dashboard() {
   const [developing, setDeveloping] = useState(false);
   const [hiddenCount, setHiddenCount] = useState<number | null>(null);
   const [lightbox, setLightbox] = useState<string | null>(null);
+  const [callOpen, setCallOpen] = useState(false);
+  const [greeting, setGreeting] = useState<CallGreeting | null>(null);
+  const [callError, setCallError] = useState<string | null>(null);
+  const [speakingId, setSpeakingId] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -129,6 +120,48 @@ export default function Dashboard() {
     } finally {
       setDeveloping(false);
       setHiddenCount(null);
+    }
+  }
+
+  /**
+   * Open the call and ask her to pick up.
+   *
+   * The greeting is fetched here rather than inside the call's effect, because
+   * StrictMode runs effects twice — that would ring her twice and leave two
+   * greetings in the transcript. Click handlers only run once.
+   */
+  async function handleStartCall() {
+    setGreeting(null);
+    setCallError(null);
+    setCallOpen(true);
+    try {
+      setGreeting(await startCall({}));
+    } catch (error) {
+      setCallError(
+        error instanceof Error
+          ? error.message
+          : "Felicia didn't pick up. Try again in a moment.",
+      );
+    }
+  }
+
+  /** Play one of her lines aloud, using her own voice when it is available. */
+  async function playMessage(messageId: Id<"messages">, content: string) {
+    if (speakingId) return;
+    setSpeakingId(messageId);
+    try {
+      const { url } = await speakMessage({ messageId });
+      let played = false;
+      if (url) played = await playAudioUrl(url);
+      if (!played) await speakWithBrowser(content);
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Felicia couldn't speak just now.",
+      );
+    } finally {
+      setSpeakingId(null);
     }
   }
 
@@ -202,6 +235,14 @@ export default function Dashboard() {
           </div>
 
           <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              className="gap-2 shadow-lg shadow-primary/20"
+              onClick={() => void handleStartCall()}
+            >
+              <Phone className="size-4" />
+              Call her
+            </Button>
             <Button
               variant="ghost"
               size="sm"
@@ -299,16 +340,36 @@ export default function Dashboard() {
                     )}
                   >
                     <p className="whitespace-pre-wrap">{message.content}</p>
-                    <p
-                      className={cn(
-                        "mt-1 text-[10px]",
-                        message.role === "user"
-                          ? "text-primary-foreground/60"
-                          : "text-muted-foreground/70",
+                    <div className="mt-1 flex items-center gap-2">
+                      <p
+                        className={cn(
+                          "text-[10px]",
+                          message.role === "user"
+                            ? "text-primary-foreground/60"
+                            : "text-muted-foreground/70",
+                        )}
+                      >
+                        {timeLabel(message.createdAt)}
+                      </p>
+                      {message.role === "felicia" && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void playMessage(message._id, message.content)
+                          }
+                          disabled={speakingId !== null}
+                          title="Hear this in her voice"
+                          className="flex items-center gap-1 text-[10px] text-muted-foreground/70 transition-colors hover:text-primary disabled:opacity-50"
+                        >
+                          {speakingId === message._id ? (
+                            <Loader2 className="size-3 animate-spin" />
+                          ) : (
+                            <Volume2 className="size-3" />
+                          )}
+                          play
+                        </button>
                       )}
-                    >
-                      {timeLabel(message.createdAt)}
-                    </p>
+                    </div>
                   </div>
                 </motion.div>
               ))}
@@ -514,6 +575,14 @@ export default function Dashboard() {
           )}
         </DialogContent>
       </Dialog>
+
+      {callOpen && (
+        <FeliciaCall
+          greeting={greeting}
+          initialNote={callError}
+          onClose={() => setCallOpen(false)}
+        />
+      )}
     </main>
   );
 }

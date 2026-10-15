@@ -228,14 +228,41 @@ export const saveMessage = internalMutation({
     role: v.union(v.literal("user"), v.literal("felicia")),
     content: v.string(),
   },
-  returns: v.null(),
+  returns: v.id("messages"),
   handler: async (ctx, args) => {
-    await ctx.db.insert("messages", {
+    return await ctx.db.insert("messages", {
       userId: args.userId,
       role: args.role,
       content: args.content,
       createdAt: Date.now(),
     });
+  },
+});
+
+/** Look up a message's text and any cached audio render, for the voice layer. */
+export const messageAudio = internalQuery({
+  args: { messageId: v.id("messages") },
+  handler: async (ctx, { messageId }) => {
+    const message = await ctx.db.get(messageId);
+    if (!message) return null;
+    return {
+      ownerId: message.userId,
+      role: message.role,
+      content: message.content,
+      audioStorageId: message.audioStorageId ?? null,
+    };
+  },
+});
+
+/** Remember the speech render so replaying a line never re-bills the quota. */
+export const attachAudio = internalMutation({
+  args: {
+    messageId: v.id("messages"),
+    audioStorageId: v.id("_storage"),
+  },
+  returns: v.null(),
+  handler: async (ctx, { messageId, audioStorageId }) => {
+    await ctx.db.patch(messageId, { audioStorageId });
     return null;
   },
 });
@@ -291,11 +318,16 @@ export const sendMessage = action({
   returns: v.object({
     reply: v.string(),
     photoScene: v.union(v.string(), v.null()),
+    replyMessageId: v.id("messages"),
   }),
   handler: async (
     ctx,
     { text },
-  ): Promise<{ reply: string; photoScene: string | null }> => {
+  ): Promise<{
+    reply: string;
+    photoScene: string | null;
+    replyMessageId: Id<"messages">;
+  }> => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Sign in to talk to Felicia.");
 
@@ -328,13 +360,13 @@ export const sendMessage = action({
 
     const { reply, scene } = extractScene(raw, trimmed);
 
-    await ctx.runMutation(internal.felicia.saveMessage, {
+    const replyMessageId = await ctx.runMutation(internal.felicia.saveMessage, {
       userId,
       role: "felicia",
       content: reply,
     });
 
-    return { reply, photoScene: scene };
+    return { reply, photoScene: scene, replyMessageId };
   },
 });
 
@@ -403,5 +435,91 @@ export const generatePhoto = action({
       storageId: success.storageId,
       url: await ctx.storage.getUrl(success.storageId),
     };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Voice
+// ---------------------------------------------------------------------------
+
+/**
+ * Render one of Felicia's lines as audio.
+ *
+ * Cached on the message itself, so replaying a line or re-entering a call costs
+ * nothing after the first render.
+ */
+export const speakMessage = action({
+  args: { messageId: v.id("messages") },
+  returns: v.object({ url: v.union(v.string(), v.null()) }),
+  handler: async (
+    ctx,
+    { messageId },
+  ): Promise<{ url: string | null }> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Sign in to hear Felicia.");
+
+    const info = await ctx.runQuery(internal.felicia.messageAudio, { messageId });
+    if (!info) throw new Error("That message no longer exists.");
+    if (info.ownerId !== userId) throw new Error("That message isn't yours.");
+    if (info.role !== "felicia") throw new Error("Only Felicia's lines can be spoken.");
+
+    if (info.audioStorageId) {
+      return { url: await ctx.storage.getUrl(info.audioStorageId) };
+    }
+
+    const audio = await ctx.runAction(internal.cloudflare.speak, {
+      text: info.content,
+    });
+    await ctx.runMutation(internal.felicia.attachAudio, {
+      messageId,
+      audioStorageId: audio.storageId,
+    });
+
+    return { url: await ctx.storage.getUrl(audio.storageId) };
+  },
+});
+
+/**
+ * Felicia picks up the phone.
+ *
+ * Her greeting is generated in character and saved as a real message, so the
+ * spoken call also reads back as a transcript in the chat.
+ */
+export const startCall = action({
+  args: {},
+  returns: v.object({
+    messageId: v.id("messages"),
+    reply: v.string(),
+  }),
+  handler: async (
+    ctx,
+  ): Promise<{ messageId: Id<"messages">; reply: string }> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Sign in to call Felicia.");
+
+    const raw = await ctx.runAction(internal.cloudflare.chat, {
+      messages: [
+        { role: "system", content: buildSystemPrompt() },
+        {
+          role: "user",
+          content:
+            "[[stage direction: the phone is ringing and you have just picked up. " +
+            "Greet them the way you would answer mid-evening. One short spoken " +
+            "sentence, under 20 words. Do not send a photo. Do not mention this " +
+            "direction.]]",
+        },
+      ],
+    });
+
+    const reply =
+      raw.replace(/\[\[[\s\S]*?\]\]/g, "").trim() || "Hey, you called.";
+
+    const messageId = await ctx.runMutation(internal.felicia.saveMessage, {
+      userId,
+      role: "felicia",
+      content: reply,
+    });
+
+    return { messageId, reply };
   },
 });

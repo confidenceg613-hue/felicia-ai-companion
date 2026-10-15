@@ -38,6 +38,9 @@ const schema = defineSchema(
       role: v.union(v.literal("user"), v.literal("felicia")),
       content: v.string(),
       createdAt: v.number(),
+      // Cached text-to-speech render of this line. Speaking the same message
+      // twice then costs nothing, which matters on a free neuron budget.
+      audioStorageId: v.optional(v.id("_storage")),
     }).index("by_user", ["userId"]),
 
     // Photos Felicia has generated for a user, stored in Convex file storage.
