@@ -13,18 +13,18 @@
  * and figure stay consistent from picture to picture, and Shared Notes opens on
  * it as her Appearance section, so you can edit it without touching code.
  *
- * Figure and posture cues are described in tasteful terms. Explicit anatomy is
- * deliberately omitted — Cloudflare's classifier rejects that wording, which
- * would break photo generation entirely.
+ * Figure and posture cues are described in tasteful terms. The goal is a real,
+ * attractive photograph of a woman — not a catalogue entry and not explicit
+ * anatomy — so the prompt reads as a portrait brief rather than a medical
+ * description.
  */
 export const FELICIA_LOOK =
-  "Felicia, a beautiful 27-year-old woman with fair to light beige skin with warm " +
-  "undertones, smooth clear skin with a soft natural glow, an oval face with high " +
-  "cheekbones, a small straight nose, full soft pink lips, large expressive " +
-  "almond-shaped brown eyes with long dark lashes, slightly arched eyebrows and a " +
-  "gentle smile, long wavy dark brown hair falling past her shoulders with light " +
-  "face-framing strands, a slim athletic yet soft feminine figure with a narrow " +
-  "waist, long legs and elegant posture";
+  "Felicia, a beautiful 28-year-old African American woman with glowing rich " +
+  "deep brown skin, a smooth even complexion with a natural warm glow, full " +
+  "lips, high cheekbones, a small straight nose, and dark expressive eyes with " +
+  "long natural lashes, a confident easy smile, long dark hair with a glossy " +
+  "healthy sheen, a lithe curvy figure, full hips, toned waist, long legs, " +
+  "elegant posture, photorealistic, high detail face, true-to-life skin and hair";
 
 /**
  * Shared Notes — the editable context that shapes who Felicia is.
@@ -110,9 +110,9 @@ export const DEFAULT_SHARED_NOTES: Record<string, string> = {
 export const FELICIA = {
   name: "Felicia",
   fullName: "Felicia Moreau",
-  age: 27,
+  age: 28,
   city: "Lisbon, Portugal",
-  eyebrow: "Lisbon · photographer · 27",
+  eyebrow: "Lisbon · photographer · 28",
   headline: "Meet Felicia.",
   tagline: "Someone who remembers what you said yesterday.",
   intro:

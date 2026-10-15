@@ -20,7 +20,7 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useAuth } from "@/hooks/use-auth";
 import { FELICIA } from "@/lib/felicia";
-import { DEVELOP_MS, sleep, preloadImage } from "@/lib/photo";
+import { DEVELOP_MS, preloadImage } from "@/lib/photo";
 import { cn } from "@/lib/utils";
 import {
   beginVoiceNote,
@@ -168,36 +168,17 @@ export default function Dashboard() {
   /**
    * Ask Felicia for a photo, then reveal it only once it is genuinely finished:
    * generated on the server, decoded by the browser, and DEVELOP_MS old.
-   */  /**
-   * Ask Felicia for a photo, then reveal it only once it is genuinely finished:
-   * generated on the server, decoded by the browser, and DEVELOP_MS old.
    */
   async function requestPhoto(scene: string) {
     if (!photosReady) return;
 
-    const startedAt = Date.now();
     setHiddenCount(allPhotos.length);
-    setDeveloping(true);      try {
+    setDeveloping(true);
+    try {
       const result = await generatePhoto({ scene });
-      // Once generation has finished and the browser has decoded the image,
-      // measure how much of the develop window is left.
-      // Agreement with the reveal animation: generation is finished and the
-      // browser has decoded the frame, so pause the composer until the
-      // DEVELOP_MS develop window has truly elapsed.
-      const develop = new Promise<void>((resolve) => {
-        const start = Date.now();
-        const left = DEVELOP_MS - (Date.now() - start);
-        if (left <= 0) {
-          resolve();
-          return;
-        }
-        const timer = setTimeout(() => {
-          clearTimeout(timer);
-          resolve();
-        }, left);
-      });
-      await develop;
-      if (result.url) await preloadImage(result.url);
+      // The Horde action already waited for the image to exist, so the only
+      // remaining gate is browser decode. Preload it once; if it has already
+      // loaded, the promise resolves immediately.
       if (result.url) await preloadImage(result.url);
     } catch (error) {
       toast.error(
@@ -266,7 +247,7 @@ export default function Dashboard() {
       setPending(null);
       setThinking(false);
       if (result.photoScene) {
-        void requestPhoto(result.photoScene);;
+        void requestPhoto(result.photoScene);
       }
     } catch (error) {
       setPending(null);
@@ -454,12 +435,15 @@ export default function Dashboard() {
       {connection && !connection.configured && (
         <div className="border-b border-primary/30 bg-primary/10 px-4 py-3 text-xs sm:px-6">
           <p className="font-medium text-primary">
-            Cloudflare Workers AI isn't connected
+            AI Horde isn't connected
           </p>
           <p className="mt-0.5 text-muted-foreground">
-            Add <code className="rounded bg-background/60 px-1">CLOUDFLARE_API_TOKEN</code>{" "}
+            Add <code className="rounded bg-background/60 px-1">AI_HORDE_API_KEY</code>{" "}
+            in your project's Keys settings so Felicia can send photos.
+            Her text and voice replies still use Cloudflare Workers AI — you'll
+            need <code className="rounded bg-background/60 px-1">CLOUDFLARE_API_TOKEN</code>{" "}
             and <code className="rounded bg-background/60 px-1">CLOUDFLARE_ACCOUNT_ID</code>{" "}
-            in your project's Keys settings so Felicia can reply and send photos.
+            for those.
           </p>
         </div>
       )}
@@ -831,7 +815,6 @@ export default function Dashboard() {
                 setArtOpen(false);
                 void requestPhoto(
                   "somewhere she has just arrived, warm evening light, candid",
-                  Date.now(),
                 );
               }}
             >
@@ -845,7 +828,7 @@ export default function Dashboard() {
                 disabled={composing || developing || !photosReady}
                 onClick={() => {
                   setArtOpen(false);
-                  void requestPhoto(scene.scene);;
+                  void requestPhoto(scene.scene);
                 }}
                 className="rounded-full border border-border/60 bg-background/40 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground disabled:opacity-50"
               >

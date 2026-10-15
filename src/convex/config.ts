@@ -29,3 +29,22 @@ export function cloudflareAccountId(): string | null {
 export function isCloudflareConfigured(): boolean {
   return Boolean(cloudflareToken() && cloudflareAccountId());
 }
+
+/**
+ * AI Horde credential resolution.
+ *
+ * The AI Horde image backend is authenticated with a single API key in the
+ * `apikey` header. Store it as `AI_HORDE_API_KEY` in the project's Keys/API
+ * keys settings. The documented anonymous key `0000000000` also works, but it
+ * has the lowest queue priority, so a real key is strongly preferred.
+ */
+export function aiHordeApiKey(): string | null {
+  return process.env.AI_HORDE_API_KEY ?? null;
+}
+
+export function isAiHordeConfigured(): boolean {
+  const key = aiHordeApiKey();
+  if (!key) return false;
+  // The documented anonymous key still "works" but is lowest priority.
+  return key !== "0000000000";
+}
