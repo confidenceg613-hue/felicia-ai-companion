@@ -5,16 +5,17 @@ import {
   aiHordeApiKey,
   cloudflareAccountId,
   cloudflareToken,
+  groqApiKey,
 } from "./config";
 import type { Id } from "./_generated/dataModel";
 import { internalAction } from "./_generated/server";
 
 /**
- * Cloudflare Workers AI — text and voice only.
+ * AI Horde — image generation only.
  *
- * Image generation has moved to the AI Horde, whose async polling workflow
- * (submit → check → status) does not fit the one-shot Cloudflare shape, so it
- * lives in its own handler below.
+ * Text and voice have their own backends now:
+ *   chat  → Groq chat completions
+ *   speak → Cloudflare Workers AI voice models
  *
  * The token and account id are read from the deployment environment so the
  * secret never reaches the browser bundle. Add them in the project's
@@ -22,7 +23,6 @@ import { internalAction } from "./_generated/server";
  *   CLOUDFLARE_API_TOKEN   – an API token with the "Workers AI: Read" permission
  *   CLOUDFLARE_ACCOUNT_ID  – the account that owns the Workers AI usage
  */
-const CHAT_MODEL = "@cf/meta/llama-3.1-8b-instruct";
 
 /**
  * Felicia's speaking voice. Aura's feminine English speakers include asteria,
@@ -103,19 +103,19 @@ function pickBase64Audio(payload: unknown): string | null {
   return null;
 }
 
-const CONFIG_HINT =
+const VOICE_CONFIG_HINT =
   "Cloudflare Workers AI is not connected yet. Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in your project's Keys/API keys settings, then try again.";
 
-function credentials(): { token: string; accountId: string } {
+function voiceCredentials(): { token: string; accountId: string } {
   const token = cloudflareToken();
   const accountId = cloudflareAccountId();
   if (!token || !accountId) {
-    throw new Error(CONFIG_HINT);
+    throw new Error(VOICE_CONFIG_HINT);
   }
   return { token, accountId };
 }
 
-async function runModel(
+async function runVoiceModel(
   accountId: string,
   token: string,
   model: string,
@@ -134,8 +134,8 @@ async function runModel(
   );
 }
 
-/** Strip Cloudflare's error envelope down to something readable. */
-function describeFailure(status: number, raw: string): string {
+/** Turn a Cloudflare error response into something readable. */
+function describeVoiceFailure(status: number, raw: string): string {
   try {
     const parsed = JSON.parse(raw) as {
       errors?: Array<{ message?: string }>;
@@ -152,7 +152,11 @@ function describeFailure(status: number, raw: string): string {
 }
 
 /**
- * Ask Felicia's text model for a reply.
+ * Ask Felicia's text model for a reply, using Groq.
+ *
+ * Uses the OpenAI-compatible chat completions endpoint, so Felicia's existing
+ * message shape (`role` + `content`) works unchanged.
+ *
  * Returns the assistant text only.
  */
 export const chat = internalAction({
@@ -163,24 +167,39 @@ export const chat = internalAction({
   },
   returns: v.string(),
   handler: async (_ctx, { messages }): Promise<string> => {
-    const { token, accountId } = credentials();
-    const response = await runModel(accountId, token, CHAT_MODEL, {
-      messages,
-      max_tokens: 400,
-      temperature: 0.85,
-    });
-    const raw = await response.text();
-    if (!response.ok) {
+    const apiKey = groqApiKey();
+    if (!apiKey) {
       throw new Error(
-        `Felicia's model is unavailable: ${describeFailure(response.status, raw)}`,
+        "Groq is not connected yet. Add GROQ_API_KEY in your project's " +
+          "Keys/API keys settings, then try again.",
       );
     }
 
+    const response = await fetch(
+      "https://api.groq.com/openai/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "llama-3.1-8b-instant",
+          messages,
+          temperature: 0.85,
+          max_completion_tokens: 400,
+        }),
+      },
+    );
+
+    const raw = await response.text();
+    if (!response.ok) {
+      throw new Error(groqFailure(response.status, raw));
+    }
+
     let payload: {
-      result?: {
-        response?: unknown;
-        choices?: Array<{ message?: { content?: unknown } }>;
-      };
+      choices?: Array<{ message?: { content?: unknown } }>;
+      error?: { message?: string };
     };
     try {
       payload = JSON.parse(raw);
@@ -188,12 +207,14 @@ export const chat = internalAction({
       throw new Error("Felicia's model returned an unreadable response.");
     }
 
+    if (payload.error) {
+      throw new Error(payload.error.message || "Groq returned an error.");
+    }
+
     const text =
-      typeof payload.result?.response === "string"
-        ? payload.result.response
-        : typeof payload.result?.choices?.[0]?.message?.content === "string"
-          ? payload.result.choices[0].message.content
-          : "";
+      typeof payload.choices?.[0]?.message?.content === "string"
+        ? payload.choices[0].message.content
+        : "";
 
     if (!text.trim()) {
       throw new Error("Felicia's model returned an empty reply.");
@@ -201,6 +222,24 @@ export const chat = internalAction({
     return text.trim();
   },
 });
+
+/** Turn a Groq error response into something readable. */
+function groqFailure(status: number, raw: string): string {
+  try {
+    const parsed = JSON.parse(raw) as {
+      error?: { message?: string; type?: string };
+    };
+    const message =
+      parsed.error?.message ?? parsed.error?.type ?? null;
+    if (typeof message === "string" && message.trim()) {
+      return message;
+    }
+  } catch {
+    // fall through to the raw body
+  }
+  if (raw.trim()) return raw.slice(0, 300);
+  return `Groq returned status ${status}`;
+}
 
 /**
  * Generate one photo of Felicia on the AI Horde and store it in Convex storage.
@@ -437,7 +476,7 @@ export const speak = internalAction({
     ctx,
     { text },
   ): Promise<{ storageId: Id<"_storage">; mimeType: string; model: string }> => {
-    const { token, accountId } = credentials();
+    const { token, accountId } = voiceCredentials();
     const spoken = text.trim().slice(0, 600);
     if (!spoken) throw new Error("There is nothing to say.");
 
@@ -446,7 +485,7 @@ export const speak = internalAction({
     for (const candidate of TTS_MODELS) {
       let response: Response;
       try {
-        response = await runModel(
+        response = await runVoiceModel(
           accountId,
           token,
           candidate.model,
@@ -461,7 +500,7 @@ export const speak = internalAction({
 
       if (!response.ok) {
         failures.push(
-          `${candidate.model}: ${describeFailure(response.status, await response.text())}`,
+          `${candidate.model}: ${describeVoiceFailure(response.status, await response.text())}`,
         );
         continue;
       }

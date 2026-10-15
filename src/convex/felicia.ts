@@ -5,7 +5,10 @@ import {
   FELICIA_LOOK,
   SHARED_NOTE_SECTIONS,
 } from "../lib/felicia";
-import { isCloudflareConfigured } from "./config";
+import {
+  isCloudflareConfigured,
+  isGroqConfigured,
+} from "./config";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import {
@@ -20,8 +23,11 @@ import {
  * Felicia — the companion layer.
  *
  * Everything the browser needs lives here: the conversation, the photos she has
- * sent, and the two actions that reach out to Cloudflare Workers AI through the
- * internal actions in `cloudflare.ts`.
+ * sent, and the actions that reach out to external AI services:
+ *   chat  → Groq chat completions
+ *   speak → Cloudflare Workers AI voice models
+ *   image → AI Horde
+ * All of those are wired through the internal actions in `cloudflare.ts`.
  */
 
 /** Used when a request has no usable scene description. */
@@ -194,10 +200,19 @@ function extractScene(
 // Queries
 // ---------------------------------------------------------------------------
 
-/** Whether the Cloudflare credentials are present on this deployment. */
+/**
+ * Whether Felicia's backends are present on this deployment.
+ *
+ * Chat needs Groq. Photo generation needs the AI Horde. Voice needs Cloudflare
+ * Workers AI. We report the chat backend here because that is the one the user
+ * notices first when Felicia does not reply.
+ */
 export const connectorStatus = query({
   args: {},
-  handler: async () => ({ configured: isCloudflareConfigured() }),
+  handler: async () => ({
+    configured: isGroqConfigured(),
+    chatBackend: "groq",
+  }),
 });
 
 export const messages = query({

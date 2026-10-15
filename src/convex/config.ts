@@ -48,3 +48,18 @@ export function isAiHordeConfigured(): boolean {
   // The documented anonymous key still "works" but is lowest priority.
   return key !== "0000000000";
 }
+
+/**
+ * Groq credential resolution.
+ *
+ * Groq's chat completions API is authenticated with a Bearer token in the
+ * `Authorization` header. Store it as `GROQ_API_KEY` in the project's Keys/API
+ * keys settings.
+ */
+export function groqApiKey(): string | null {
+  return process.env.GROQ_API_KEY ?? null;
+}
+
+export function isGroqConfigured(): boolean {
+  return Boolean(groqApiKey());
+}
