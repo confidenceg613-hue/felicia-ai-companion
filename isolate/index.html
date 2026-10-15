@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta
+    name="description"
+    content="Felicia is an AI companion with a life of her own — she texts like a real person, remembers your conversations, and sends you photos when you ask."
+  />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..600&family=Inter:wght@300..700&display=swap"
+    rel="stylesheet"
+  />
+  <title>Felicia — your companion in Lisbon</title>
+  <!-- Applied before first paint so the page never flashes the wrong theme. -->
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem("felicia-theme");
+        var dark =
+          saved === "dark" ||
+          ((saved === null || saved === "undefined" || saved === "system") &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches);
+        if (dark) document.documentElement.classList.add("dark");
+      } catch (e) {
+        /* private mode: fall back to the light theme */
+      }
+    })();
+  </script>
+  <script type="module" crossorigin src="/assets/index-CArG-rmt.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/react-vendor-fik7D5hW.js">
+  <link rel="modulepreload" crossorigin href="/assets/framer-motion-CMSwhX_3.js">
+  <link rel="modulepreload" crossorigin href="/assets/radix-ui-DcZ5-qAq.js">
+  <link rel="modulepreload" crossorigin href="/assets/charts-1VE_BFDx.js">
+  <link rel="stylesheet" crossorigin href="/assets/index-Dn6hyoMw.css">
+</head>
+
+
+<body>
+  <div id="root"></div>
+</body>
+
+</html>
