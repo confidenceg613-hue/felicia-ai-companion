@@ -189,7 +189,7 @@ export const chat = internalAction({
           //   https://console.groq.com/settings/project/limits
           //   https://console.groq.com/settings/limits
           // and enable it there. Org-level model permissions override project settings.
-          model: "qwen/qwen3.8-27b",
+          model: "openai/gpt-oss-120b",
           messages,
           temperature: 0.85,
           max_completion_tokens: 400,
