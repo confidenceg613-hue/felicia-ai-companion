@@ -16,8 +16,8 @@ export const THEME_KEY = "felicia-theme";
 export const THEME_OPTIONS: Array<{ value: Theme; label: string; hint: string }> =
   [
     { value: "system", label: "Match my device", hint: "Follows your system setting" },
-    { value: "light", label: "Light", hint: "Warm paper and terracotta" },
-    { value: "dark", label: "Dark", hint: "Espresso and amber light" },
+    { value: "light", label: "Violet light", hint: "The brand purple on deep violet" },
+    { value: "dark", label: "Ambient purple", hint: "Deep violet, softer on the eyes" },
   ];
 
 function systemPrefersDark(): boolean {
