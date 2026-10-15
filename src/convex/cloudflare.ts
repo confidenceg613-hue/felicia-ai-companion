@@ -184,7 +184,19 @@ export const chat = internalAction({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "llama-3.1-8b-instant",
+          // llama-3.1-8b-instant is scheduled off free/Developer tiers on 2026-08-16,
+          // and both openai/gpt-oss-20b and openai/gpt-oss-120b are currently blocked
+          // at the Groq project level for this key. If they stay blocked, open:
+          //   https://console.groq.com/settings/project/limits
+          // and unblock the model under Select project → Settings → Projects → Limits.
+          // If the block is at the org level, an org owner must check:
+          //   https://console.groq.com/settings/limits
+          // as org-level model permissions override project settings.
+          //
+          // If you do not want to change console permissions, switch the line below to
+          //   model: "qwen/qwen3.8-27b",
+          // and use a slightly lower temperature (0.7 is what Groq recommends for it).
+          model: "openai/gpt-oss-120b",
           messages,
           temperature: 0.85,
           max_completion_tokens: 400,
