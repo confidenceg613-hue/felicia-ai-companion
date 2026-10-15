@@ -168,10 +168,10 @@ export default function Dashboard() {
   /**
    * Ask Felicia for a photo, then reveal it only once it is genuinely finished:
    * generated on the server, decoded by the browser, and DEVELOP_MS old.
-   */
-  async function requestPhoto(scene: string) {
+   */  async function requestPhoto(scene: string) {
     if (!photosReady) return;
     const startedAt = Date.now();
+
     setHiddenCount(allPhotos.length);
     setDeveloping(true);
     try {
