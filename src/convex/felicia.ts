@@ -30,7 +30,7 @@ export const DEFAULT_SCENE =
 
 /** A deliberately plain scene used to retry after a safety-filter false positive. */
 const FALLBACK_SCENE =
-  "standing on a sunlit balcony at golden hour, wearing a soft linen shirt and jeans, calm friendly expression";
+  "by a rain-streaked cafe window with a cup of coffee, wearing an oversized knit sweater, moody grey-blue light, elegant relaxed pose";
 
 const MAX_MESSAGE_LENGTH = 2000;
 const HISTORY_LIMIT = 16;
@@ -106,26 +106,31 @@ function buildSystemPrompt(
 }
 
 /**
- * Felicia is always framed head to toe, so her photos read as full pictures of
- * her rather than cropped portraits.
+ * Build the image prompt from the fixed appearance descriptor plus one scene.
  *
- * The descriptor tail is kept deliberately short: measured against Cloudflare's
- * classifier, long camera jargon roughly doubles the chance of a rejection.
+ * The look string is the only thing that ever varies her face/body between photos.
+ * It comes from the user-editable Appearance note, which defaults to
+ * FELICIA_LOOK, so every photo keeps the same woman. The scene is the only other
+ * variable, and it is always injected in the same spot so the model treats it as
+ * setting rather than as a new person.
  */
 function buildImagePrompt(scene: string, look: string = FELICIA_LOOK): string {
   return (
     `Photorealistic full-body shot of ${look}, ${scene}, head to toe in frame, ` +
-    "wide shot, warm natural light, high detail face, true-to-life skin and hair, " +
-    "high resolution."
+    "natural full-body framing, warm natural light, candid unposed, true-to-life " +
+    "deep brown skin and dark hair, high detail face, high resolution."
   );
 }
 
-/** Wording without camera jargon, kept for when the full prompt is rejected. */
+/**
+ * A restrained fallback prompt, kept only in case the richer prompt is ever
+ * rejected by a worker's safety layer.
+ */
 function plainImagePrompt(scene: string): string {
   return (
-    "Photorealistic full-body shot of a beautiful woman with fair to light beige skin " +
-    "and long wavy dark brown hair, an oval face, large almond-shaped brown eyes and a " +
-    `gentle smile, ${scene}, head to toe in frame, wide shot, warm natural light.`
+    "Photorealistic full-body shot of Felicia, a beautiful 28-year-old African " +
+    "American woman with deep brown skin and long dark hair, " +
+    `${scene}, head to toe in frame, warm natural light.`
   );
 }
 
@@ -719,8 +724,14 @@ export const sendMessage = action({
 /**
  * Generate a photo of Felicia for the signed-in user.
  *
- * Cloudflare's safety filter occasionally flags a perfectly innocent prompt, so
- * a rejection is retried once with a plainer scene before surfacing the error.
+ * Her appearance is locked to the same face, skin tone and body on every shot.
+ * The prompt always uses the user's Appearance note (which defaults to
+ * FELICIA_LOOK from `lib/felicia.ts`), and the only thing that changes between
+ * photos is the scene the model or the user asked for.
+ *
+ * Generating a good stock photo can take a couple of minutes on the AI Horde.
+ * Each attempt is retried once if it times out or is rejected, so a single
+ * request still only surfaces one error to the user.
  */
 export const generatePhoto = action({
   args: { scene: v.optional(v.string()) },
@@ -737,19 +748,15 @@ export const generatePhoto = action({
 
     const requested = (scene ?? "").trim() || DEFAULT_SCENE;
 
-    // Her appearance lives in Shared Notes, so editing that section changes
-    // every photo she sends from then on.
+    // Appearance is the only thing that ever changes her face/body. Everything
+    // else in the prompt is the scene, the framing and the lighting.
     const notes = await ctx.runQuery(internal.felicia.notesFor, { userId });
     const look = (notes.appearance ?? "").trim() || FELICIA_LOOK;
 
-    // Escalating attempts. The filter rejects innocent prompts at random, so the
-    // full prompt is retried before falling back to plainer wording that keeps
-    // the requested scene, and only then to a safe last resort.
+    // One photo per request. If the Horde stalls or rejects, try once more with
+    // the same look before surfacing the error.
     const candidates = [
       buildImagePrompt(requested, look),
-      buildImagePrompt(requested, look),
-      buildImagePrompt(requested, look),
-      plainImagePrompt(requested),
       buildImagePrompt(FALLBACK_SCENE, look),
     ];
 
@@ -763,13 +770,16 @@ export const generatePhoto = action({
         success = { prompt, storageId: attempt.storageId };
         break;
       } catch (error) {
-        if (!isFilterError(error)) throw error;
+        if (!isFilterError(error) && !isHordeFailureRetryable(error)) {
+          throw error;
+        }
       }
     }
 
     if (!success) {
       throw new Error(
-        "Cloudflare's safety filter turned that one down. Try asking for a different scene.",
+        "Couldn't generate that photo right now. The AI Horde is volunteer-powered, " +
+          "so it can be slow or unavailable — try again in a moment.",
       );
     }
 
@@ -788,6 +798,24 @@ export const generatePhoto = action({
     };
   },
 });
+
+/**
+ * Decide whether an image-generation failure is worth retrying.
+ *
+ * The AI Horde is a volunteer network: requests can stall, time out, or be
+ * rejected for transient reasons. Those are worth a second attempt with a
+ * plainer fallback scene. A real configuration or perma-electron error is not.
+ */
+function isHordeFailureRetryable(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+
+  // Retries already handle the Horde's own NSFW / safety filter noise; be a
+  // little broader than the Cloudflare-only matcher so a timeout or empty
+  // result still gets a second shot.
+  return /nsfw|content|blocked|filter|safety|timeout|empty|unreadable|not finish/i.test(
+    message,
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Voice
