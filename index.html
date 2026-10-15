@@ -17,6 +17,21 @@
     rel="stylesheet"
   />
   <title>Felicia — your companion in Lisbon</title>
+  <!-- Applied before first paint so the page never flashes the wrong theme. -->
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem("felicia-theme");
+        var dark =
+          saved === "dark" ||
+          ((saved === null || saved === "undefined" || saved === "system") &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches);
+        if (dark) document.documentElement.classList.add("dark");
+      } catch (e) {
+        /* private mode: fall back to the light theme */
+      }
+    })();
+  </script>
 </head>
 
 

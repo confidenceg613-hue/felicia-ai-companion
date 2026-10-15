@@ -12,7 +12,12 @@ import "./index.css";
 // Lazy load route components for better code splitting
 const Landing = lazy(() => import("./pages/Landing.tsx"));
 const AuthPage = lazy(() => import("./pages/Auth.tsx"));
+const AppShell = lazy(() => import("./components/AppShell.tsx"));
 const Dashboard = lazy(() => import("./pages/Dashboard.tsx"));
+const Memories = lazy(() => import("./pages/Memories.tsx"));
+const Album = lazy(() => import("./pages/Album.tsx"));
+const SharedNotes = lazy(() => import("./pages/SharedNotes.tsx"));
+const Settings = lazy(() => import("./pages/Settings.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 
 // Simple loading fallback for route transitions
@@ -128,10 +133,16 @@ createRoot(document.getElementById("root")!).render(
                 path="/dashboard"
                 element={
                   <RequireAuth>
-                    <Dashboard />
+                    <AppShell />
                   </RequireAuth>
                 }
-              />
+              >
+                <Route index element={<Dashboard />} />
+                <Route path="memories" element={<Memories />} />
+                <Route path="album" element={<Album />} />
+                <Route path="notes" element={<SharedNotes />} />
+                <Route path="settings" element={<Settings />} />
+              </Route>
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>

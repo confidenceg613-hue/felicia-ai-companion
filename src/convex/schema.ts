@@ -41,6 +41,10 @@ const schema = defineSchema(
       // Cached text-to-speech render of this line. Speaking the same message
       // twice then costs nothing, which matters on a free neuron budget.
       audioStorageId: v.optional(v.id("_storage")),
+      // A photo the user attached from the composer. `content` stays empty for
+      // these so the conversation renders the image alone, the way a shared
+      // picture appears in a real chat.
+      imageStorageId: v.optional(v.id("_storage")),
     }).index("by_user", ["userId"]),
 
     // Photos Felicia has generated for a user, stored in Convex file storage.
@@ -50,6 +54,30 @@ const schema = defineSchema(
       prompt: v.string(),
       scene: v.string(),
       createdAt: v.number(),
+    }).index("by_user", ["userId"]),
+
+    // Felicia's mind map: things she knows, each filed under a category so the
+    // graph can colour and cluster them. She builds these from conversation and
+    // you can add or edit them yourself.
+    memories: defineTable({
+      userId: v.id("users"),
+      title: v.string(),
+      category: v.string(),
+      content: v.string(),
+      // 1–5. Drives the bubble's size in the graph view.
+      strength: v.optional(v.number()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_user", ["userId"])
+      .index("by_user_updated", ["userId", "updatedAt"]),
+
+    // Shared Notes — the editable context that shapes who Felicia is. One row
+    // per user holding every section, because they are always read together.
+    sharedNotes: defineTable({
+      userId: v.id("users"),
+      sections: v.record(v.string(), v.string()),
+      updatedAt: v.number(),
     }).index("by_user", ["userId"]),
   },
   {

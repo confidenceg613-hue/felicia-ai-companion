@@ -1,5 +1,10 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
+import {
+  DEFAULT_SHARED_NOTES,
+  FELICIA_LOOK,
+  SHARED_NOTE_SECTIONS,
+} from "../lib/felicia";
 import { isCloudflareConfigured } from "./config";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -19,23 +24,6 @@ import {
  * internal actions in `cloudflare.ts`.
  */
 
-/**
- * Felicia's character sheet. This exact text is prepended to every photo prompt so
- * her face, hair and figure stay consistent from picture to picture.
- *
- * Figure and posture cues are described in tasteful terms. Explicit anatomy is
- * deliberately omitted: Cloudflare's classifier rejects that wording, which would
- * break photo generation entirely.
- */
-const FELICIA_LOOK =
-  "Felicia, a beautiful 27-year-old woman with fair to light beige skin with warm " +
-  "undertones, smooth clear skin with a soft natural glow, an oval face with high " +
-  "cheekbones, a small straight nose, full soft pink lips, large expressive " +
-  "almond-shaped brown eyes with long dark lashes, slightly arched eyebrows and a " +
-  "gentle smile, long wavy dark brown hair falling past her shoulders with light " +
-  "face-framing strands, a slim athletic yet soft feminine figure with a narrow " +
-  "waist, long legs and elegant posture";
-
 /** Used when a request has no usable scene description. */
 export const DEFAULT_SCENE =
   "relaxing on a sunlit balcony at golden hour, wearing a soft linen shirt, holding a mug of coffee";
@@ -46,6 +34,15 @@ const FALLBACK_SCENE =
 
 const MAX_MESSAGE_LENGTH = 2000;
 const HISTORY_LIMIT = 16;
+
+// ---------------------------------------------------------------------------
+// Shared Notes
+// ---------------------------------------------------------------------------
+
+/** The notes actually handed to the model: stored values layered over defaults. */
+function mergedNotes(stored: Record<string, string> | null | undefined) {
+  return { ...DEFAULT_SHARED_NOTES, ...(stored ?? {}) };
+}
 
 // ---------------------------------------------------------------------------
 // Persona
@@ -74,14 +71,38 @@ You are able to send photos and you enjoy it. If and only if the user asks to se
 
 Rules for that line: it goes last, it is the only line in that format, and you never refer to it, quote it, explain it, or mention the words "scene" or "prompt" anywhere else in your reply.`;
 
-function buildSystemPrompt(): string {
+function buildSystemPrompt(
+  notes: Record<string, string>,
+  memories: Array<{ title: string; content: string }> = [],
+): string {
   const now = new Date().toLocaleString("en-GB", {
     timeZone: "Europe/Lisbon",
     weekday: "long",
     hour: "2-digit",
     minute: "2-digit",
   });
-  return `${SYSTEM_PROMPT}\n\nIt is currently ${now} in Lisbon, where you are.`;
+
+  const noteLines = SHARED_NOTE_SECTIONS.map((section) => {
+    const value = (notes[section.key] ?? "").trim();
+    return value ? `${section.title}: ${value}` : null;
+  }).filter((line): line is string => line !== null);
+
+  const known = memories
+    .map((memory) => `- ${memory.title} — ${memory.content}`)
+    .join("\n");
+
+  return [
+    SYSTEM_PROMPT,
+    `It is currently ${now} in Lisbon, where you are.`,
+    noteLines.length
+      ? `SHARED NOTES — written by the user, and they are true:\n${noteLines.join("\n")}`
+      : "",
+    known
+      ? `WHAT YOU KNOW — facts you have kept from things that happened between you:\n${known}`
+      : "",
+  ]
+    .filter((part) => part.length > 0)
+    .join("\n\n");
 }
 
 /**
@@ -91,9 +112,9 @@ function buildSystemPrompt(): string {
  * The descriptor tail is kept deliberately short: measured against Cloudflare's
  * classifier, long camera jargon roughly doubles the chance of a rejection.
  */
-function buildImagePrompt(scene: string): string {
+function buildImagePrompt(scene: string, look: string = FELICIA_LOOK): string {
   return (
-    `Photorealistic full-body shot of ${FELICIA_LOOK}, ${scene}, head to toe in frame, ` +
+    `Photorealistic full-body shot of ${look}, ${scene}, head to toe in frame, ` +
     "wide shot, warm natural light, high detail face, true-to-life skin and hair, " +
     "high resolution."
   );
@@ -179,11 +200,25 @@ export const messages = query({
   handler: async (ctx) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) return [];
-    return await ctx.db
+    const rows = await ctx.db
       .query("messages")
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .order("asc")
       .take(300);
+
+    return await Promise.all(
+      rows.map(async (message) => ({
+        _id: message._id,
+        role: message.role,
+        content: message.content,
+        createdAt: message.createdAt,
+        // Resolved here so the conversation can render a shared photo without
+        // the client needing a second round trip.
+        imageUrl: message.imageStorageId
+          ? await ctx.storage.getUrl(message.imageStorageId)
+          : null,
+      })),
+    );
   },
 });
 
@@ -203,6 +238,41 @@ export const photos = query({
         url: await ctx.storage.getUrl(photo.storageId),
       })),
     );
+  },
+});
+
+/**
+ * The user's Shared Notes, with the defaults already filled in so the editor
+ * opens on something meaningful rather than a wall of empty fields.
+ */
+export const sharedNotes = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return { sections: DEFAULT_SHARED_NOTES, updatedAt: 0 };
+    const row = await ctx.db
+      .query("sharedNotes")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .unique();
+    if (!row) return { sections: DEFAULT_SHARED_NOTES, updatedAt: 0 };
+    return {
+      sections: { ...DEFAULT_SHARED_NOTES, ...row.sections },
+      updatedAt: row.updatedAt,
+    };
+  },
+});
+
+/** Everything Felicia has remembered, most recently updated first. */
+export const memories = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return [];
+    return await ctx.db
+      .query("memories")
+      .withIndex("by_user_updated", (q) => q.eq("userId", userId))
+      .order("desc")
+      .take(200);
   },
 });
 
@@ -227,6 +297,7 @@ export const saveMessage = internalMutation({
     userId: v.id("users"),
     role: v.union(v.literal("user"), v.literal("felicia")),
     content: v.string(),
+    imageStorageId: v.optional(v.id("_storage")),
   },
   returns: v.id("messages"),
   handler: async (ctx, args) => {
@@ -234,6 +305,7 @@ export const saveMessage = internalMutation({
       userId: args.userId,
       role: args.role,
       content: args.content,
+      imageStorageId: args.imageStorageId,
       createdAt: Date.now(),
     });
   },
@@ -280,6 +352,272 @@ export const savePhoto = internalMutation({
     return null;
   },
 });
+
+/** Shared Notes as the model sees them: stored sections over the defaults. */
+export const notesFor = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, { userId }) => {
+    const row = await ctx.db
+      .query("sharedNotes")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .unique();
+    return mergedNotes(row?.sections);
+  },
+});
+
+/** The facts Felicia keeps, handed to her prompt so the mind map is real. */
+export const topMemories = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, { userId }) => {
+    const rows = await ctx.db
+      .query("memories")
+      .withIndex("by_user_updated", (q) => q.eq("userId", userId))
+      .order("desc")
+      .take(12);
+    return rows.map((memory) => ({
+      title: memory.title.slice(0, 70),
+      content: memory.content.slice(0, 200),
+    }));
+  },
+});
+
+export const memoryTitles = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, { userId }) => {
+    const rows = await ctx.db
+      .query("memories")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .take(300);
+    return rows.map((memory) => memory.title.trim().toLowerCase());
+  },
+});
+
+export const memoryCount = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, { userId }) => {
+    const rows = await ctx.db
+      .query("memories")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .take(1);
+    return rows.length;
+  },
+});
+
+export const insertMemory = internalMutation({
+  args: {
+    userId: v.id("users"),
+    title: v.string(),
+    category: v.string(),
+    content: v.string(),
+    strength: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    await ctx.db.insert("memories", { ...args, createdAt: now, updatedAt: now });
+    return null;
+  },
+});
+
+/**
+ * Facts from Felicia's own life, planted the first time the mind map opens.
+ *
+ * They are true in-fiction and drawn from her persona, so the graph is never a
+ * blank circle — while everything about *you* still has to be earned from real
+ * conversation. Re-checked inside the mutation so a StrictMode double-run can't
+ * seed the set twice.
+ */
+const SEED_MEMORIES: Array<{
+  title: string;
+  category: string;
+  content: string;
+  strength: number;
+}> = [
+  {
+    title: "Cafe Nove",
+    category: "place",
+    content: "The small coffee shop in Alfama where she works weekend shifts.",
+    strength: 4,
+  },
+  {
+    title: "Manjericao",
+    category: "person",
+    content: "Her dog, named after the herb. She sends photos of him unasked.",
+    strength: 3,
+  },
+  {
+    title: "Second-hand Pentax",
+    category: "preference",
+    content: "She shoots film on a battered camera she bought years ago and develops at home.",
+    strength: 4,
+  },
+  {
+    title: "October swimming",
+    category: "goal",
+    content: "She swims in the Atlantic in October when it is far too cold, and wants to shoot it.",
+    strength: 3,
+  },
+  {
+    title: "Rain over sunshine",
+    category: "preference",
+    content: "Lisbon rain, wet cobbles and the smell afterwards. She will text about the weather.",
+    strength: 3,
+  },
+  {
+    title: "The bookshop in Alfama",
+    category: "place",
+    content: "A second-hand shop where the owner saves things for her. Some of her best photos were taken there.",
+    strength: 3,
+  },
+];
+
+export const seedMemories = mutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Sign in first.");
+
+    const existing = await ctx.db
+      .query("memories")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .take(1);
+    if (existing.length > 0) return null;
+
+    const now = Date.now();
+    for (const seed of SEED_MEMORIES) {
+      await ctx.db.insert("memories", { userId, ...seed, createdAt: now, updatedAt: now });
+    }
+    return null;
+  },
+});
+
+export const saveSharedNotes = mutation({
+  args: { sections: v.record(v.string(), v.string()) },
+  returns: v.null(),
+  handler: async (ctx, { sections }) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Sign in to edit Shared Notes.");
+
+    // Only the known sections are persisted, so a stray key can't grow unbounded.
+    const cleaned: Record<string, string> = {};
+    for (const section of SHARED_NOTE_SECTIONS) {
+      cleaned[section.key] = (sections[section.key] ?? "").slice(0, 4000);
+    }
+
+    const existing = await ctx.db
+      .query("sharedNotes")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .unique();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, { sections: cleaned, updatedAt: Date.now() });
+    } else {
+      await ctx.db.insert("sharedNotes", {
+        userId,
+        sections: cleaned,
+        updatedAt: Date.now(),
+      });
+    }
+    return null;
+  },
+});
+
+const MEMORY_CATEGORIES = [
+  "person",
+  "place",
+  "preference",
+  "moment",
+  "goal",
+  "fact",
+];
+
+export const addMemory = mutation({
+  args: {
+    title: v.string(),
+    category: v.string(),
+    content: v.string(),
+    strength: v.optional(v.number()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Sign in to add a memory.");
+
+    const title = args.title.trim();
+    const content = args.content.trim();
+    if (!title) throw new Error("Give it a title.");
+    if (!content) throw new Error("Write what it's about.");
+
+    await ctx.db.insert("memories", {
+      userId,
+      title: title.slice(0, 80),
+      category: MEMORY_CATEGORIES.includes(args.category)
+        ? args.category
+        : "fact",
+      content: content.slice(0, 600),
+      strength: clampStrength(args.strength ?? 3),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+export const updateMemory = mutation({
+  args: {
+    id: v.id("memories"),
+    title: v.string(),
+    category: v.string(),
+    content: v.string(),
+    strength: v.optional(v.number()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Sign in first.");
+
+    const memory = await ctx.db.get(args.id);
+    if (!memory) throw new Error("That memory is gone.");
+    if (memory.userId !== userId) throw new Error("That memory isn't yours.");
+
+    const title = args.title.trim();
+    const content = args.content.trim();
+    if (!title) throw new Error("Give it a title.");
+    if (!content) throw new Error("Write what it's about.");
+
+    await ctx.db.patch(args.id, {
+      title: title.slice(0, 80),
+      category: MEMORY_CATEGORIES.includes(args.category)
+        ? args.category
+        : "fact",
+      content: content.slice(0, 600),
+      strength: clampStrength(args.strength ?? memory.strength ?? 3),
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+export const deleteMemory = mutation({
+  args: { id: v.id("memories") },
+  returns: v.null(),
+  handler: async (ctx, { id }) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Sign in first.");
+
+    const memory = await ctx.db.get(id);
+    if (!memory) return null;
+    if (memory.userId !== userId) throw new Error("That memory isn't yours.");
+
+    await ctx.db.delete(id);
+    return null;
+  },
+});
+
+function clampStrength(value: number): number {
+  return Math.min(5, Math.max(1, Math.round(value)));
+}
 
 // ---------------------------------------------------------------------------
 // Public mutations
@@ -347,13 +685,21 @@ export const sendMessage = action({
       userId,
       limit: HISTORY_LIMIT,
     });
+    const notes = await ctx.runQuery(internal.felicia.notesFor, { userId });
+    const memories = await ctx.runQuery(internal.felicia.topMemories, {
+      userId,
+    });
 
     const raw = await ctx.runAction(internal.cloudflare.chat, {
       messages: [
-        { role: "system", content: buildSystemPrompt() },
+        { role: "system", content: buildSystemPrompt(notes, memories) },
         ...history.map((message) => ({
           role: message.role === "user" ? "user" : "assistant",
-          content: message.content,
+          // A photo the user shared carries no text, so stand it in with a
+          // marker the model can respond to instead of an empty turn.
+          content:
+            message.content ||
+            (message.imageStorageId ? "[they sent a photo]" : "[...]"),
         })),
       ],
     });
@@ -391,15 +737,20 @@ export const generatePhoto = action({
 
     const requested = (scene ?? "").trim() || DEFAULT_SCENE;
 
+    // Her appearance lives in Shared Notes, so editing that section changes
+    // every photo she sends from then on.
+    const notes = await ctx.runQuery(internal.felicia.notesFor, { userId });
+    const look = (notes.appearance ?? "").trim() || FELICIA_LOOK;
+
     // Escalating attempts. The filter rejects innocent prompts at random, so the
     // full prompt is retried before falling back to plainer wording that keeps
     // the requested scene, and only then to a safe last resort.
     const candidates = [
-      buildImagePrompt(requested),
-      buildImagePrompt(requested),
-      buildImagePrompt(requested),
+      buildImagePrompt(requested, look),
+      buildImagePrompt(requested, look),
+      buildImagePrompt(requested, look),
       plainImagePrompt(requested),
-      buildImagePrompt(FALLBACK_SCENE),
+      buildImagePrompt(FALLBACK_SCENE, look),
     ];
 
     let success: { prompt: string; storageId: Id<"_storage"> } | null = null;
@@ -497,9 +848,14 @@ export const startCall = action({
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Sign in to call Felicia.");
 
+    const notes = await ctx.runQuery(internal.felicia.notesFor, { userId });
+    const memories = await ctx.runQuery(internal.felicia.topMemories, {
+      userId,
+    });
+
     const raw = await ctx.runAction(internal.cloudflare.chat, {
       messages: [
-        { role: "system", content: buildSystemPrompt() },
+        { role: "system", content: buildSystemPrompt(notes, memories) },
         {
           role: "user",
           content:
@@ -521,5 +877,224 @@ export const startCall = action({
     });
 
     return { messageId, reply };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Shared photos
+// ---------------------------------------------------------------------------
+
+/**
+ * Store a photo the user picked and let Felicia react to it.
+ *
+ * The model behind her is text-only, so she responds to the fact that a photo
+ * arrived rather than to its contents — she says so naturally instead of
+ * pretending to have seen it. The image itself is saved to Convex storage and
+ * rendered in the conversation.
+ */
+export const sendUserPhoto = action({
+  args: { data: v.bytes(), mimeType: v.string() },
+  returns: v.object({
+    reply: v.string(),
+    replyMessageId: v.id("messages"),
+  }),
+  handler: async (
+    ctx,
+    { data, mimeType },
+  ): Promise<{ reply: string; replyMessageId: Id<"messages"> }> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Sign in to share a photo.");
+
+    const bytes = new Uint8Array(data);
+
+    if (bytes.byteLength > 6_000_000) {
+      throw new Error("That photo is over 6 MB — try a smaller one.");
+    }
+    if (bytes.byteLength === 0) throw new Error("That photo is empty.");
+
+    const storageId = await ctx.storage.store(
+      new Blob([bytes], {
+        type: /^image\/[a-z0-9.+-]+$/i.test(mimeType) ? mimeType : "image/jpeg",
+      }),
+    );
+
+    await ctx.runMutation(internal.felicia.saveMessage, {
+      userId,
+      role: "user",
+      content: "",
+      imageStorageId: storageId,
+    });
+
+    const notes = await ctx.runQuery(internal.felicia.notesFor, { userId });
+    const memories = await ctx.runQuery(internal.felicia.topMemories, {
+      userId,
+    });
+
+    const raw = await ctx.runAction(internal.cloudflare.chat, {
+      messages: [
+        {
+          role: "system",
+          content: buildSystemPrompt(notes, memories),
+        },
+        {
+          role: "user",
+          content:
+            "[[stage direction: they have just sent you a photo of themselves. " +
+            "React to the fact that a photo arrived — one or two sentences, in " +
+            "character, no stage directions. You cannot see the image, so talk " +
+            "about having received it rather than describing its contents.]]",
+        },
+      ],
+    });
+
+    const reply =
+      raw.replace(/\[\[[\s\S]*?\]\]/g, "").trim() ||
+      "Just got it — give me a second.";
+
+    const replyMessageId = await ctx.runMutation(internal.felicia.saveMessage, {
+      userId,
+      role: "felicia",
+      content: reply,
+    });
+
+    return { reply, replyMessageId };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Mind map
+// ---------------------------------------------------------------------------
+
+/** Pull a JSON array out of a reply that may be wrapped in prose or code fences. */
+function parseMemoryList(raw: string): Array<{
+  title: string;
+  category: string;
+  content: string;
+  strength: number;
+}> {
+  const start = raw.indexOf("[");
+  const end = raw.lastIndexOf("]");
+  if (start === -1 || end === -1 || end <= start) return [];
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw.slice(start, end + 1));
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+
+  const allowed = ["person", "place", "preference", "moment", "goal", "fact"];
+  const out: Array<{
+    title: string;
+    category: string;
+    content: string;
+    strength: number;
+  }> = [];
+
+  for (const entry of parsed) {
+    if (!entry || typeof entry !== "object") continue;
+    const item = entry as Record<string, unknown>;
+    const title = typeof item.title === "string" ? item.title.trim() : "";
+    const content =
+      typeof item.content === "string" ? item.content.trim() : "";
+    if (!title || !content) continue;
+
+    const category =
+      typeof item.category === "string" &&
+      allowed.includes(item.category.toLowerCase())
+        ? item.category.toLowerCase()
+        : "fact";
+    const strength =
+      typeof item.strength === "number" ? item.strength : 3;
+
+    out.push({ title, category, content, strength: clampStrength(strength) });
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
+/**
+ * Ask Felicia to write down what she has learned about the two of you.
+ *
+ * The mind map is meant to be earned from conversation, so this reads the real
+ * transcript and only adds facts that aren't already there. A malformed reply
+ * yields zero new memories rather than an error — a model that rambles should
+ * not break the page.
+ */
+export const captureMemories = action({
+  args: {},
+  returns: v.object({ added: v.number(), total: v.number() }),
+  handler: async (
+    ctx,
+  ): Promise<{ added: number; total: number }> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Sign in first.");
+
+    const history = await ctx.runQuery(internal.felicia.recentMessages, {
+      userId,
+      limit: 60,
+    });
+    if (history.length < 8) {
+      throw new Error(
+        "There isn't much to remember yet — talk to her a little first.",
+      );
+    }
+
+    const notes = await ctx.runQuery(internal.felicia.notesFor, { userId });
+    const known = await ctx.runQuery(internal.felicia.memoryTitles, {
+      userId,
+    });
+    const seen = new Set(known);
+
+    const transcript = history
+      .map(
+        (message) =>
+          `${message.role === "user" ? "Them" : "Felicia"}: ${message.content}`,
+      )
+      .filter((line) => !line.endsWith(": [...]"))
+      .join("\n");
+
+    const raw = await ctx.runAction(internal.cloudflare.chat, {
+      messages: [
+        {
+          role: "system",
+          content:
+            "You extract durable facts from conversations. Reply with JSON only — no prose, no code fences.",
+        },
+        {
+          role: "user",
+          content:
+            "Extract up to 6 facts from this conversation between Felicia and " +
+            "the person she is talking to. Only facts worth remembering weeks " +
+            "later — people, places, preferences, moments, goals. Each must be " +
+            "concrete and about these two people.\n\n" +
+            'Reply with a JSON array, items shaped {"title": "2-6 words", ' +
+            '"category": "person|place|preference|moment|goal|fact", ' +
+            '"content": "3-18 words", "strength": 1-5}. Nothing else.\n\n' +
+            "Already known, do not repeat:\n" +
+            `${JSON.stringify(known)}\n\n` +
+            `Shared Notes for context:\n${JSON.stringify(notes)}\n\n` +
+            `Conversation:\n${transcript}`,
+        },
+      ],
+    });
+
+    const extracted = parseMemoryList(raw);
+    let added = 0;
+
+    for (const item of extracted) {
+      const key = item.title.trim().toLowerCase();
+      if (seen.has(key)) continue;
+      await ctx.runMutation(internal.felicia.insertMemory, {
+        userId,
+        ...item,
+      });
+      seen.add(key);
+      added += 1;
+    }
+
+    const total = await ctx.runQuery(internal.felicia.memoryCount, { userId });
+    return { added, total };
   },
 });

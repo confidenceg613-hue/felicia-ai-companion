@@ -277,3 +277,96 @@ export function listenOnce(
 export function sleep(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
+
+// ---------------------------------------------------------------------------
+// Hold-to-talk voice messages
+// ---------------------------------------------------------------------------
+
+/**
+ * Start transcribing while a button is held, and settle when it is released.
+ *
+ * Voice messages in a companion app are press-and-hold: you talk, you let go,
+ * the words send. Recognition is entirely on-device, so a voice message costs
+ * nothing and never leaves the browser — the transcript simply becomes a normal
+ * message that Felicia replies to.
+ */
+export function beginVoiceNote(onInterim: (text: string) => void): {
+  /** Whether this browser can record a voice message at all. */
+  supported: boolean;
+  /** Release the button. Resolves with everything that was said, or `null`. */
+  end: () => Promise<string | null>;
+  /** Abandon the recording without sending anything. */
+  cancel: () => void;
+} {
+  const recognition = createSpeechRecognition();
+  if (!recognition) {
+    return { supported: false, end: async () => null, cancel: () => {} };
+  }
+
+  let finalText = "";
+  let settled = false;
+  let settleWith: (text: string | null) => void = () => {};
+  const finished = new Promise<string | null>((resolve) => {
+    settleWith = resolve;
+  });
+
+  const settle = (text: string | null) => {
+    if (settled) return;
+    settled = true;
+    settleWith(text);
+  };
+
+  recognition.lang = "en-US";
+  recognition.continuous = true;
+  recognition.interimResults = true;
+
+  recognition.onresult = (event) => {
+    let partial = "";
+    for (let i = event.resultIndex; i < event.results.length; i += 1) {
+      const result = event.results[i];
+      const alternative = result?.[0];
+      if (!alternative) continue;
+      if (result.isFinal) finalText += `${alternative.transcript} `;
+      else partial += alternative.transcript;
+    }
+    onInterim(`${finalText}${partial}`.trim());
+  };
+
+  recognition.onerror = () => settle(finalText.trim() || null);
+  recognition.onend = () => settle(finalText.trim() || null);
+
+  // Safety net: a recogniser that never fires `onend` must not leave the
+  // composer stuck in a recording state forever.
+  const guard = setTimeout(() => settle(finalText.trim() || null), 60000);
+
+  try {
+    recognition.start();
+  } catch {
+    clearTimeout(guard);
+    settle(null);
+  }
+
+  return {
+    supported: true,
+    end: () => {
+      clearTimeout(guard);
+      try {
+        recognition.stop();
+      } catch {
+        // Already stopped.
+      }
+      // Give `onend` a beat, then settle with whatever we have either way.
+      setTimeout(() => settle(finalText.trim() || null), 350);
+      return finished;
+    },
+    cancel: () => {
+      clearTimeout(guard);
+      try {
+        recognition.abort();
+      } catch {
+        // Nothing to abort.
+      }
+      settle(null);
+    },
+  };
+}

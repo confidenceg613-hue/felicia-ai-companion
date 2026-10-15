@@ -1,5 +1,4 @@
 import { FeliciaCall, type CallGreeting } from "@/components/FeliciaCall";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -8,7 +7,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -16,14 +22,23 @@ import { useAuth } from "@/hooks/use-auth";
 import { FELICIA } from "@/lib/felicia";
 import { DEVELOP_MS, preloadImage } from "@/lib/photo";
 import { cn } from "@/lib/utils";
-import { playAudioUrl, sleep, speakWithBrowser } from "@/lib/voice";
+import {
+  beginVoiceNote,
+  playAudioUrl,
+  sleep,
+  speakWithBrowser,
+} from "@/lib/voice";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { motion } from "framer-motion";
 import {
   Camera,
-  ImagePlus,
+  Ellipsis,
+  Images,
+  Info,
   Loader2,
-  LogOut,
+  Mic,
+  Palette,
+  Paperclip,
   Phone,
   Send,
   Sparkles,
@@ -48,8 +63,20 @@ function timeLabel(ms: number) {
   });
 }
 
+/** One entry in the conversation, whether it is text, a shared photo or hers. */
+type TimelineItem = {
+  id: string;
+  kind: "message" | "photo";
+  role: "user" | "felicia";
+  createdAt: number;
+  content: string;
+  imageUrl: string | null;
+  scene?: string;
+  messageId?: Id<"messages">;
+};
+
 export default function Dashboard() {
-  const { user, signOut } = useAuth();
+  const { signOut } = useAuth();
   const navigate = useNavigate();
 
   const messages = useQuery(api.felicia.messages);
@@ -58,6 +85,7 @@ export default function Dashboard() {
   const clearConversation = useMutation(api.felicia.clearConversation);
   const sendMessage = useAction(api.felicia.sendMessage);
   const generatePhoto = useAction(api.felicia.generatePhoto);
+  const sendUserPhoto = useAction(api.felicia.sendUserPhoto);
   const speakMessage = useAction(api.felicia.speakMessage);
   const startCall = useAction(api.felicia.startCall);
 
@@ -72,30 +100,70 @@ export default function Dashboard() {
   const [callError, setCallError] = useState<string | null>(null);
   const [speakingId, setSpeakingId] = useState<string | null>(null);
 
+  const [artOpen, setArtOpen] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [interim, setInterim] = useState("");
+
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const voiceRef = useRef<{
+    end: () => Promise<string | null>;
+    cancel: () => void;
+  } | null>(null);
 
   const list = messages ?? [];
   const lastUserMessage = [...list].reverse().find((m) => m.role === "user");
   const showPending = pending !== null && lastUserMessage?.content !== pending;
-  const busy = thinking || developing;
+  // A photo can still be developing while you carry on typing — a companion app
+  // shouldn't lock the composer for six seconds. Only an in-flight reply or a
+  // live recording actually blocks it.
+  const composing = thinking || recording;
 
   const allPhotos = photos ?? [];
   // Photo requests are blocked until the gallery has loaded, because the reveal
   // gate works by counting photos. Capturing a baseline while the list is still
   // loading would read as zero and hide every photo instead of just the new one.
   const photosReady = photos !== undefined;
-  // A developing photo is held out of the gallery entirely, so it can never
-  // flash on screen before it is ready. New photos arrive first, so slicing by
-  // the count captured when the request started hides exactly the new arrivals.
-  const visiblePhotos =
-    hiddenCount === null
-      ? allPhotos
-      : allPhotos.slice(Math.max(0, allPhotos.length - hiddenCount));
+
+  // Her photos are newest-first, so anything above the baseline captured when a
+  // request started is a photo still developing and must stay off screen.
+  const hiddenPhotoIds = new Set<string>();
+  if (hiddenCount !== null) {
+    const fresh = allPhotos.slice(
+      0,
+      Math.max(0, allPhotos.length - hiddenCount),
+    );
+    for (const photo of fresh) hiddenPhotoIds.add(String(photo._id));
+  }
+
+  const items: TimelineItem[] = [
+    ...list.map((message) => ({
+      id: `m${message._id}`,
+      kind: "message" as const,
+      role: message.role,
+      createdAt: message.createdAt,
+      content: message.content,
+      imageUrl: message.imageUrl,
+      messageId: message._id,
+    })),
+    ...allPhotos
+      .filter((photo) => !hiddenPhotoIds.has(String(photo._id)))
+      .map((photo) => ({
+        id: `p${photo._id}`,
+        kind: "photo" as const,
+        role: "felicia" as const,
+        createdAt: photo.createdAt,
+        content: "",
+        imageUrl: photo.url,
+        scene: photo.scene,
+      })),
+  ].sort((a, b) => a.createdAt - b.createdAt);
 
   useEffect(() => {
     const node = scrollRef.current;
     if (node) node.scrollTop = node.scrollHeight;
-  }, [list.length, showPending, developing]);
+  }, [items.length, showPending, developing, interim]);
 
   /**
    * Ask Felicia for a photo, then reveal it only once it is genuinely finished:
@@ -167,7 +235,7 @@ export default function Dashboard() {
 
   async function handleSend(text: string) {
     const trimmed = text.trim();
-    if (!trimmed || busy) return;
+    if (!trimmed || composing) return;
 
     setDraft("");
     setPending(trimmed);
@@ -189,6 +257,72 @@ export default function Dashboard() {
     }
   }
 
+  /** Attach a photo from the composer and let her react to it. */
+  async function handleFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || composing) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Send an image file.");
+      return;
+    }
+    if (file.size > 6_000_000) {
+      toast.error("That photo is over 6 MB — try a smaller one.");
+      return;
+    }
+
+    setThinking(true);
+    try {
+      const data = await file.arrayBuffer();
+      await sendUserPhoto({ data, mimeType: file.type });
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "That photo didn't send.",
+      );
+    } finally {
+      setThinking(false);
+    }
+  }
+
+  // ----------------------------------------------------------- voice message
+
+  function startRecording() {
+    if (voiceRef.current || thinking) return;
+    const note = beginVoiceNote(setInterim);
+    if (!note.supported) {
+      toast.error("This browser can't record voice messages. Type instead.");
+      return;
+    }
+    voiceRef.current = note;
+    setInterim("");
+    setRecording(true);
+  }
+
+  async function stopRecording() {
+    const note = voiceRef.current;
+    if (!note) return;
+    voiceRef.current = null;
+    setRecording(false);
+    const text = await note.end();
+    setInterim("");
+    if (text) void handleSend(text);
+  }
+
+  function cancelRecording() {
+    const note = voiceRef.current;
+    if (!note) return;
+    voiceRef.current = null;
+    setRecording(false);
+    setInterim("");
+    note.cancel();
+  }
+
+  useEffect(() => {
+    // A recording must never outlive the screen it started on.
+    return () => voiceRef.current?.cancel();
+  }, []);
+
   async function handleClear() {
     try {
       await clearConversation();
@@ -204,359 +338,553 @@ export default function Dashboard() {
   }
 
   return (
-    <main className="relative min-h-screen bg-background text-foreground">
+    <>
+      {/* ------------------------------------------------------------ header */}
+      <header className="flex items-center justify-between gap-3 border-b border-border/50 bg-background/80 px-4 py-3 backdrop-blur-xl sm:px-6">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="relative shrink-0">
+            <img
+              src="/felicia/hero.jpg"
+              alt={FELICIA.name}
+              className="size-10 rounded-full border border-border/60 object-cover"
+            />
+            <span className="absolute -right-0.5 -bottom-0.5 size-3 rounded-full border-2 border-background bg-emerald-400" />
+          </div>
+          <div className="min-w-0">
+            <h1 className="truncate text-sm font-semibold">{FELICIA.fullName}</h1>
+            <p className="truncate text-xs text-muted-foreground">
+              {FELICIA.city} · online
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            title="Call her"
+            aria-label="Call her"
+            onClick={() => void handleStartCall()}
+          >
+            <Phone className="size-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            title="Her album"
+            aria-label="Her album"
+            onClick={() => navigate("/dashboard/album")}
+          >
+            <Images className="size-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            title="Create art"
+            aria-label="Create art"
+            onClick={() => setArtOpen(true)}
+          >
+            <Palette className="size-4" />
+          </Button>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                title="More"
+                aria-label="More options"
+              >
+                <Ellipsis className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>Felicia</DropdownMenuLabel>
+              <DropdownMenuItem onSelect={() => setInfoOpen(true)}>
+                <Info className="size-4" />
+                View her information
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => navigate("/dashboard/notes")}
+              >
+                Shared Notes
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => navigate("/dashboard/memories")}
+              >
+                Mind map
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={thinking || list.length === 0}
+                onSelect={() => void handleClear()}
+              >
+                <Trash2 className="size-4" />
+                Clear conversation
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => void handleSignOut()}>
+                Sign out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </header>
+
+      {/* ------------------------------------------------------- config note */}
+      {connection && !connection.configured && (
+        <div className="border-b border-primary/30 bg-primary/10 px-4 py-3 text-xs sm:px-6">
+          <p className="font-medium text-primary">
+            Cloudflare Workers AI isn't connected
+          </p>
+          <p className="mt-0.5 text-muted-foreground">
+            Add <code className="rounded bg-background/60 px-1">CLOUDFLARE_API_TOKEN</code>{" "}
+            and <code className="rounded bg-background/60 px-1">CLOUDFLARE_ACCOUNT_ID</code>{" "}
+            in your project's Keys settings so Felicia can reply and send photos.
+          </p>
+        </div>
+      )}
+
+      {/* ---------------------------------------------------------- timeline */}
       <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-96 overflow-hidden"
+        ref={scrollRef}
+        className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6"
       >
-        <div className="absolute -top-32 left-1/2 h-[32rem] w-[32rem] -translate-x-1/2 rounded-full bg-primary/10 blur-[130px]" />
-      </div>
-
-      <div className="relative mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8">
-        {/* ----------------------------------------------------------- header */}
-        <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-4">
-            <div className="relative">
-              <img
-                src="/felicia/hero.jpg"
-                alt={FELICIA.name}
-                className="size-14 rounded-2xl border border-border/60 object-cover"
-              />
-              <span className="absolute -right-0.5 -bottom-0.5 size-3.5 rounded-full border-2 border-background bg-emerald-400" />
-            </div>
-            <div>
-              <h1 className="font-display text-2xl leading-tight font-semibold tracking-tight">
-                {FELICIA.fullName}
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                {FELICIA.city} · online
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              className="gap-2 shadow-lg shadow-primary/20"
-              onClick={() => void handleStartCall()}
-            >
-              <Phone className="size-4" />
-              Call her
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="gap-2 text-muted-foreground"
-              onClick={handleClear}
-              disabled={busy || list.length === 0}
-            >
-              <Trash2 className="size-4" />
-              <span className="hidden sm:inline">Clear</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-2"
-              onClick={handleSignOut}
-            >
-              <LogOut className="size-4" />
-              Sign out
-            </Button>
-          </div>
-        </header>
-
-        {/* ------------------------------------------------------- config note */}
-        {connection && !connection.configured && (
-          <div className="rounded-2xl border border-primary/40 bg-primary/10 p-4 text-sm">
-            <p className="font-medium text-primary">
-              Cloudflare Workers AI isn't connected
-            </p>
-            <p className="mt-1 text-muted-foreground">
-              Add{" "}
-              <code className="rounded bg-background/60 px-1.5 py-0.5">
-                CLOUDFLARE_API_TOKEN
-              </code>{" "}
-              and{" "}
-              <code className="rounded bg-background/60 px-1.5 py-0.5">
-                CLOUDFLARE_ACCOUNT_ID
-              </code>{" "}
-              in your project's Keys settings so Felicia can reply and send
-              photos.
-            </p>
-          </div>
-        )}
-
-        <div className="grid gap-6 lg:grid-cols-[1.35fr_1fr]">
-          {/* ---------------------------------------------------------- chat */}
-          <section className="flex h-[70vh] min-h-[30rem] flex-col overflow-hidden rounded-2xl border border-border/60 bg-card">
-            <div
-              ref={scrollRef}
-              className="flex-1 space-y-4 overflow-y-auto p-5"
-            >
-              {list.length === 0 && !showPending && (
-                <div className="flex h-full flex-col items-center justify-center px-4 text-center">
-                  <div className="flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                    <Sparkles className="size-5" />
-                  </div>
-                  <h2 className="mt-4 font-display text-xl">
-                    Felicia is at her desk in Alfama.
-                  </h2>
-                  <p className="mt-2 max-w-sm text-sm text-muted-foreground">
-                    She's editing yesterday's roll and she's bored of it. Say
-                    something and she'll pick up.
-                  </p>
-                  <div className="mt-6 flex flex-wrap justify-center gap-2">
-                    {OPENERS.map((opener) => (
-                      <button
-                        key={opener}
-                        type="button"
-                        onClick={() => void handleSend(opener)}
-                        className="rounded-full border border-border/60 bg-background/40 px-3.5 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
-                      >
-                        {opener}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {list.map((message) => (
-                <motion.div
-                  key={message._id}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.25 }}
-                  className={cn(
-                    "flex",
-                    message.role === "user" ? "justify-end" : "justify-start",
-                  )}
-                >
-                  <div
-                    className={cn(
-                      "max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
-                      message.role === "user"
-                        ? "rounded-br-md bg-primary text-primary-foreground"
-                        : "rounded-bl-md bg-secondary text-secondary-foreground",
-                    )}
-                  >
-                    <p className="whitespace-pre-wrap">{message.content}</p>
-                    <div className="mt-1 flex items-center gap-2">
-                      <p
-                        className={cn(
-                          "text-[10px]",
-                          message.role === "user"
-                            ? "text-primary-foreground/60"
-                            : "text-muted-foreground/70",
-                        )}
-                      >
-                        {timeLabel(message.createdAt)}
-                      </p>
-                      {message.role === "felicia" && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            void playMessage(message._id, message.content)
-                          }
-                          disabled={speakingId !== null}
-                          title="Hear this in her voice"
-                          className="flex items-center gap-1 text-[10px] text-muted-foreground/70 transition-colors hover:text-primary disabled:opacity-50"
-                        >
-                          {speakingId === message._id ? (
-                            <Loader2 className="size-3 animate-spin" />
-                          ) : (
-                            <Volume2 className="size-3" />
-                          )}
-                          play
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-
-              {showPending && (
-                <div className="flex justify-end">
-                  <div className="max-w-[85%] rounded-2xl rounded-br-md bg-primary/70 px-4 py-2.5 text-sm text-primary-foreground">
-                    <p className="whitespace-pre-wrap">{pending}</p>
-                  </div>
-                </div>
-              )}
-
-              {thinking && (
-                <div className="flex justify-start">
-                  <div className="flex items-center gap-1.5 rounded-2xl rounded-bl-md bg-secondary px-4 py-3">
-                    {[0, 150, 300].map((delay) => (
-                      <span
-                        key={delay}
-                        className="size-1.5 animate-bounce rounded-full bg-muted-foreground"
-                        style={{ animationDelay: `${delay}ms` }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {developing && (
-                <div className="flex justify-start">
-                  <div className="w-64 rounded-2xl border border-primary/30 bg-primary/10 px-4 py-3 text-xs text-primary">
-                    <div className="flex items-center gap-2.5">
-                      <Camera className="size-4 animate-pulse" />
-                      Felicia is taking a photo…
-                    </div>
-                    <div className="mt-2.5 h-1 w-full overflow-hidden rounded-full bg-primary/20">
-                      <motion.div
-                        className="h-full rounded-full bg-primary"
-                        initial={{ width: "0%" }}
-                        animate={{ width: "100%" }}
-                        transition={{
-                          duration: DEVELOP_MS / 1000,
-                          ease: "linear",
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                void handleSend(draft);
-              }}
-              className="border-t border-border/60 bg-background/40 p-4"
-            >
-              <div className="flex items-end gap-2">
-                <Textarea
-                  value={draft}
-                  onChange={(event) => setDraft(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey) {
-                      event.preventDefault();
-                      void handleSend(draft);
-                    }
-                  }}
-                  placeholder="Message Felicia…"
-                  rows={1}
-                  disabled={busy}
-                  className="max-h-32 min-h-11 resize-none"
-                />
-                <Button
-                  type="submit"
-                  size="icon"
-                  className="size-11 shrink-0"
-                  disabled={busy || !draft.trim()}
-                >
-                  {thinking ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <Send className="size-4" />
-                  )}
-                </Button>
+        <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+          {items.length === 0 && !showPending && (
+            <div className="flex flex-col items-center justify-center px-4 py-16 text-center">
+              <div className="flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <Sparkles className="size-5" />
               </div>
-              <p className="mt-2 text-[11px] text-muted-foreground">
-                Enter to send · Shift + Enter for a new line
+              <h2 className="mt-4 font-display text-xl">
+                Felicia is at her desk in Alfama.
+              </h2>
+              <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+                She's editing yesterday's roll and she's bored of it. Say
+                something and she'll pick up.
               </p>
-            </form>
-          </section>
-
-          {/* -------------------------------------------------------- photos */}
-          <section className="flex flex-col gap-4">
-            <div className="rounded-2xl border border-border/60 bg-card p-5">
-              <div className="flex items-center justify-between">
-                <h2 className="font-display text-lg">Ask for a photo</h2>
-                <Badge
-                  variant="outline"
-                  className="border-primary/40 text-[10px] text-primary"
-                >
-                  {photos?.length ?? 0} sent
-                </Badge>
-              </div>
-              <p className="mt-1.5 text-xs text-muted-foreground">
-                She'll tell you where she is, then send the picture.
-              </p>
-
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Button
-                  size="sm"
-                  className="gap-2"
-                  disabled={busy || !photosReady}
-                  onClick={() =>
-                    void requestPhoto(
-                      "somewhere she has just arrived, warm evening light, candid",
-                    )
-                  }
-                >
-                  {developing ? (
-                    <Loader2 className="size-3.5 animate-spin" />
-                  ) : (
-                    <ImagePlus className="size-3.5" />
-                  )}
-                  Surprise me
-                </Button>
-                {FELICIA.scenes.map((scene) => (
+              <div className="mt-6 flex flex-wrap justify-center gap-2">
+                {OPENERS.map((opener) => (
                   <button
-                    key={scene.label}
+                    key={opener}
                     type="button"
-                    disabled={busy || !photosReady}
-                    onClick={() => void requestPhoto(scene.scene)}
-                    className="rounded-full border border-border/60 bg-background/40 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground disabled:opacity-50"
+                    onClick={() => void handleSend(opener)}
+                    className="rounded-full border border-border/60 bg-card px-3.5 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
                   >
-                    {scene.label}
+                    {opener}
                   </button>
                 ))}
               </div>
             </div>
+          )}
 
-            <div className="rounded-2xl border border-border/60 bg-card p-5">
-              <h2 className="font-display text-lg">Her photos</h2>
-              <p className="mt-1.5 text-xs text-muted-foreground">
-                Everything she's sent you, newest first.
-              </p>
+          {items.map((item) => {
+            const isUser = item.role === "user";
 
-              {photos === undefined ? (
-                <div className="mt-4 flex h-32 items-center justify-center">
-                  <Loader2 className="size-5 animate-spin text-muted-foreground" />
+            if (item.kind === "photo" && item.imageUrl) {
+              return (
+                <motion.div
+                  key={item.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="flex justify-start gap-2.5"
+                >
+                  <img
+                    src="/felicia/hero.jpg"
+                    alt=""
+                    className="mt-1 size-7 shrink-0 rounded-full object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setLightbox(item.imageUrl)}
+                    className="group w-fit max-w-[80%] overflow-hidden rounded-2xl rounded-bl-md border border-border/60 bg-card text-left"
+                    title={item.scene}
+                  >
+                    <img
+                      src={item.imageUrl}
+                      alt={item.scene ?? "Felicia sent a photo"}
+                      loading="lazy"
+                      className="block max-h-[26rem] w-full max-w-xs object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+                    />
+                    {item.scene && (
+                      <p className="px-3 py-2 text-[11px] leading-snug text-muted-foreground">
+                        {item.scene}
+                      </p>
+                    )}
+                  </button>
+                </motion.div>
+              );
+            }
+
+            return (
+              <motion.div
+                key={item.id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25 }}
+                className={cn(
+                  "flex gap-2.5",
+                  isUser ? "justify-end" : "justify-start",
+                )}
+              >
+                {!isUser && (
+                  <img
+                    src="/felicia/hero.jpg"
+                    alt=""
+                    className="mt-1 size-7 shrink-0 rounded-full object-cover"
+                  />
+                )}
+
+                <div
+                  className={cn(
+                    "max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
+                    isUser
+                      ? "rounded-br-md bg-primary text-primary-foreground"
+                      : "rounded-bl-md bg-card text-foreground",
+                    !isUser && "border border-border/60",
+                  )}
+                >
+                  {item.imageUrl && item.content === "" ? (
+                    <button
+                      type="button"
+                      onClick={() => setLightbox(item.imageUrl)}
+                      className="block overflow-hidden rounded-xl"
+                    >
+                      <img
+                        src={item.imageUrl}
+                        alt="Shared photo"
+                        loading="lazy"
+                        className="max-h-[26rem] w-full max-w-xs object-cover"
+                      />
+                    </button>
+                  ) : (
+                    <p className="whitespace-pre-wrap">{item.content}</p>
+                  )}
+
+                  <div
+                    className={cn(
+                      "mt-1 flex items-center gap-2",
+                      item.imageUrl && item.content === "" && "hidden",
+                    )}
+                  >
+                    <p
+                      className={cn(
+                        "text-[10px]",
+                        isUser
+                          ? "text-primary-foreground/60"
+                          : "text-muted-foreground/70",
+                      )}
+                    >
+                      {timeLabel(item.createdAt)}
+                    </p>
+
+                    {!isUser && item.messageId && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void playMessage(item.messageId!, item.content)
+                        }
+                        disabled={speakingId !== null}
+                        title="Hear this in her voice"
+                        className="flex items-center gap-1 text-[10px] text-muted-foreground/70 transition-colors hover:text-primary disabled:opacity-50"
+                      >
+                        {speakingId === item.messageId ? (
+                          <Loader2 className="size-3 animate-spin" />
+                        ) : (
+                          <Volume2 className="size-3" />
+                        )}
+                        play
+                      </button>
+                    )}
+                  </div>
                 </div>
-              ) : allPhotos.length === 0 ? (
-                <div className="mt-4 flex flex-col items-center rounded-xl border border-dashed border-border/60 px-4 py-10 text-center">
-                  <Camera className="size-5 text-muted-foreground" />
-                  <p className="mt-3 text-sm text-muted-foreground">
-                    Nothing yet. Ask her to send you something.
-                  </p>
-                </div>
-              ) : (
-                <div className="mt-4">
-                  <ScrollArea className="max-h-[26rem]">
-                    <div className="grid grid-cols-2 gap-3 pr-3">
-                      {visiblePhotos.map((photo) => (
-                        <button
-                          key={photo._id}
-                          type="button"
-                          onClick={() => photo.url && setLightbox(photo.url)}
-                          className="group relative overflow-hidden rounded-xl border border-border/60"
-                          title={photo.scene}
-                        >
-                          <img
-                            src={photo.url ?? ""}
-                            alt={photo.scene}
-                            loading="lazy"
-                            className="aspect-square w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                          />
-                          <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/80 to-transparent px-2 pt-6 pb-1.5 text-left text-[10px] text-white/85">
-                            {timeLabel(photo.createdAt)}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </ScrollArea>
-                </div>
-              )}
+              </motion.div>
+            );
+          })}
+
+          {showPending && (
+            <div className="flex justify-end">
+              <div className="max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-sm text-primary-foreground">
+                <p className="whitespace-pre-wrap">{pending}</p>
+              </div>
             </div>
-          </section>
+          )}
+
+          {thinking && (
+            <div className="flex justify-start gap-2.5">
+              <img
+                src="/felicia/hero.jpg"
+                alt=""
+                className="size-7 shrink-0 rounded-full object-cover"
+              />
+              <div className="flex items-center gap-1.5 rounded-2xl rounded-bl-md border border-border/60 bg-card px-4 py-3">
+                {[0, 150, 300].map((delay) => (
+                  <span
+                    key={delay}
+                    className="size-1.5 animate-bounce rounded-full bg-muted-foreground"
+                    style={{ animationDelay: `${delay}ms` }}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {developing && (
+            <div className="flex justify-start gap-2.5">
+              <img
+                src="/felicia/hero.jpg"
+                alt=""
+                className="size-7 shrink-0 rounded-full object-cover"
+              />
+              <div className="w-64 rounded-2xl border border-primary/30 bg-primary/10 px-4 py-3 text-xs text-primary">
+                <div className="flex items-center gap-2.5">
+                  <Camera className="size-4 animate-pulse" />
+                  Felicia is taking a photo…
+                </div>
+                <div className="mt-2.5 h-1 w-full overflow-hidden rounded-full bg-primary/20">
+                  <motion.div
+                    className="h-full rounded-full bg-primary"
+                    initial={{ width: "0%" }}
+                    animate={{ width: "100%" }}
+                    transition={{
+                      duration: DEVELOP_MS / 1000,
+                      ease: "linear",
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
+      {/* --------------------------------------------------------- composer */}
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          void handleSend(draft);
+        }}
+        className="border-t border-border/50 bg-background/80 px-4 py-3 backdrop-blur-xl sm:px-6"
+      >
+        <div className="mx-auto w-full max-w-3xl">
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(event) => void handleFile(event)}
+          />
+
+          {recording && (
+            <div className="mb-2 flex items-center gap-2 rounded-xl border border-primary/40 bg-primary/10 px-3 py-2 text-xs text-primary">
+              <span className="flex size-2">
+                <span className="absolute inline-flex size-2 animate-ping rounded-full bg-primary opacity-75" />
+                <span className="relative inline-flex size-2 rounded-full bg-primary" />
+              </span>
+              Recording — release to send
+              {interim && (
+                <span className="truncate text-muted-foreground italic">
+                  “{interim}”
+                </span>
+              )}
+            </div>
+          )}
+
+          <div className="flex items-end gap-1.5">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="shrink-0 text-muted-foreground"
+              title="Send a photo of yourself"
+              aria-label="Send a photo"
+              disabled={composing}
+              onClick={() => fileRef.current?.click()}
+            >
+              <Paperclip className="size-4" />
+            </Button>
+
+            <Textarea
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  void handleSend(draft);
+                }
+              }}
+              placeholder={
+                recording ? "Listening…" : "Message Felicia…"
+              }
+              rows={1}
+              disabled={composing}
+              className="max-h-32 min-h-11 flex-1 resize-none rounded-2xl"
+            />
+
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="shrink-0 text-muted-foreground"
+              title="Ask for a selfie"
+              aria-label="Ask for a selfie"
+              disabled={composing || developing || !photosReady}
+              onClick={() =>
+                void requestPhoto(
+                  "a candid selfie, holding the camera at arm's length, soft window light, natural smile",
+                )
+              }
+            >
+              <Camera className="size-4" />
+            </Button>
+
+            <Button
+              type="button"
+              size="icon"
+              variant={recording ? "default" : "ghost"}
+              className={cn(
+                "shrink-0 touch-none select-none",
+                recording
+                  ? "text-primary-foreground"
+                  : "text-muted-foreground",
+              )}
+              title={
+                recording ? "Release to send" : "Hold to send a voice message"
+              }
+              aria-label="Hold to record a voice message"
+              disabled={!recording && thinking}
+              onContextMenu={(event) => event.preventDefault()}
+              onPointerDown={(event) => {
+                event.currentTarget.setPointerCapture(event.pointerId);
+                startRecording();
+              }}
+              onPointerUp={() => void stopRecording()}
+              onPointerCancel={cancelRecording}
+              onLostPointerCapture={() => void stopRecording()}
+            >
+              {recording ? (
+                <Mic className="size-4 animate-pulse" />
+              ) : (
+                <Mic className="size-4" />
+              )}
+            </Button>
+
+            <Button
+              type="submit"
+              size="icon"
+              className="size-11 shrink-0"
+              disabled={composing || !draft.trim()}
+            >
+              {thinking ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Send className="size-4" />
+              )}
+            </Button>
+          </div>
+
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            Enter to send · Shift + Enter for a new line · hold the mic to send
+            a voice message
+          </p>
+        </div>
+      </form>
+
+      {/* -------------------------------------------------------- art dialog */}
+      <Dialog open={artOpen} onOpenChange={setArtOpen}>
+        <DialogContent className="max-w-lg border-border/60 bg-card">
+          <DialogHeader>
+            <DialogTitle className="font-display text-xl">
+              Ask her for a photo
+            </DialogTitle>
+            <DialogDescription>
+              She'll tell you where she is, then send the picture.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              className="gap-2"
+              disabled={composing || developing || !photosReady}
+              onClick={() => {
+                setArtOpen(false);
+                void requestPhoto(
+                  "somewhere she has just arrived, warm evening light, candid",
+                );
+              }}
+            >
+              <Sparkles className="size-3.5" />
+              Surprise me
+            </Button>
+            {FELICIA.scenes.map((scene) => (
+              <button
+                key={scene.label}
+                type="button"
+                disabled={composing || developing || !photosReady}
+                onClick={() => {
+                  setArtOpen(false);
+                  void requestPhoto(scene.scene);
+                }}
+                className="rounded-full border border-border/60 bg-background/40 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground disabled:opacity-50"
+              >
+                {scene.label}
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* --------------------------------------------------------- her info */}
+      <Dialog open={infoOpen} onOpenChange={setInfoOpen}>
+        <DialogContent className="max-w-md border-border/60 bg-card">
+          <DialogHeader>
+            <DialogTitle className="font-display text-xl">
+              {FELICIA.fullName}
+            </DialogTitle>
+            <DialogDescription>{FELICIA.eyebrow}</DialogDescription>
+          </DialogHeader>
+
+          <div className="mt-1 flex items-start gap-4">
+            <img
+              src="/felicia/hero.jpg"
+              alt={FELICIA.name}
+              className="size-20 shrink-0 rounded-2xl border border-border/60 object-cover"
+            />
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              {FELICIA.intro}
+            </p>
+          </div>
+
+          <dl className="mt-3 grid grid-cols-3 gap-4 border-t border-border/50 pt-4">
+            {[
+              { k: "Age", v: String(FELICIA.age) },
+              { k: "Lives in", v: "Lisbon" },
+              { k: "Talks to you", v: "Most evenings" },
+            ].map((row) => (
+              <div key={row.k}>
+                <dt className="text-[10px] tracking-widest text-muted-foreground/70 uppercase">
+                  {row.k}
+                </dt>
+                <dd className="mt-1 font-display text-base">{row.v}</dd>
+              </div>
+            ))}
+          </dl>
+
+          <Button
+            variant="outline"
+            className="mt-4 w-full"
+            onClick={() => {
+              setInfoOpen(false);
+              navigate("/dashboard/notes");
+            }}
+          >
+            Edit Shared Notes
+          </Button>
+        </DialogContent>
+      </Dialog>
+
+      {/* ---------------------------------------------------------- lightbox */}
       <Dialog
         open={lightbox !== null}
         onOpenChange={(open) => !open && setLightbox(null)}
@@ -583,6 +911,6 @@ export default function Dashboard() {
           onClose={() => setCallOpen(false)}
         />
       )}
-    </main>
+    </>
   );
 }
