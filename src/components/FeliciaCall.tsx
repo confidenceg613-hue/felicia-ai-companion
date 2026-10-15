@@ -133,7 +133,7 @@ export function FeliciaCall({
         if (!usedFallbackRef.current) {
           usedFallbackRef.current = true;
           setNote(
-            "Felicia's own voice is unavailable right now, so she's using your device voice.",
+            "Felicia's own voice isn't available right now, so she's using your device voice.",
           );
         }
         await speakWithBrowser(text);

@@ -440,12 +440,13 @@ export default function Dashboard() {
           <p className="mt-0.5 text-muted-foreground">
             Add <code className="rounded bg-background/60 px-1">GROQ_API_KEY</code>{" "}
             in your project's Keys settings so Felicia can reply to you.
-            Photos still use the AI Horde, and voice still uses Cloudflare Workers
-            AI — you'll need
+            Photos still use the AI Horde, and voice now tries Cloudflare Workers
+            AI first and falls back to Groq Orpheus TTS — you'll need
             <code className="rounded bg-background/60 px-1">AI_HORDE_API_KEY</code>{" "}
-            and <code className="rounded bg-background/60 px-1">CLOUDFLARE_API_TOKEN</code>{" "}
+            <code className="rounded bg-background/60 px-1">CLOUDFLARE_API_TOKEN</code>{" "}
             <code className="rounded bg-background/60 px-1">CLOUDFLARE_ACCOUNT_ID</code>{" "}
-            for those.
+            for those. If Cloudflare can’t speak, Felicia can also use Groq’s
+            Orpheus voice, so GROQ_API_KEY helps there too.
           </p>
         </div>
       )}

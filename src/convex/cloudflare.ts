@@ -443,7 +443,7 @@ export const generateImage = internalAction({
 async function speakWithGroq(
   apiKey: string,
   text: string,
-): Promise<{ bytes: Uint8Array; mimeType: string; model: string }> {
+): Promise<{ bytes: Uint8Array<ArrayBuffer>; mimeType: string; model: string }> {
   const response = await fetch(
     "https://api.groq.com/openai/v1/audio/speech",
     {
@@ -451,11 +451,10 @@ async function speakWithGroq(
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
+      },        body: JSON.stringify({
         model: "canopylabs/orpheus-v1-english",
         input: text,
-        voice: "austin",
+        voice: "hannah",
         response_format: "wav",
       }),
     },
@@ -467,14 +466,13 @@ async function speakWithGroq(
   }
 
   const contentType =
-    response.headers.get("content-type") ?? "application/octet-stream";
-  const bytes = Buffer.from(await response.arrayBuffer());
-  if (bytes.byteLength === 0) {
+    response.headers.get("content-type") ?? "application/octet-stream";      const rawBytes = await response.arrayBuffer();
+  if (rawBytes.byteLength === 0) {
     throw new Error("Groq TTS returned empty audio.");
   }
 
   return {
-    bytes: new Uint8Array(bytes),
+    bytes: new Uint8Array(rawBytes),
     mimeType:
       contentType.split(";")[0]?.trim() || "audio/wav",
     model: "canopylabs/orpheus-v1-english",
@@ -622,7 +620,7 @@ export const speak = internalAction({
       try {
         const groqAudio = await speakWithGroq(groqApiKey()!, spoken);
         const storageId = await ctx.storage.store(
-          new Blob([new Uint8Array(groqAudio.bytes)], { type: groqAudio.mimeType }),
+          new Blob([groqAudio.bytes], { type: groqAudio.mimeType }),
         );
         return { storageId, mimeType: groqAudio.mimeType, model: groqAudio.model };
       } catch (error) {
