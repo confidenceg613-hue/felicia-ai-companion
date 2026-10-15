@@ -55,11 +55,26 @@ export function isAiHordeConfigured(): boolean {
  * Groq's chat completions API is authenticated with a Bearer token in the
  * `Authorization` header. Store it as `GROQ_API_KEY` in the project's Keys/API
  * keys settings.
+ *
+ * The same key is also used for Groq text-to-speech, via the Audio API
+ * `POST /openai/v1/audio/speech` endpoint.
  */
 export function groqApiKey(): string | null {
   return process.env.GROQ_API_KEY ?? null;
 }
 
 export function isGroqConfigured(): boolean {
+  return Boolean(groqApiKey());
+}
+
+/**
+ * Groq voice capability resolution.
+ *
+ * Groq text-to-speech is a separate Audio API endpoint, not Cloudflare-style
+ * workers. This app keeps Cloudflare Workers AI as the default voice backend
+ * because it returns MP3 directly and has a mature fallback ladder, but Groq
+ * Orpheus can be used as an alternative when Cloudflare is unavailable.
+ */
+export function groqVoiceEnabled(): boolean {
   return Boolean(groqApiKey());
 }

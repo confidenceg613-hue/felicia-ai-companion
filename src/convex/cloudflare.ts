@@ -6,6 +6,7 @@ import {
   cloudflareAccountId,
   cloudflareToken,
   groqApiKey,
+  groqVoiceEnabled,
 } from "./config";
 import type { Id } from "./_generated/dataModel";
 import { internalAction } from "./_generated/server";
@@ -15,13 +16,16 @@ import { internalAction } from "./_generated/server";
  *
  * Text and voice have their own backends now:
  *   chat  → Groq chat completions
- *   speak → Cloudflare Workers AI voice models
+ *   speak → Cloudflare Workers AI voice models, with Groq Orpheus TTS as an
+ *           alternative when Cloudflare is unavailable
+ *   image → AI Horde
  *
  * The token and account id are read from the deployment environment so the
  * secret never reaches the browser bundle. Add them in the project's
  * Keys/API keys settings as:
  *   CLOUDFLARE_API_TOKEN   – an API token with the "Workers AI: Read" permission
  *   CLOUDFLARE_ACCOUNT_ID  – the account that owns the Workers AI usage
+ *   GROQ_API_KEY           – used for both chat and Groq text-to-speech
  */
 
 /**
@@ -432,6 +436,70 @@ export const generateImage = internalAction({
 });
 
 /**
+ * Groq Orpheus text-to-speech.
+ *
+ * Returns WAV bytes directly from `POST /openai/v1/audio/speech`.
+ */
+async function speakWithGroq(
+  apiKey: string,
+  text: string,
+): Promise<{ bytes: Uint8Array; mimeType: string; model: string }> {
+  const response = await fetch(
+    "https://api.groq.com/openai/v1/audio/speech",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "canopylabs/orpheus-v1-english",
+        input: text,
+        voice: "austin",
+        response_format: "wav",
+      }),
+    },
+  );
+
+  const raw = await response.text();
+  if (!response.ok) {
+    throw new Error(groqAudioFailure(response.status, raw));
+  }
+
+  const contentType =
+    response.headers.get("content-type") ?? "application/octet-stream";
+  const bytes = Buffer.from(await response.arrayBuffer());
+  if (bytes.byteLength === 0) {
+    throw new Error("Groq TTS returned empty audio.");
+  }
+
+  return {
+    bytes: new Uint8Array(bytes),
+    mimeType:
+      contentType.split(";")[0]?.trim() || "audio/wav",
+    model: "canopylabs/orpheus-v1-english",
+  };
+}
+
+/** Turn a Groq audio error response into something readable. */
+function groqAudioFailure(status: number, raw: string): string {
+  try {
+    const parsed = JSON.parse(raw) as {
+      error?: { message?: string; type?: string };
+    };
+    const message =
+      parsed.error?.message ?? parsed.error?.type ?? null;
+    if (typeof message === "string" && message.trim()) {
+      return message;
+    }
+  } catch {
+    // fall through to the raw body
+  }
+  if (raw.trim()) return raw.slice(0, 300);
+  return `Groq TTS returned status ${status}`;
+}
+
+/**
  * Sleep for the given number of milliseconds. Used only by the Horde polling
  * loop, where we deliberately pause between status checks.
  */
@@ -469,6 +537,10 @@ function describeHordeFailure(status: number, raw: string): string {
  * Walks the voice ladder until one model answers with usable audio; if every
  * model fails the error lists what each one said, so a quota problem reads
  * differently from a malformed request.
+ *
+ * The default ladder is Cloudflare Workers AI because it returns MP3 directly.
+ * If Cloudflare is unavailable, this falls back to Groq Orpheus TTS, which
+ * returns WAV audio from the Groq Audio API.
  */
 export const speak = internalAction({
   args: { text: v.string() },
@@ -543,6 +615,19 @@ export const speak = internalAction({
         new Blob([new Uint8Array(bytes)], { type: mimeType }),
       );
       return { storageId, mimeType, model: candidate.model };
+    }
+
+    // Cloudflare did not work; try Groq Orpheus TTS if a Groq key is present.
+    if (groqVoiceEnabled()) {
+      try {
+        const groqAudio = await speakWithGroq(groqApiKey()!, spoken);
+        const storageId = await ctx.storage.store(
+          new Blob([new Uint8Array(groqAudio.bytes)], { type: groqAudio.mimeType }),
+        );
+        return { storageId, mimeType: groqAudio.mimeType, model: groqAudio.model };
+      } catch (error) {
+        failures.push(`groq/orpheus: ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
 
     throw new Error(`Felicia could not speak: ${failures.join(" | ")}`);
