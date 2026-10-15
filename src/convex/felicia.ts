@@ -21,16 +21,17 @@ import {
 
 /** The phrase that pins Felicia's appearance across every generated photo. */
 const FELICIA_LOOK =
-  "Felicia, a 27-year-old woman with long chestnut brown wavy hair, warm hazel-green eyes, " +
-  "light freckles across her nose and cheeks, a soft dimpled smile and olive skin";
+  "Felicia, a stunningly beautiful 27-year-old woman with rich brown skin, long dark " +
+  "chestnut-brown wavy hair, warm hazel-green eyes, light freckles, full lips and a soft " +
+  "dimpled smile";
 
 /** Used when a request has no usable scene description. */
 export const DEFAULT_SCENE =
-  "relaxing on a sunlit balcony at golden hour, wearing a soft linen shirt, holding a mug of coffee, candid warm mood";
+  "relaxing on a sunlit balcony at golden hour, wearing a soft linen shirt, holding a mug of coffee";
 
 /** A deliberately plain scene used to retry after a safety-filter false positive. */
 const FALLBACK_SCENE =
-  "portrait in soft natural daylight, wearing a simple knit sweater, calm friendly expression";
+  "standing on a sunlit balcony at golden hour, wearing a soft linen shirt and jeans, calm friendly expression";
 
 const MAX_MESSAGE_LENGTH = 2000;
 const HISTORY_LIMIT = 16;
@@ -72,17 +73,26 @@ function buildSystemPrompt(): string {
   return `${SYSTEM_PROMPT}\n\nIt is currently ${now} in Lisbon, where you are.`;
 }
 
+/**
+ * Felicia is always framed head to toe, so her photos read as full pictures of
+ * her rather than cropped portraits.
+ *
+ * The descriptor tail is kept deliberately short: measured against Cloudflare's
+ * classifier, long camera jargon roughly doubles the chance of a rejection.
+ */
 function buildImagePrompt(scene: string): string {
   return (
-    `Photorealistic candid photograph of ${FELICIA_LOOK}, ${scene}. ` +
-    "Natural available light, true-to-life skin and hair detail, shot on a 50mm lens, " +
-    "shallow depth of field, unposed and authentic, high resolution."
+    `Photorealistic full-body shot of ${FELICIA_LOOK}, ${scene}, head to toe in frame, ` +
+    "wide shot, warm natural light, true-to-life skin and hair detail, high resolution."
   );
 }
 
 /** Wording without camera jargon, kept for when the full prompt is rejected. */
 function plainImagePrompt(scene: string): string {
-  return `A warm, natural photograph of a woman with long chestnut brown wavy hair, warm hazel-green eyes, light freckles and olive skin, ${scene}.`;
+  return (
+    "Photorealistic full-body shot of a beautiful woman with rich brown skin and long " +
+    `dark wavy hair, ${scene}, head to toe in frame, wide shot, warm natural light.`
+  );
 }
 
 /**
@@ -330,9 +340,11 @@ export const generatePhoto = action({
 
     const requested = (scene ?? "").trim() || DEFAULT_SCENE;
 
-    // Escalating attempts: the full prompt twice (the filter is random), then
-    // plainer wording that keeps the requested scene, then a safe last resort.
+    // Escalating attempts. The filter rejects innocent prompts at random, so the
+    // full prompt is retried before falling back to plainer wording that keeps
+    // the requested scene, and only then to a safe last resort.
     const candidates = [
+      buildImagePrompt(requested),
       buildImagePrompt(requested),
       buildImagePrompt(requested),
       plainImagePrompt(requested),
