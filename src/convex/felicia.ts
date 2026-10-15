@@ -19,11 +19,22 @@ import {
  * internal actions in `cloudflare.ts`.
  */
 
-/** The phrase that pins Felicia's appearance across every generated photo. */
+/**
+ * Felicia's character sheet. This exact text is prepended to every photo prompt so
+ * her face, hair and figure stay consistent from picture to picture.
+ *
+ * Figure and posture cues are described in tasteful terms. Explicit anatomy is
+ * deliberately omitted: Cloudflare's classifier rejects that wording, which would
+ * break photo generation entirely.
+ */
 const FELICIA_LOOK =
-  "Felicia, a stunningly beautiful 27-year-old woman with rich brown skin, long dark " +
-  "chestnut-brown wavy hair, warm hazel-green eyes, light freckles, full lips and a soft " +
-  "dimpled smile";
+  "Felicia, a beautiful 27-year-old woman with fair to light beige skin with warm " +
+  "undertones, smooth clear skin with a soft natural glow, an oval face with high " +
+  "cheekbones, a small straight nose, full soft pink lips, large expressive " +
+  "almond-shaped brown eyes with long dark lashes, slightly arched eyebrows and a " +
+  "gentle smile, long wavy dark brown hair falling past her shoulders with light " +
+  "face-framing strands, a slim athletic yet soft feminine figure with a narrow " +
+  "waist, long legs and elegant posture";
 
 /** Used when a request has no usable scene description. */
 export const DEFAULT_SCENE =
@@ -83,15 +94,17 @@ function buildSystemPrompt(): string {
 function buildImagePrompt(scene: string): string {
   return (
     `Photorealistic full-body shot of ${FELICIA_LOOK}, ${scene}, head to toe in frame, ` +
-    "wide shot, warm natural light, true-to-life skin and hair detail, high resolution."
+    "wide shot, warm natural light, high detail face, true-to-life skin and hair, " +
+    "high resolution."
   );
 }
 
 /** Wording without camera jargon, kept for when the full prompt is rejected. */
 function plainImagePrompt(scene: string): string {
   return (
-    "Photorealistic full-body shot of a beautiful woman with rich brown skin and long " +
-    `dark wavy hair, ${scene}, head to toe in frame, wide shot, warm natural light.`
+    "Photorealistic full-body shot of a beautiful woman with fair to light beige skin " +
+    "and long wavy dark brown hair, an oval face, large almond-shaped brown eyes and a " +
+    `gentle smile, ${scene}, head to toe in frame, wide shot, warm natural light.`
   );
 }
 
@@ -333,8 +346,14 @@ export const sendMessage = action({
  */
 export const generatePhoto = action({
   args: { scene: v.optional(v.string()) },
-  returns: v.object({ storageId: v.id("_storage") }),
-  handler: async (ctx, { scene }): Promise<{ storageId: Id<"_storage"> }> => {
+  returns: v.object({
+    storageId: v.id("_storage"),
+    url: v.union(v.string(), v.null()),
+  }),
+  handler: async (
+    ctx,
+    { scene },
+  ): Promise<{ storageId: Id<"_storage">; url: string | null }> => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Sign in to see Felicia's photos.");
 
@@ -378,6 +397,11 @@ export const generatePhoto = action({
       scene: requested,
     });
 
-    return { storageId: success.storageId };
+    // The client preloads this URL and holds the photo back until it has fully
+    // decoded, so a half-rendered image is never shown.
+    return {
+      storageId: success.storageId,
+      url: await ctx.storage.getUrl(success.storageId),
+    };
   },
 });

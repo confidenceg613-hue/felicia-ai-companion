@@ -35,6 +35,27 @@ const OPENERS = [
   "What's playing in the studio?",
 ];
 
+/**
+ * How long a photo develops before it is revealed. Felicia's picture is held back
+ * until it has finished generating, been fully decoded by the browser, and is at
+ * least this old — so nothing ever appears half-rendered.
+ */
+const DEVELOP_MS = 6000;
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+/** Resolve once the browser has decoded the image, not merely downloaded it. */
+function preloadImage(url: string) {
+  return new Promise<void>((resolve) => {
+    const image = new Image();
+    image.onload = () => resolve();
+    image.onerror = () => resolve();
+    image.src = url;
+  });
+}
+
 function timeLabel(ms: number) {
   return new Date(ms).toLocaleTimeString([], {
     hour: "2-digit",
@@ -56,7 +77,8 @@ export default function Dashboard() {
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState<string | null>(null);
   const [thinking, setThinking] = useState(false);
-  const [generating, setGenerating] = useState<string | null>(null);
+  const [developing, setDeveloping] = useState(false);
+  const [hiddenCount, setHiddenCount] = useState<number | null>(null);
   const [lightbox, setLightbox] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -64,17 +86,40 @@ export default function Dashboard() {
   const list = messages ?? [];
   const lastUserMessage = [...list].reverse().find((m) => m.role === "user");
   const showPending = pending !== null && lastUserMessage?.content !== pending;
-  const busy = thinking || generating !== null;
+  const busy = thinking || developing;
+
+  const allPhotos = photos ?? [];
+  // Photo requests are blocked until the gallery has loaded, because the reveal
+  // gate works by counting photos. Capturing a baseline while the list is still
+  // loading would read as zero and hide every photo instead of just the new one.
+  const photosReady = photos !== undefined;
+  // A developing photo is held out of the gallery entirely, so it can never
+  // flash on screen before it is ready. New photos arrive first, so slicing by
+  // the count captured when the request started hides exactly the new arrivals.
+  const visiblePhotos =
+    hiddenCount === null
+      ? allPhotos
+      : allPhotos.slice(Math.max(0, allPhotos.length - hiddenCount));
 
   useEffect(() => {
     const node = scrollRef.current;
     if (node) node.scrollTop = node.scrollHeight;
-  }, [list.length, showPending, generating]);
+  }, [list.length, showPending, developing]);
 
+  /**
+   * Ask Felicia for a photo, then reveal it only once it is genuinely finished:
+   * generated on the server, decoded by the browser, and DEVELOP_MS old.
+   */
   async function requestPhoto(scene: string) {
-    setGenerating("a new photo");
+    if (!photosReady) return;
+    const startedAt = Date.now();
+    setHiddenCount(allPhotos.length);
+    setDeveloping(true);
     try {
-      await generatePhoto({ scene });
+      const result = await generatePhoto({ scene });
+      const remaining = DEVELOP_MS - (Date.now() - startedAt);
+      if (remaining > 0) await sleep(remaining);
+      if (result.url) await preloadImage(result.url);
     } catch (error) {
       toast.error(
         error instanceof Error
@@ -82,7 +127,8 @@ export default function Dashboard() {
           : "Felicia couldn't send that photo.",
       );
     } finally {
-      setGenerating(null);
+      setDeveloping(false);
+      setHiddenCount(null);
     }
   }
 
@@ -289,11 +335,24 @@ export default function Dashboard() {
                 </div>
               )}
 
-              {generating && (
+              {developing && (
                 <div className="flex justify-start">
-                  <div className="flex items-center gap-2.5 rounded-2xl border border-primary/30 bg-primary/10 px-4 py-3 text-xs text-primary">
-                    <Camera className="size-4 animate-pulse" />
-                    Felicia is taking a photo…
+                  <div className="w-64 rounded-2xl border border-primary/30 bg-primary/10 px-4 py-3 text-xs text-primary">
+                    <div className="flex items-center gap-2.5">
+                      <Camera className="size-4 animate-pulse" />
+                      Felicia is taking a photo…
+                    </div>
+                    <div className="mt-2.5 h-1 w-full overflow-hidden rounded-full bg-primary/20">
+                      <motion.div
+                        className="h-full rounded-full bg-primary"
+                        initial={{ width: "0%" }}
+                        animate={{ width: "100%" }}
+                        transition={{
+                          duration: DEVELOP_MS / 1000,
+                          ease: "linear",
+                        }}
+                      />
+                    </div>
                   </div>
                 </div>
               )}
@@ -360,14 +419,14 @@ export default function Dashboard() {
                 <Button
                   size="sm"
                   className="gap-2"
-                  disabled={busy}
+                  disabled={busy || !photosReady}
                   onClick={() =>
                     void requestPhoto(
                       "somewhere she has just arrived, warm evening light, candid",
                     )
                   }
                 >
-                  {generating ? (
+                  {developing ? (
                     <Loader2 className="size-3.5 animate-spin" />
                   ) : (
                     <ImagePlus className="size-3.5" />
@@ -378,7 +437,7 @@ export default function Dashboard() {
                   <button
                     key={scene.label}
                     type="button"
-                    disabled={busy}
+                    disabled={busy || !photosReady}
                     onClick={() => void requestPhoto(scene.scene)}
                     className="rounded-full border border-border/60 bg-background/40 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground disabled:opacity-50"
                   >
@@ -398,7 +457,7 @@ export default function Dashboard() {
                 <div className="mt-4 flex h-32 items-center justify-center">
                   <Loader2 className="size-5 animate-spin text-muted-foreground" />
                 </div>
-              ) : photos.length === 0 ? (
+              ) : allPhotos.length === 0 ? (
                 <div className="mt-4 flex flex-col items-center rounded-xl border border-dashed border-border/60 px-4 py-10 text-center">
                   <Camera className="size-5 text-muted-foreground" />
                   <p className="mt-3 text-sm text-muted-foreground">
@@ -409,7 +468,7 @@ export default function Dashboard() {
                 <div className="mt-4">
                   <ScrollArea className="max-h-[26rem]">
                     <div className="grid grid-cols-2 gap-3 pr-3">
-                      {photos.map((photo) => (
+                      {visiblePhotos.map((photo) => (
                         <button
                           key={photo._id}
                           type="button"
