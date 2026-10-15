@@ -44,10 +44,11 @@ function formatDuration(seconds: number) {
 /**
  * A voice call with Felicia.
  *
- * Her side comes from Cloudflare's text-to-speech; your side is transcribed on
- * device by the browser. If her voice model is unavailable — for example when
- * the daily neuron budget is spent — she falls back to the device voice so the
- * call still works rather than failing silently.
+ * Her side comes from Groq's Orpheus voice, falling back to Cloudflare's
+ * text-to-speech; your side is transcribed on device by the browser. If both
+ * are unavailable — for example when a model is blocked or a quota is spent —
+ * she falls back to the device voice so the call still works rather than
+ * failing silently.
  */
 export interface CallGreeting {
   messageId: Id<"messages">;
@@ -109,7 +110,7 @@ export function FeliciaCall({
     return () => clearInterval(id);
   }, []);
 
-  /** Speak one of her lines, falling back to the device voice if need be. */
+  /** Speak one of her lines in her own voice, falling back to the device voice. */
   const say = useCallback(
     async (
       messageId: Id<"messages">,

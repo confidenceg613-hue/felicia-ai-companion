@@ -29,13 +29,29 @@ import { internalAction } from "./_generated/server";
  */
 
 /**
- * Felicia's speaking voice. Aura's feminine English speakers include asteria,
- * athena, luna, hera and stella.
+ * Felicia's speaking voice.
+ *
+ * Groq Orpheus is the primary voice because it reads as a real woman talking
+ * rather than as a narrator. `hannah` is one of the three feminine English
+ * Orpheus personas (the others are `autumn` and `diana`); swap the constant to
+ * audition them. Vocal directions are deliberately omitted from the request,
+ * because Groq says that produces the most natural conversational cadence.
+ *
+ * The Cloudflare voices are the fallback. Aura's feminine English speakers
+ * include asteria, athena, luna, hera and stella.
  */
+export const FELICIA_GROQ_VOICE = "hannah";
 export const FELICIA_VOICE = "asteria";
 
 /**
- * Voice models in preference order.
+ * Orpheus caps a single request at 200 characters, so longer lines are split
+ * and the audio is stitched back together. See `splitForSpeech` / `buildWav`.
+ */
+const GROQ_SPEECH_LIMIT = 200;
+
+/**
+ * Cloudflare voice models in preference order — the fallback ladder used when
+ * Groq Orpheus is unavailable.
  *
  * Aura-1 is the better voice but costs ~1,364 neurons per 1,000 characters;
  * MeloTTS is roughly a hundred times cheaper at ~18.6 neurons per audio minute.
@@ -109,15 +125,6 @@ function pickBase64Audio(payload: unknown): string | null {
 
 const VOICE_CONFIG_HINT =
   "Cloudflare Workers AI is not connected yet. Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in your project's Keys/API keys settings, then try again.";
-
-function voiceCredentials(): { token: string; accountId: string } {
-  const token = cloudflareToken();
-  const accountId = cloudflareAccountId();
-  if (!token || !accountId) {
-    throw new Error(VOICE_CONFIG_HINT);
-  }
-  return { token, accountId };
-}
 
 async function runVoiceModel(
   accountId: string,
@@ -438,45 +445,176 @@ export const generateImage = internalAction({
 /**
  * Groq Orpheus text-to-speech.
  *
- * Returns WAV bytes directly from `POST /openai/v1/audio/speech`.
+ * Returns WAV bytes from `POST /openai/v1/audio/speech`. Orpheus accepts at most
+ * 200 characters per request, so a longer line is split at sentence boundaries
+ * and the resulting WAV files are stitched into one continuous clip.
  */
 async function speakWithGroq(
   apiKey: string,
   text: string,
 ): Promise<{ bytes: Uint8Array<ArrayBuffer>; mimeType: string; model: string }> {
-  const response = await fetch(
-    "https://api.groq.com/openai/v1/audio/speech",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },        body: JSON.stringify({
-        model: "canopylabs/orpheus-v1-english",
-        input: text,
-        voice: "hannah",
-        response_format: "wav",
-      }),
-    },
+  const model = "canopylabs/orpheus-v1-english";
+  const chunks = splitForSpeech(text, GROQ_SPEECH_LIMIT);
+  const parts: Array<{ fmt: Uint8Array; data: Uint8Array }> = [];
+
+  for (const chunk of chunks) {
+    const response = await fetch(
+      "https://api.groq.com/openai/v1/audio/speech",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          input: chunk,
+          voice: FELICIA_GROQ_VOICE,
+          response_format: "wav",
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(groqAudioFailure(response.status, await response.text()));
+    }
+
+    const rawBytes = await response.arrayBuffer();
+    if (rawBytes.byteLength === 0) {
+      throw new Error("Groq TTS returned empty audio.");
+    }
+
+    const part = readWavChunks(new Uint8Array(rawBytes));
+    if (!part) {
+      // Not a WAV we can parse. If this was the whole line, happily use it as
+      // is; if there were several chunks we cannot stitch them, so fail and let
+      // the Cloudflare ladder try instead.
+      if (chunks.length === 1) {
+        return {
+          bytes: new Uint8Array(rawBytes),
+          mimeType: "audio/wav",
+          model,
+        };
+      }
+      throw new Error("Groq TTS returned audio in an unsupported container.");
+    }
+    parts.push(part);
+  }
+
+  const first = parts[0];
+  if (!first) throw new Error("Groq TTS returned no audio.");
+
+  const data = concatBytes(parts.map((part) => part.data));
+  return { bytes: buildWav(first.fmt, data), mimeType: "audio/wav", model };
+}
+
+/**
+ * Break a line into pieces Orpheus will accept, preferring to cut after a
+ * sentence so the seams fall where a speaker would naturally pause.
+ */
+function splitForSpeech(text: string, limit: number): string[] {
+  const chunks: string[] = [];
+  let remaining = text.trim();
+
+  while (remaining.length > limit) {
+    const window = remaining.slice(0, limit);
+    let cut = Math.max(
+      window.lastIndexOf(". "),
+      window.lastIndexOf("! "),
+      window.lastIndexOf("? "),
+    );
+    if (cut < limit * 0.4) cut = window.lastIndexOf(", ");
+    if (cut < limit * 0.4) cut = window.lastIndexOf("; ");
+    if (cut < limit * 0.4) cut = window.lastIndexOf(" ");
+    // No usable break, or a single very long word: hard-cut at the limit.
+    if (cut <= 0) cut = limit - 1;
+    else cut += 1;
+
+    chunks.push(remaining.slice(0, cut).trim());
+    remaining = remaining.slice(cut).trim();
+  }
+
+  if (remaining) chunks.push(remaining);
+  return chunks.filter((chunk) => chunk.length > 0);
+}
+
+/** Read the `fmt ` and `data` chunks out of a RIFF/WAVE buffer. */
+function readWavChunks(
+  buffer: Uint8Array,
+): { fmt: Uint8Array; data: Uint8Array } | null {
+  if (buffer.byteLength < 44) return null;
+  if (readAscii(buffer, 0, 4) !== "RIFF") return null;
+  if (readAscii(buffer, 8, 4) !== "WAVE") return null;
+
+  const view = new DataView(
+    buffer.buffer,
+    buffer.byteOffset,
+    buffer.byteLength,
   );
+  let fmt: Uint8Array | null = null;
+  let offset = 12;
 
-  const raw = await response.text();
-  if (!response.ok) {
-    throw new Error(groqAudioFailure(response.status, raw));
+  while (offset + 8 <= buffer.byteLength) {
+    const id = readAscii(buffer, offset, 4);
+    const size = view.getUint32(offset + 4, true);
+    const start = offset + 8;
+    const end = Math.min(start + size, buffer.byteLength);
+
+    if (id === "fmt ") fmt = buffer.slice(start, end);
+    if (id === "data") {
+      return fmt ? { fmt, data: buffer.slice(start, end) } : null;
+    }
+
+    // RIFF chunks are word-aligned, so an odd size is followed by a pad byte.
+    offset = start + size + (size % 2);
   }
 
-  const contentType =
-    response.headers.get("content-type") ?? "application/octet-stream";      const rawBytes = await response.arrayBuffer();
-  if (rawBytes.byteLength === 0) {
-    throw new Error("Groq TTS returned empty audio.");
-  }
+  return null;
+}
 
-  return {
-    bytes: new Uint8Array(rawBytes),
-    mimeType:
-      contentType.split(";")[0]?.trim() || "audio/wav",
-    model: "canopylabs/orpheus-v1-english",
-  };
+/** Rebuild one canonical WAV from a format chunk and raw sample data. */
+function buildWav(fmt: Uint8Array, data: Uint8Array): Uint8Array<ArrayBuffer> {
+  const dataIdOffset = 20 + fmt.byteLength;
+  const total = dataIdOffset + 8 + data.byteLength;
+  const out = new Uint8Array(total);
+  const view = new DataView(out.buffer);
+
+  writeAscii(out, 0, "RIFF");
+  view.setUint32(4, total - 8, true);
+  writeAscii(out, 8, "WAVE");
+  writeAscii(out, 12, "fmt ");
+  view.setUint32(16, fmt.byteLength, true);
+  out.set(fmt, 20);
+  writeAscii(out, dataIdOffset, "data");
+  view.setUint32(dataIdOffset + 4, data.byteLength, true);
+  out.set(data, dataIdOffset + 8);
+
+  return out;
+}
+
+function concatBytes(parts: Uint8Array[]): Uint8Array {
+  const total = parts.reduce((sum, part) => sum + part.byteLength, 0);
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const part of parts) {
+    out.set(part, offset);
+    offset += part.byteLength;
+  }
+  return out;
+}
+
+function readAscii(buffer: Uint8Array, offset: number, length: number): string {
+  let out = "";
+  for (let index = 0; index < length; index += 1) {
+    out += String.fromCharCode(buffer[offset + index] ?? 0);
+  }
+  return out;
+}
+
+function writeAscii(buffer: Uint8Array, offset: number, text: string): void {
+  for (let index = 0; index < text.length; index += 1) {
+    buffer[offset + index] = text.charCodeAt(index);
+  }
 }
 
 /** Turn a Groq audio error response into something readable. */
@@ -532,13 +670,13 @@ function describeHordeFailure(status: number, raw: string): string {
 /**
  * Render text as speech and store it in Convex file storage.
  *
- * Walks the voice ladder until one model answers with usable audio; if every
- * model fails the error lists what each one said, so a quota problem reads
- * differently from a malformed request.
+ * The ladder runs in the order that sounds best first: Groq Orpheus reads as a
+ * real woman talking, so it is tried before Cloudflare. Every failure is
+ * collected, and the thrown error lists what each backend said — a quota
+ * problem then reads differently from a malformed request.
  *
- * The default ladder is Cloudflare Workers AI because it returns MP3 directly.
- * If Cloudflare is unavailable, this falls back to Groq Orpheus TTS, which
- * returns WAV audio from the Groq Audio API.
+ * Cloudflare credentials are only required if Groq is unavailable, so a
+ * deployment with just GROQ_API_KEY still has a voice.
  */
 export const speak = internalAction({
   args: { text: v.string() },
@@ -551,11 +689,37 @@ export const speak = internalAction({
     ctx,
     { text },
   ): Promise<{ storageId: Id<"_storage">; mimeType: string; model: string }> => {
-    const { token, accountId } = voiceCredentials();
     const spoken = text.trim().slice(0, 600);
     if (!spoken) throw new Error("There is nothing to say.");
 
     const failures: string[] = [];
+
+    // Her best voice first.
+    if (groqVoiceEnabled()) {
+      try {
+        const groqAudio = await speakWithGroq(groqApiKey()!, spoken);
+        const storageId = await ctx.storage.store(
+          new Blob([groqAudio.bytes], { type: groqAudio.mimeType }),
+        );
+        return {
+          storageId,
+          mimeType: groqAudio.mimeType,
+          model: groqAudio.model,
+        };
+      } catch (error) {
+        failures.push(
+          `groq/orpheus: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
+    // Cloudflare needs both credentials; without them, skip to the error.
+    const token = cloudflareToken();
+    const accountId = cloudflareAccountId();
+    if (!token || !accountId) {
+      failures.push(`cloudflare: ${VOICE_CONFIG_HINT}`);
+      throw new Error(`Felicia could not speak: ${failures.join(" | ")}`);
+    }
 
     for (const candidate of TTS_MODELS) {
       let response: Response;
@@ -613,19 +777,6 @@ export const speak = internalAction({
         new Blob([new Uint8Array(bytes)], { type: mimeType }),
       );
       return { storageId, mimeType, model: candidate.model };
-    }
-
-    // Cloudflare did not work; try Groq Orpheus TTS if a Groq key is present.
-    if (groqVoiceEnabled()) {
-      try {
-        const groqAudio = await speakWithGroq(groqApiKey()!, spoken);
-        const storageId = await ctx.storage.store(
-          new Blob([groqAudio.bytes], { type: groqAudio.mimeType }),
-        );
-        return { storageId, mimeType: groqAudio.mimeType, model: groqAudio.model };
-      } catch (error) {
-        failures.push(`groq/orpheus: ${error instanceof Error ? error.message : String(error)}`);
-      }
     }
 
     throw new Error(`Felicia could not speak: ${failures.join(" | ")}`);
