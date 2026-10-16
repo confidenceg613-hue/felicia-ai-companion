@@ -1,0 +1,1 @@
+import{j as r}from"./framer-motion-DXLROMwW.js";import"./react-vendor-CJ8ltDLd.js";function l({children:e}){return r.jsx("div",{className:"flex min-h-screen flex-col",children:e})}export{l as default};
