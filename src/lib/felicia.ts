@@ -225,7 +225,7 @@ export const DEFAULT_SHARED_NOTES: Record<string, string> = {
 };
 
 export const FELICIA_AVATAR_URL =
-  ((process.env.FELICIA_IMAGE_URL as unknown as string | undefined) ||
+  (((globalThis as unknown as { process?: { env?: Record<string, string | undefined> } }).process?.env?.FELICIA_IMAGE_URL as string | undefined) ||
     "/felicia/hero.jpg");
 
 export const FELICIA = {
