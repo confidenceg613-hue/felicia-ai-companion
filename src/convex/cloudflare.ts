@@ -10,7 +10,18 @@ import {
   isCloudflareConfigured,
 } from "./config";
 import type { Id } from "./_generated/dataModel";
-import { internalAction, type InternalActionCtx } from "./_generated/server";
+import { internalAction } from "./_generated/server";
+
+/**
+ * The slice of an action context the image helpers below actually use.
+ *
+ * Typed structurally rather than as the generated action context type: these
+ * are plain functions shared by the internal action, and this keeps them
+ * honest about needing nothing more than storage.
+ */
+type ImageCtx = {
+  storage: { store: (blob: Blob) => Promise<Id<"_storage">> };
+};
 
 /**
  * Image and voice backends.
@@ -376,14 +387,17 @@ function nanoBananaSource(payload: unknown): string | null {
 
 /** Persist raw image bytes in Convex storage and report what they are. */
 async function storeImage(
-  ctx: InternalActionCtx,
+  ctx: ImageCtx,
   bytes: Uint8Array,
   mimeType: string,
 ): Promise<{ storageId: Id<"_storage">; mimeType: string }> {
   if (bytes.byteLength === 0) {
     throw new Error("Cloudflare returned an empty image.");
   }
-  const storageId = await ctx.storage.store(new Blob([bytes], { type: mimeType }));
+  const storageId = await ctx.storage.store(
+    // `slice()` so a view over a pooled buffer hands Blob exactly the image.
+    new Blob([bytes.slice()], { type: mimeType }),
+  );
   return { storageId, mimeType };
 }
 
@@ -394,7 +408,7 @@ async function storeImage(
  * image (as a URL, a data URI, or raw bytes), so there is nothing to poll.
  */
 async function generateWithNanoBanana(
-  ctx: InternalActionCtx,
+  ctx: ImageCtx,
   prompt: string,
 ): Promise<{ storageId: Id<"_storage">; mimeType: string }> {
   const token = cloudflareToken();
@@ -499,7 +513,7 @@ async function generateWithNanoBanana(
  * action is free to take as long as the Horde needs.
  */
 async function generateWithHorde(
-  ctx: InternalActionCtx,
+  ctx: ImageCtx,
   prompt: string,
 ): Promise<{ storageId: Id<"_storage">; mimeType: string }> {
     const apiKey = aiHordeApiKey();
@@ -675,12 +689,65 @@ async function generateWithHorde(
 }
 
 /**
+ * The account-hosted Workers AI image model — the safety net under Nano Banana.
+ *
+ * Nano Banana is a third-party model billed against the account's AI Gateway
+ * balance, so an empty balance comes back as `402`. This one runs on the
+ * account's own Workers AI allocation and answers with raw image bytes, so
+ * photos keep working while the balance is being sorted out.
+ */
+const HOSTED_IMAGE_MODEL = "@cf/stabilityai/stable-diffusion-xl-base-1.0";
+
+async function generateWithHostedModel(
+  ctx: ImageCtx,
+  prompt: string,
+): Promise<{ storageId: Id<"_storage">; mimeType: string }> {
+  const token = cloudflareToken();
+  const accountId = cloudflareAccountId();
+  if (!token || !accountId) {
+    throw new Error(
+      "Cloudflare is not connected yet. Add CLOUDFLARE_API_TOKEN and " +
+        "CLOUDFLARE_ACCOUNT_ID in your project's Keys/API keys settings.",
+    );
+  }
+
+  const response = await fetch(
+    `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${HOSTED_IMAGE_MODEL}`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        prompt,
+        negative_prompt:
+          "blurry, low quality, extra fingers, deformed, distorted face",
+      }),
+    },
+  );
+
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.startsWith("image/")) {
+    return storeImage(
+      ctx,
+      new Uint8Array(await response.arrayBuffer()),
+      contentType.split(";")[0]?.trim() || "image/png",
+    );
+  }
+
+  throw new Error(cloudflareFailure(response.status, await response.text()));
+}
+
+/**
  * Generate one photo of Felicia and store it in Convex storage.
  *
- * Nano Banana 2.1 on Cloudflare is the first choice — synchronous, one request,
- * no volunteer queue. The AI Horde stays behind it as a free fallback, because
- * the Nano Banana route bills against the account's AI Gateway balance: a
- * balance that has run dry should degrade to a slow photo rather than to none.
+ * Three engines, cheapest success first:
+ *   1. Nano Banana 2.1 on Cloudflare — the requested model, synchronous, but
+ *      third-party and billed against the account's gateway balance.
+ *   2. Cloudflare's own hosted image model — same account, no gateway balance
+ *      involved, so a `402` degrades to a slower photo rather than to none.
+ *   3. The AI Horde — free, volunteer-powered, and deliberately last.
  */
 export const generateImage = internalAction({
   args: { prompt: v.string() },
@@ -690,6 +757,7 @@ export const generateImage = internalAction({
     { prompt },
   ): Promise<{ storageId: Id<"_storage">; mimeType: string }> => {
     let nanoBananaError: unknown = null;
+    let hostedError: unknown = null;
 
     if (isCloudflareConfigured()) {
       try {
@@ -697,35 +765,35 @@ export const generateImage = internalAction({
       } catch (error) {
         nanoBananaError = error;
       }
+
+      try {
+        return await generateWithHostedModel(ctx, prompt);
+      } catch (error) {
+        hostedError = error;
+      }
     }
+
+    const reason = (value: unknown) =>
+      value instanceof Error ? value.message : value ? String(value) : null;
+    const primary = reason(nanoBananaError);
 
     if (aiHordeApiKey()) {
       try {
         return await generateWithHorde(ctx, prompt);
       } catch (hordeError) {
-        // Both engines failed. Lead with Nano Banana's reason when it is a
+        // All three failed. Lead with Nano Banana's reason when it is a
         // billing problem — that is the actionable half; the volunteer queue
         // timing out on top of it is only the symptom the user can see.
-        const primary =
-          nanoBananaError instanceof Error
-            ? nanoBananaError.message
-            : nanoBananaError
-              ? String(nanoBananaError)
-              : null;
         if (primary && /balance|billing|402/i.test(primary)) {
-          const secondary =
-            hordeError instanceof Error ? hordeError.message : String(hordeError);
-          throw new Error(`${primary} (The AI Horde fallback failed too: ${secondary})`);
+          throw new Error(`${primary} (The AI Horde fallback failed too: ${reason(hordeError)})`);
         }
         throw hordeError;
       }
     }
 
-    if (nanoBananaError instanceof Error) {
-      throw new Error(
-        `${nanoBananaError.message} The free AI Horde fallback is not configured ` +
-          "either — add AI_HORDE_API_KEY to use it.",
-      );
+    if (primary) {
+      const hosted = reason(hostedError);
+      throw new Error(hosted ? `${primary} ${hosted}` : primary);
     }
     throw new Error(
       "No photo backend is configured. Add CLOUDFLARE_API_TOKEN + " +
