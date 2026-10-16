@@ -39,10 +39,30 @@ import {
   Sparkles,
   Trash2,
   Volume2,
+  VolumeX,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
+
+/**
+ * Whether her replies are read aloud automatically.
+ *
+ * Kept in localStorage because it is a preference, not session state — someone
+ * who turns her voice off in a quiet office should not have to turn it off
+ * again on every visit.
+ */
+const AUTO_VOICE_KEY = "felicia:auto-voice";
+
+function readAutoVoicePref(): boolean {
+  try {
+    const stored = window.localStorage.getItem(AUTO_VOICE_KEY);
+    return stored === null ? true : stored === "1";
+  } catch {
+    // Private mode or storage disabled — default to on rather than crashing.
+    return true;
+  }
+}
 
 const OPENERS = [
   "What are you doing right now?",
@@ -99,6 +119,19 @@ export default function Dashboard() {
   const [infoOpen, setInfoOpen] = useState(false);
   const [recording, setRecording] = useState(false);
   const [interim, setInterim] = useState("");
+  const [autoVoice, setAutoVoice] = useState(readAutoVoicePref);
+
+  // Mirrors `autoVoice` for the same reason as `speakingRef`: a send that is
+  // already in flight reads the value from the render it started in, so it
+  // would otherwise autoplay (or stay silent) based on a stale preference.
+  const autoVoiceRef = useRef(autoVoice);
+  // `speakingId` as a ref too, because playMessage is called from async
+  // handlers that finished after a later render.
+  const speakingRef = useRef<Id<"messages"> | null>(null);
+
+  useEffect(() => {
+    autoVoiceRef.current = autoVoice;
+  }, [autoVoice]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -209,12 +242,22 @@ export default function Dashboard() {
     }
   }
 
-  /** Play one of her lines aloud, using her own voice when it is available. */
+  /**
+   * Play one of her lines aloud, using her own voice when it is available.
+   *
+   * Used both by the per-message play button and by auto-play, so the guard
+   * reads the ref rather than the state: an auto-play fires from an async
+   * handler that closed over an older render. Returns quietly when a line is
+   * already playing, which is what stops two autoplays from overlapping.
+   */
   async function playMessage(messageId: Id<"messages">, content: string) {
-    if (speakingId) return;
+    if (speakingRef.current) return;
+    speakingRef.current = messageId;
     setSpeakingId(messageId);
     try {
       const { url } = await speakMessage({ messageId });
+      // A browser that blocks the play resolves false, so she falls back to the
+      // device voice instead of sitting in silence.
       let played = false;
       if (url) played = await playAudioUrl(url);
       if (!played) await speakWithBrowser(content);
@@ -225,8 +268,22 @@ export default function Dashboard() {
           : "Felicia couldn't speak just now.",
       );
     } finally {
+      speakingRef.current = null;
       setSpeakingId(null);
     }
+  }
+
+  /** Flip auto-play and remember the choice. */
+  function toggleAutoVoice() {
+    setAutoVoice((value) => {
+      const next = !value;
+      try {
+        window.localStorage.setItem(AUTO_VOICE_KEY, next ? "1" : "0");
+      } catch {
+        // Storage unavailable; the preference just won't survive a reload.
+      }
+      return next;
+    });
   }
 
   async function handleSend(text: string) {
@@ -241,6 +298,11 @@ export default function Dashboard() {
       const result = await sendMessage({ text: trimmed });
       setPending(null);
       setThinking(false);
+      if (autoVoiceRef.current) {
+        // Deliberately not awaited: she starts talking while a photo, if she
+        // sent one, is still developing.
+        void playMessage(result.replyMessageId, result.reply);
+      }
       if (result.photoScene) {
         void requestPhoto(result.photoScene);
       }
@@ -271,7 +333,10 @@ export default function Dashboard() {
     setThinking(true);
     try {
       const data = await file.arrayBuffer();
-      await sendUserPhoto({ data, mimeType: file.type });
+      const result = await sendUserPhoto({ data, mimeType: file.type });
+      if (autoVoiceRef.current) {
+        void playMessage(result.replyMessageId, result.reply);
+      }
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "That photo didn't send.",
@@ -355,6 +420,25 @@ export default function Dashboard() {
         </div>
 
         <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            title={
+              autoVoice
+                ? "Her voice plays automatically — turn it off"
+                : "Her voice is muted — turn it on"
+            }
+            aria-label={autoVoice ? "Mute her voice" : "Unmute her voice"}
+            aria-pressed={autoVoice}
+            className={cn(!autoVoice && "text-muted-foreground")}
+            onClick={toggleAutoVoice}
+          >
+            {autoVoice ? (
+              <Volume2 className="size-4" />
+            ) : (
+              <VolumeX className="size-4" />
+            )}
+          </Button>
           <Button
             variant="ghost"
             size="icon"
