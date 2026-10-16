@@ -186,7 +186,7 @@ export default function Dashboard() {
   }
 
   const items: TimelineItem[] = [
-    ...list.map((message) => ({
+    ...list.map((message: { _id: unknown; role: "user" | "felicia"; createdAt: number; content: string; imageUrl: string | null }) => ({
       id: `m${message._id}`,
       kind: "message" as const,
       role: message.role,
@@ -196,8 +196,8 @@ export default function Dashboard() {
       messageId: message._id,
     })),
     ...allPhotos
-      .filter((photo) => !hiddenPhotoIds.has(String(photo._id)))
-      .map((photo) => ({
+      .filter((photo: { _id: unknown; createdAt: number; url?: string | null; scene?: string | null }) => !hiddenPhotoIds.has(String(photo._id)))
+      .map((photo: { _id: unknown; createdAt: number; url?: string | null; scene?: string | null }) => ({
         id: `p${photo._id}`,
         kind: "photo" as const,
         role: "felicia" as const,

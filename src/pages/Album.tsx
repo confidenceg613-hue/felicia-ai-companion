@@ -93,7 +93,7 @@ export default function Album() {
     }
   }
 
-  const visible = allPhotos.filter((photo) => !hidden.has(String(photo._id)));
+  const visible = allPhotos.filter((photo: { _id: unknown }) => !hidden.has(String(photo._id)));
 
   async function requestPhoto(scene: string) {
     if (!ready) return;
@@ -396,7 +396,7 @@ export default function Album() {
                 </div>
               )}
 
-              {visible.map((photo: Parameters<typeof visible.map>[0]) => (
+              {visible.map((photo: { _id: string; url?: string | null; createdAt: number; scene?: string | null }) => (
                 <motion.button
                   key={photo._id}
                   type="button"
@@ -405,11 +405,11 @@ export default function Album() {
                   transition={{ duration: 0.3 }}
                   onClick={() => photo.url && setLightbox(photo.url)}
                   className="group relative overflow-hidden rounded-2xl border border-border/60 bg-card text-left"
-                  title={photo.scene}
+                  title={photo.scene ?? undefined}
                 >
                   <img
                     src={photo.url ?? ""}
-                    alt={photo.scene}
+                    alt={photo.scene ?? ""}
                     loading="lazy"
                     className="aspect-square w-full object-cover transition-transform duration-500 group-hover:scale-105"
                   />
@@ -602,7 +602,7 @@ export default function Album() {
               </p>
             ) : (
               <div className="grid gap-2 sm:grid-cols-2">
-                {allPhotos.slice(0, 8).map((photo) => (
+                {allPhotos.slice(0, 8).map((photo: { _id: string; scene?: string | null; url?: string | null; createdAt: number }) => (
                   <button
                     key={photo._id}
                     type="button"
@@ -614,7 +614,7 @@ export default function Album() {
                     {photo.url && (
                       <img
                         src={photo.url}
-                        alt={photo.scene}
+                        alt={photo.scene ?? undefined}
                         loading="lazy"
                         className="size-12 shrink-0 rounded-lg object-cover"
                       />

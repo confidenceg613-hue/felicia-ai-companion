@@ -313,12 +313,12 @@ export const connectorStatus = query({
     if (!userId) return [];
     const rows = await ctx.db
       .query("messages")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) => q.eq("userId", userId))
       .order("asc")
       .take(300);
 
     return await Promise.all(
-      rows.map(async (message) => ({
+      rows.map(async (message: { _id: unknown; role: unknown; content: unknown; createdAt: unknown; imageStorageId?: unknown }) => ({
         _id: message._id,
         role: message.role,
         content: message.content,
@@ -340,12 +340,12 @@ export const photos = query({
     if (!userId) return [];
     const rows = await ctx.db
       .query("photos")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) => q.eq("userId", userId))
       .order("desc")
       .take(60);
     return await Promise.all(
-      rows.map(async (photo) => ({
-        ...photo,
+      rows.map(async (photo: { storageId: unknown }) => ({
+        storageId: photo.storageId,
         url: await ctx.storage.getUrl(photo.storageId),
       })),
     );
@@ -363,12 +363,14 @@ export const sharedNotes = query({
     if (!userId) return { sections: DEFAULT_SHARED_NOTES, updatedAt: 0 };
     const row = await ctx.db
       .query("sharedNotes")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) => q.eq("userId", userId))
       .unique();
     if (!row) return { sections: DEFAULT_SHARED_NOTES, updatedAt: 0 };
+    const rowTyped = row as { sections: Record<string, string>; updatedAt: number; _id: unknown } | null;
+    if (!rowTyped) return { sections: DEFAULT_SHARED_NOTES, updatedAt: 0 };
     return {
-      sections: { ...DEFAULT_SHARED_NOTES, ...row.sections },
-      updatedAt: row.updatedAt,
+      sections: { ...DEFAULT_SHARED_NOTES, ...rowTyped.sections },
+      updatedAt: rowTyped.updatedAt,
     };
   },
 });
@@ -381,7 +383,7 @@ export const memories = query({
     if (!userId) return [];
     return await ctx.db
       .query("memories")
-      .withIndex("by_user_updated", (q) => q.eq("userId", userId))
+      .withIndex("by_user_updated", (q: { eq: (key: string, value: string) => unknown }) => q.eq("userId", userId))
       .order("desc")
       .take(200);
   },
@@ -396,7 +398,7 @@ export const recentMessages = internalQuery({
   handler: async (ctx: AnyCtx, { userId, limit }: AnyArgs) => {
     const rows = await ctx.db
       .query("messages")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) => q.eq("userId", userId))
       .order("desc")
       .take(limit);
     return rows.reverse();
@@ -426,7 +428,7 @@ export const saveMessage = internalMutation({
 export const messageAudio = internalQuery({
   args: { messageId: v.id("messages") },
   handler: async (ctx: AnyCtx, { messageId }: AnyArgs) => {
-    const message = await ctx.db.get(messageId);
+    const message = await ctx.db.get(messageId) as { userId: unknown; role: unknown; content: unknown; audioStorageId?: unknown } | null;
     if (!message) return null;
     return {
       ownerId: message.userId,
@@ -470,9 +472,9 @@ export const notesFor = internalQuery({
   handler: async (ctx: AnyCtx, { userId }: AnyArgs) => {
     const row = await ctx.db
       .query("sharedNotes")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) => q.eq("userId", userId))
       .unique();
-    return mergedNotes(row?.sections);
+    return mergedNotes((row as { sections?: Record<string, string> } | null)?.sections);
   },
 });
 
@@ -489,10 +491,10 @@ export const topMemories = internalQuery({
   handler: async (ctx: AnyCtx, { userId }: AnyArgs) => {
     const rows = await ctx.db
       .query("memories")
-      .withIndex("by_user_updated", (q) => q.eq("userId", userId))
+      .withIndex("by_user_updated", (q: { eq: (key: string, value: string) => unknown }) => q.eq("userId", userId))
       .order("desc")
       .take(30);
-    return rows.map((memory) => ({
+    return (rows as Array<{ title: string; content: string }>).map((memory) => ({
       title: memory.title.slice(0, 70),
       content: memory.content.slice(0, 200),
     }));
@@ -504,9 +506,9 @@ export const memoryTitles = internalQuery({
   handler: async (ctx: AnyCtx, { userId }: AnyArgs) => {
     const rows = await ctx.db
       .query("memories")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) => q.eq("userId", userId))
       .take(300);
-    return rows.map((memory) => memory.title.trim().toLowerCase());
+    return (rows as Array<{ title: string }>).map((memory) => memory.title.trim().toLowerCase());
   },
 });
 
@@ -515,9 +517,9 @@ export const memoryCount = internalQuery({
   handler: async (ctx: AnyCtx, { userId }: AnyArgs) => {
     const rows = await ctx.db
       .query("memories")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) => q.eq("userId", userId))
       .take(1);
-    return rows.length;
+    return (rows as Array<unknown>).length;
   },
 });
 
@@ -605,9 +607,9 @@ export const seedMemories = mutation({
 
     const existing = await ctx.db
       .query("memories")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) => q.eq("userId", userId))
       .take(1);
-    if (existing.length > 0) return null;
+    if ((existing as Array<unknown>).length > 0) return null;
 
     const now = Date.now();
     for (const seed of SEED_MEMORIES) {
@@ -632,7 +634,7 @@ export const saveSharedNotes = mutation({
 
     const existing = await ctx.db
       .query("sharedNotes")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) => q.eq("userId", userId))
       .unique();
 
     if (existing) {
@@ -756,9 +758,9 @@ export const clearConversation = mutation({
     if (!userId) throw new Error("Sign in to talk to Felicia.");
     const rows = await ctx.db
       .query("messages")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) => q.eq("userId", userId))
       .take(500);
-    for (const row of rows) {
+    for (const row of rows as Array<{ _id: unknown }>) {
       await ctx.db.delete(row._id);
     }
     return null;
@@ -785,8 +787,8 @@ export const sendMessage = action<{ ctx: AnyCtx; args: { text: string } }>({
     photoReadyAfterMs: v.number(),
   }),
   handler: async (
-    ctx,
-    { text },
+    ctx: AnyCtx,
+    { text }: { text: string },
   ): Promise<{
     reply: string;
     photoScene: string | null;
@@ -820,7 +822,7 @@ export const sendMessage = action<{ ctx: AnyCtx; args: { text: string } }>({
     const raw = await ctx.runAction(cloudflare.chat, {
       messages: [
         { role: "system", content: buildSystemPrompt(notes, memories) },
-        ...history.map((message) => ({
+        ...history.map((message: { role: unknown; content: unknown; imageStorageId?: unknown }) => ({
           role: message.role === "user" ? "user" : "assistant",
           // A photo the user shared carries no text, so stand it in with a
           // marker the model can respond to instead of an empty turn.
@@ -882,8 +884,8 @@ export const generatePhoto = action<{ ctx: AnyCtx; args: { scene?: string } }>({
     url: v.union(v.string(), v.null()),
   }),
   handler: async (
-    ctx,
-    { scene },
+    ctx: AnyCtx,
+    { scene }: { scene?: string | null },
   ): Promise<{ storageId: Id<"_storage">; url: string | null }> => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Sign in to see Felicia's photos.");
@@ -971,8 +973,8 @@ export const speakMessage = action<{ ctx: AnyCtx; args: { messageId: Id<"message
   args: { messageId: v.id("messages") },
   returns: v.object({ url: v.union(v.string(), v.null()) }),
   handler: async (
-    ctx,
-    { messageId },
+    ctx: AnyCtx,
+    { messageId }: { messageId: Id<"messages"> },
   ): Promise<{ url: string | null }> => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Sign in to hear Felicia.");
@@ -1011,7 +1013,7 @@ export const startCall = action<{ ctx: AnyCtx; args: {} }>({
     reply: v.string(),
   }),
   handler: async (
-    ctx,
+    ctx: AnyCtx,
   ): Promise<{ messageId: Id<"messages">; reply: string }> => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Sign in to call Felicia.");
@@ -1067,8 +1069,8 @@ export const sendUserPhoto = action<{ ctx: AnyCtx; args: { data: Uint8Array; mim
     replyMessageId: v.id("messages"),
   }),
   handler: async (
-    ctx,
-    { data, mimeType },
+    ctx: AnyCtx,
+    { data, mimeType }: { data: Uint8Array; mimeType: string },
   ): Promise<{ reply: string; replyMessageId: Id<"messages"> }> => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Sign in to share a photo.");
@@ -1194,7 +1196,7 @@ export const captureMemories = action<{ ctx: AnyCtx; args: {} }>({
   args: {},
   returns: v.object({ added: v.number(), total: v.number() }),
   handler: async (
-    ctx,
+    ctx: AnyCtx,
   ): Promise<{ added: number; total: number }> => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Sign in first.");
@@ -1217,10 +1219,10 @@ export const captureMemories = action<{ ctx: AnyCtx; args: {} }>({
 
     const transcript = history
       .map(
-        (message) =>
+        (message: { role: unknown; content: unknown }) =>
           `${message.role === "user" ? "Them" : "Felicia"}: ${message.content}`,
       )
-      .filter((line) => !line.endsWith(": [...]"))
+      .filter((line: string) => !line.endsWith(": [...]"))
       .join("\n");
 
     const raw = await ctx.runAction(cloudflare.chat, {

@@ -199,7 +199,7 @@ export default function Memories() {
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    const matches = list.filter((memory) => {
+    const matches = list.filter((memory: { title: string; content: string; category: string }) => {
       if (!needle) return true;
       return (
         memory.title.toLowerCase().includes(needle) ||

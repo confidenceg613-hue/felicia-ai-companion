@@ -2,20 +2,25 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyCtx = any;
+
 /** Where the user's chosen outfit / background / custom scene live. */
 export const feliciaAppearance = query({
   args: {},
-  handler: async (ctx: any) => {
+  handler: async (ctx: AnyCtx) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) return null;
 
     const row = await ctx.db
       .query("feliciaAppearance")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) => q.eq("userId", userId))
       .unique();
 
     if (!row) return null;
-    return row.appearance;
+    const rowTyped = row as { appearance: { outfitKey: string; backgroundKey: string; overrideScene?: string | null } } | null;
+    if (!rowTyped) return null;
+    return rowTyped.appearance;
   },
 });
 
@@ -27,13 +32,13 @@ export const saveFeliciaAppearance = mutation({
       overrideScene: v.optional(v.union(v.string(), v.null())),
     }),
   },
-  handler: async (ctx: any, { appearance }: any) => {
+  handler: async (ctx: AnyCtx, { appearance }: { appearance: { outfitKey: string; backgroundKey: string; overrideScene?: string | null } }) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Sign in first.");
 
     const existing = await ctx.db
       .query("feliciaAppearance")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) => q.eq("userId", userId))
       .unique();
 
     if (existing) {
