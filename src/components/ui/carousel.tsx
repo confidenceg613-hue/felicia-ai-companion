@@ -95,7 +95,7 @@ function Carousel({
     if (!api) return
     api.on("reInit", onSelect)
     api.on("select", onSelect)
-    onSelect(api)
+    setTimeout(() => onSelect(api), 0)
 
     return () => {
       api?.off("select", onSelect)

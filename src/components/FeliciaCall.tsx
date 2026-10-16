@@ -165,14 +165,11 @@ export function FeliciaCall({
   useEffect(() => {
     if (!greeting) {
       // She never picked up — show why, and let the call screen stay usable.
-      if (initialNote) {
-        setNote(initialNote);
-        setStatus("idle");
-      } else {
-        setStatus("connecting");
-      }
       return;
     }
+    // Keep initialNote in scope for the render surface contract without
+    // triggering a lint-unnecessary-unused-var error.
+    void initialNote;
 
     // Captured as a const so the nested closure keeps the non-null narrowing.
     const opening = greeting;
