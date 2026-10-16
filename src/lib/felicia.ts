@@ -1,6 +1,3 @@
-import { api } from "@/convex/_generated/api";
-import { useQuery } from "convex/react";
-
 export type FeliciaMood = (typeof FELICIA_MOODS)[number]["key"];
 
 export const FELICIA_MOODS = [

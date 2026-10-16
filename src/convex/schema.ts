@@ -79,6 +79,18 @@ const schema = defineSchema(
       sections: v.record(v.string(), v.string()),
       updatedAt: v.number(),
     }).index("by_user", ["userId"]),
+
+    // Felicia's persisted appearance choice: outfit, background and optional
+    // custom scene. This is what the photo prompt is built from once the user
+    // picks a look instead of relying on the Appearance note alone.
+    feliciaAppearance: defineTable({
+      userId: v.id("users"),
+      appearance: v.object({
+        outfitKey: v.string(),
+        backgroundKey: v.string(),
+        overrideScene: v.optional(v.union(v.string(), v.null())),
+      }),
+    }).index("by_user", ["userId"]),
   },
   {
     schemaValidation: false,
