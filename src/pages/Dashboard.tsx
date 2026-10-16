@@ -938,7 +938,7 @@ export default function Dashboard() {
             <DialogTitle className="font-display text-xl">
               {FELICIA.fullName}
             </DialogTitle>
-            <DialogDescription>{FELICIA.eyebrow}</DialogDescription>
+            <DialogDescription>{FELICIA.traits[0].title}</DialogDescription>
           </DialogHeader>
 
           <div className="mt-1 flex items-start gap-4">
@@ -948,14 +948,15 @@ export default function Dashboard() {
               className="size-20 shrink-0 rounded-2xl border border-border/60 object-cover"
             />
             <p className="text-sm leading-relaxed text-muted-foreground">
-              {FELICIA.intro}
+              {FELICIA.fullName} is {FELICIA.age}. She lives in Lisbon and works as a photographer and at Cafe Nove. She texts like a real person — short messages, real opinions, and an actual memory for what you have told her.
             </p>
           </div>
 
           <dl className="mt-3 grid grid-cols-3 gap-4 border-t border-border/50 pt-4">
             {[
-              { k: "Age", v: String(FELICIA.age) },
-              { k: "Lives in", v: "Lisbon" },
+              { k: "Based in", v: FELICIA.city },
+              { k: "Works as", v: FELICIA.traits[0].title },
+              { k: "Neighborhood", v: FELICIA.neighborhood },
               { k: "Talks to you", v: "Most evenings" },
             ].map((row) => (
               <div key={row.k}>

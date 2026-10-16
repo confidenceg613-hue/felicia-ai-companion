@@ -1,27 +1,19 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { FELICIA, FELICIA_AVATAR_URL } from "@/lib/felicia";
 import { motion } from "framer-motion";
+import { FELICIA, FELICIA_AVATAR_URL, FELICIA_PERSONALITY } from "@/lib/felicia";
 import {
   ArrowRight,
-  BookOpen,
-  Camera,
-  CloudRain,
-  Coffee,
   ImageIcon,
-  Music,
   Sparkles,
-  Waves,
 } from "lucide-react";
 import { useNavigate } from "react-router";
 
-const ICONS = {
+// ICONS is no longer referenced now that the trait cards use a shared icon.
+/* const ICONS = {
   Camera,
   Coffee,
   CloudRain,
-  Music,
-  Waves,
-  BookOpen,
 } as const;
 
 const MOMENTS = [
@@ -40,7 +32,7 @@ const MOMENTS = [
     place: "The bookshop in Alfama",
     caption: "She'll text you from between the shelves.",
   },
-];
+); */
 
 const STEPS = [
   {
@@ -159,7 +151,7 @@ export default function Landing() {
             </h1>
 
             <p className="mt-5 max-w-xl text-lg leading-relaxed text-muted-foreground">
-              {FELICIA.tagline} A photographer in Lisbon who texts like a real
+              Felicia is a photographer in Lisbon who texts like a real
               person, has a life you'll learn in pieces, and sends you pictures
               of where she actually is.
             </p>
@@ -222,7 +214,9 @@ export default function Landing() {
                   <p className="font-display text-2xl text-white">
                     {FELICIA.fullName}
                   </p>
-                  <p className="text-xs text-white/70">{FELICIA.eyebrow}</p>
+                  <p className="text-xs text-white/70">{FELICIA.traits[0].title}</p>
+
+                  {/* todo: keep this point to the personality summary instead of the removed eyebrow */}
                 </div>
               </div>
 
@@ -294,29 +288,25 @@ export default function Landing() {
           <Reveal>
             <h2 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
               Who she is
-            </h2>
-            <p className="mt-3 max-w-2xl text-muted-foreground">
-              {FELICIA.intro}
+            </h2>            <p className="mt-3 max-w-2xl text-muted-foreground">
+              Felicia is a photographer in Lisbon who works weekends at Cafe Nove and shoots film the rest of the time. She texts like a real person — short messages, real opinions, and an actual memory for what you told her. Ask to see her and she will send you the photo herself.
             </p>
           </Reveal>
 
           <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {FELICIA.traits.map((trait, index) => {
-              const Icon = ICONS[trait.icon];
-              return (
-                <Reveal key={trait.title} delay={index * 0.05}>
-                  <div className="h-full rounded-2xl border border-border/60 bg-card p-6 transition-colors hover:border-primary/40">
-                    <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                      <Icon className="size-5" />
-                    </div>
-                    <h3 className="mt-4 font-display text-lg">{trait.title}</h3>
-                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                      {trait.body}
-                    </p>
+            {FELICIA_PERSONALITY.map((trait, index) => (
+              <Reveal key={index} delay={index * 0.05}>
+                <div className="h-full rounded-2xl border border-border/60 bg-card p-6 transition-colors hover:border-primary/40">
+                  <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <Sparkles className="size-5" />
                   </div>
-                </Reveal>
-              );
-            })}
+                  <h3 className="mt-4 font-display text-lg">A little of who she is</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                    {trait}
+                  </p>
+                </div>
+              </Reveal>
+            ))}
           </div>
         </div>
       </section>

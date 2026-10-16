@@ -168,7 +168,7 @@ export default function Settings() {
           <section className="rounded-2xl border border-destructive/30 bg-card p-5">
             <h2 className="font-display text-lg">Your data</h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              Clearing removes every message you've exchanged with Felicia. Her
+              Clearing removes every message you've exchanged with Felicia. Her memories stay, but the conversation does not come back.
               album stays as it is.
             </p>
 

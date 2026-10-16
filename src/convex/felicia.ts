@@ -40,7 +40,15 @@ const FALLBACK_SCENE =
   "by a rain-streaked cafe window with a cup of coffee, wearing an oversized knit sweater, moody grey-blue light, elegant relaxed pose";
 
 const MAX_MESSAGE_LENGTH = 2000;
-const HISTORY_LIMIT = 16;
+/**
+ * How much recent conversation history Felicia can see when replying.
+ *
+ * Raised from 16 to 50 so she has a real working window into today's chat and
+ * the last few exchanges, instead of responding as if only the last couple of
+ * lines exist. The conversation itself is still stored in full; this limit only
+ * constrains the context window we send to the model, not what is kept on disk.
+ */
+const HISTORY_LIMIT = 50;
 
 // ---------------------------------------------------------------------------
 // Shared Notes
@@ -388,7 +396,14 @@ export const notesFor = internalQuery({
   },
 });
 
-/** The facts Felicia keeps, handed to her prompt so the mind map is real. */
+/**
+ * Facts Felicia keeps, plus the conversation memory window she is allowed to
+ * reason over.
+ *
+ * Memories are stored permanently in the `memories` table. The only thing that
+ * limits here is how many of the strongest ones we hand to the model in one go;
+ * the older ones are not deleted, just not all loaded at once.
+ */
 export const topMemories = internalQuery({
   args: { userId: v.id("users") },
   handler: async (ctx, { userId }) => {
@@ -396,7 +411,7 @@ export const topMemories = internalQuery({
       .query("memories")
       .withIndex("by_user_updated", (q) => q.eq("userId", userId))
       .order("desc")
-      .take(12);
+      .take(30);
     return rows.map((memory) => ({
       title: memory.title.slice(0, 70),
       content: memory.content.slice(0, 200),
@@ -443,7 +458,8 @@ export const insertMemory = internalMutation({
 });
 
 /**
- * Facts from Felicia's own life, planted the first time the mind map opens.
+ * Facts from Felicia's own life, planted once when the mind map first opens for
+ * a user who has no memories yet.
  *
  * They are true in-fiction and drawn from her persona, so the graph is never a
  * blank circle — while everything about *you* still has to be earned from real
@@ -457,9 +473,15 @@ const SEED_MEMORIES: Array<{
   strength: number;
 }> = [
   {
+    title: "Who Felicia is",
+    category: "identity",
+    content: "Felicia Moreau, 28, photographer and weekend barista at Cafe Nove in Alfama, Lisbon. She grew up in Mouraria, has an older brother called Rui, and a rescue terrier mix called Manjericao. Her father died when she was sixteen. She lives alone in a small flat in Alcântara and likes it disordered.",
+    strength: 5,
+  },
+  {
     title: "Cafe Nove",
     category: "place",
-    content: "The small coffee shop in Alfama where she works weekend shifts.",
+    content: "The small coffee shop in Alfama where she works weekend shifts. She has meant to quit for months and has not done it.",
     strength: 4,
   },
   {
