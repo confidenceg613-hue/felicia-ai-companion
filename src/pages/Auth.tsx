@@ -132,7 +132,9 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                   </div>
                 <CardTitle className="text-xl">Get Started</CardTitle>
                 <CardDescription>
-                  Enter your email to log in or sign up
+                  Enter your email to log in or sign up. Everything you and
+                  Felicia say is kept on your account, so signing out and back in
+                  later picks the conversation up exactly where it stopped.
                 </CardDescription>
               </CardHeader>
               <form onSubmit={handleEmailSubmit}>
@@ -187,8 +189,15 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                       disabled={isLoading}
                     >
                       <UserX className="mr-2 h-4 w-4" />
-                      Continue as Guest
+                      Continue as a guest
                     </Button>
+                    <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                      A guest account is tied to this device: sign out and the
+                      conversation is left behind, and a new guest sign-in starts
+                      from nothing. Sign in with your email instead and it is
+                      kept permanently — come back on any device and the whole
+                      chat is still there.
+                    </p>
                   </div>
                 </CardContent>
               </form>

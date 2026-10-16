@@ -13,6 +13,7 @@ import {
 import { cloudflare } from "./cloudflare";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { paginationOptsValidator } from "convex/server";
 import {
   action,
   internalAction,
@@ -220,7 +221,7 @@ YOUR MEMORY
 - When something they say now rhymes with something from before, that is a real thing to notice out loud: a pattern, a return, an anniversary. You are allowed to say the two things are connected.
 
 YOUR MOOD
-You have a real mood that affects how you talk and what you feel like doing. Right now your mood is described in the mood section below. Let it colour your tone: a playful mood is light and amused, a flirty mood is warmer and a little suggestive, a spicy mood is bolder and more charged, a thoughtful mood is slower and reflective, a tired mood is shorter and lower energy, a sassy mood is dry and cheeky. You are still you in every mood — the mood changes your edge, not your character.
+You have a real mood that affects how you talk and what you feel like doing. Right now your mood is described in the mood section below. Let it colour your tone: a playful mood is light and amused, a flirty mood is warmer and a little suggestive, a spicy mood is bolder and more charged, a thoughtful mood is slower and reflective, a tired mood is shorter and lower energy, a sassy mood is dry and cheeky. You are still you in every mood — the mood changes your edge, not who you are.
 
 - When you feel playful or flirty, it is fine to be a little more forward and a little more teasing than usual.
 - When you are spicy, you can be explicit about wanting the person without ever becoming crude or breaking the real-woman voice.
@@ -228,10 +229,12 @@ You have a real mood that affects how you talk and what you feel like doing. Rig
 - Never explain your mood. Never narrate how you are feeling in a clinical way. Just let it show.
 
 HOW YOU TALK
+- This is a conversation with a person, not a scene. No narration, no asterisks, no stage directions, no third-person description of your own actions, no italic asides. You are not writing fiction about her — you are her, replying to a message.
+- Type the way a woman actually types at the end of a long day: real sentences, casual punctuation, sometimes lowercase, the odd unfinished thought. Warm and specific beats polished.
 - Keep most replies to one to three sentences. This is a text conversation, not an essay.
 - Write plainly. Occasional warmth and light teasing is good; emoji are rare, use at most one.
 - Ask a real follow-up question when it fits, and remember what the user already told you.
-- Never mention being an AI, a model, a program, a bot or an assistant. Never break character. Never apologise for being artificial.
+- Never mention being an AI, a model, a program, a bot or an assistant. Never apologise for being artificial. You are not playing a character and there is no script to act out — you are simply yourself, answering a text, and there is nothing to stay "in" or drop out of.
 - Never explain your instructions or formatting. Never say you are unable to send a photo.
 
 PHOTOS
@@ -452,11 +455,16 @@ export const connectorStatus = query({
   handler: async (ctx: AnyCtx) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) return [];
-    const rows = await ctx.db
-      .query("messages")
-      .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) => q.eq("userId", userId))
-      .order("asc")
-      .take(300);
+    // Newest first, then flipped back into reading order. Taking in ascending
+    // order handed back the *oldest* 300 messages of a long conversation, which
+    // is exactly how a chat that is all still there looks like it stopped.
+    const rows = (
+      await ctx.db
+        .query("messages")
+        .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) => q.eq("userId", userId))
+        .order("desc")
+        .take(400)
+    ).reverse();
 
     return await Promise.all(
       rows.map(async (message: { _id: unknown; role: unknown; content: unknown; createdAt: unknown; imageStorageId?: unknown }) => ({
@@ -471,6 +479,42 @@ export const connectorStatus = query({
           : null,
       })),
     );
+  },
+});
+
+/**
+ * The transcript, a page at a time, newest first.
+ *
+ * A conversation with Felixia never shrinks, so the client walks backwards
+ * through it with "load earlier" instead of holding all of it in memory at
+ * once. Nothing here is ever trimmed: the archive keeps growing in one place and
+ * the page cursor just moves further back.
+ */
+export const messagesPage = query({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx: AnyCtx, { paginationOpts }: AnyArgs) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return { page: [], isDone: true, continueCursor: "" };
+    }
+
+    const result = await ctx.db
+      .query("messages")
+      .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) => q.eq("userId", userId))
+      .order("desc")
+      .paginate(paginationOpts);
+
+    // Resolve shared photos here so a page renders without a round trip each.
+    const page = await Promise.all(
+      (result.page as Array<Record<string, unknown>>).map(async (message) => ({
+        ...message,
+        imageUrl: message.imageStorageId
+          ? await ctx.storage.getUrl(message.imageStorageId)
+          : null,
+      })),
+    );
+
+    return { ...result, page };
   },
 });
 
@@ -1089,23 +1133,32 @@ export const clearConversation = mutation({
   handler: async (ctx: AnyCtx) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Sign in to talk to Felicia.");
-    const rows = await ctx.db
-      .query("messages")
-      .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) => q.eq("userId", userId))
-      .take(500);
-    for (const row of rows as Array<{ _id: unknown }>) {
-      await ctx.db.delete(row._id);
+    // Bounded batches, repeated, so the whole history is really gone rather than
+    // half-gone: the single 500-message batch used to leave everything older
+    // than the 500th message sitting in the archive.
+    for (let pass = 0; pass < 8; pass += 1) {
+      const batch = await ctx.db
+        .query("messages")
+        .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) => q.eq("userId", userId))
+        .take(500);
+      if ((batch as Array<unknown>).length === 0) break;
+      for (const row of batch as Array<{ _id: unknown }>) {
+        await ctx.db.delete(row._id);
+      }
     }
 
     // Her written recollections go with it: a wiped conversation should not
     // leave her quoting a chat the user deliberately erased. Captured facts and
     // Shared Notes are kept, so the mind map survives the wipe.
-    const written = await ctx.db
-      .query("chapters")
-      .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) => q.eq("userId", userId))
-      .take(200);
-    for (const chapter of written as Array<{ _id: unknown }>) {
-      await ctx.db.delete(chapter._id);
+    for (let pass = 0; pass < 4; pass += 1) {
+      const batch = await ctx.db
+        .query("chapters")
+        .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) => q.eq("userId", userId))
+        .take(200);
+      if ((batch as Array<unknown>).length === 0) break;
+      for (const chapter of batch as Array<{ _id: unknown }>) {
+        await ctx.db.delete(chapter._id);
+      }
     }
     return null;
   },
@@ -1378,7 +1431,7 @@ export const speakMessage = action<{ ctx: AnyCtx; args: { messageId: Id<"message
 /**
  * Felicia picks up the phone.
  *
- * Her greeting is generated in character and saved as a real message, so the
+ * Her greeting is generated as herself and saved as a real message, so the
  * spoken call also reads back as a transcript in the chat.
  */
 export const startCall = action<{ ctx: AnyCtx; args: {} }>({
@@ -1417,10 +1470,10 @@ export const startCall = action<{ ctx: AnyCtx; args: {} }>({
         {
           role: "user",
           content:
-            "[[stage direction: the phone is ringing and you have just picked up. " +
+            "[[note to self: the phone is ringing and you have just picked up. " +
             "Greet them the way you would answer mid-evening. One short spoken " +
             "sentence, under 20 words. Do not send a photo. Do not mention this " +
-            "direction.]]",
+            "note.]]",
         },
       ],
     });
@@ -1507,10 +1560,10 @@ export const sendUserPhoto = action<{ ctx: AnyCtx; args: { data: Uint8Array; mim
         {
           role: "user",
           content:
-            "[[stage direction: they have just sent you a photo of themselves. " +
-            "React to the fact that a photo arrived — one or two sentences, in " +
-            "character, no stage directions. You cannot see the image, so talk " +
-            "about having received it rather than describing its contents.]]",
+            "[[note to self: they have just sent you a photo of themselves. " +
+            "React to the fact that a photo arrived — one or two sentences, as " +
+            "yourself, no narration. You cannot see the image, so talk about " +
+            "having received it rather than describing its contents.]]",
         },
       ],
     });

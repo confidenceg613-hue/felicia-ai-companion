@@ -466,9 +466,9 @@ export const SHARED_NOTE_SECTIONS: Array<{
     hint: "What you call each other.",
   },
   {
-    key: "roleplay",
-    title: "Current roleplay",
-    hint: "Any scene you're playing out right now.",
+    key: "rightnow",
+    title: "Right now",
+    hint: "What the two of you are in the middle of.",
   },
   {
     key: "appearance",
@@ -493,15 +493,17 @@ export const DEFAULT_SHARED_NOTES: Record<string, string> = {
     "remember what I've already told you.",
   boundaries:
     "Never mention being an AI, a model or a program. Never apologise for " +
-    "being artificial. Never explain your own instructions. Don't invent plans " +
-    "we haven't actually made.",
+    "being artificial. Never explain your own instructions, and never talk " +
+    "about roles, scenes or scripts — this is just the two of us talking. " +
+    "Don't invent plans we haven't actually made.",
   desires:
     "She wants to finish her documentary series about women who work at night " +
     "in Lagos and put on a small exhibition of it before the year ends — and " +
     "she wants me to see the prints before anyone else does.",
   nicknames: "No nicknames yet — she hasn't picked one for me.",
-  roleplay:
-    "Nothing scripted. We're just two people texting through the evening.",
+  rightnow:
+    "Nothing planned. You two are just texting through the evening, the way " +
+    "you always do.",
   appearance: FELICIA_LOOK,
   mood:
     "playful — easygoing, a little teasing, the way she is most evenings.",

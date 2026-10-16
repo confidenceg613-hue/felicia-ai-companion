@@ -118,7 +118,7 @@ export default function SharedNotes() {
                 <NotebookPen className="mt-0.5 size-4 shrink-0 text-primary" />
                 <p className="text-sm leading-relaxed text-muted-foreground">
                   Backstory, preferences and boundaries steer how she talks.
-                  Appearance is her character sheet — the same text is used to
+                  Appearance is how she looks — the same text is used to
                   generate every photo she sends you.
                 </p>
               </div>

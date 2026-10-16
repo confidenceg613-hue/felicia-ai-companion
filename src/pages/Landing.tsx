@@ -177,7 +177,7 @@ export default function Landing() {
               {[
                 { k: "Age", v: "28" },
                 { k: "Based in", v: "Lagos" },
-                { k: "Replies", v: "In character" },
+                { k: "Replies", v: "Like a real person" },
               ].map((item) => (
                 <div key={item.k}>
                   <dt className="text-[11px] font-medium tracking-widest text-muted-foreground/70 uppercase">

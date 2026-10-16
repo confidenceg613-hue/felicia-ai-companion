@@ -168,8 +168,11 @@ export default function Settings() {
           <section className="rounded-2xl border border-destructive/30 bg-card p-5">
             <h2 className="font-display text-lg">Your data</h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              Clearing removes every message you've exchanged with Felicia. Her memories stay, but the conversation does not come back.
-              album stays as it is.
+              Signing out keeps everything: your whole conversation stays on your
+              account and is waiting the next time you sign in with the same
+              email. Only the button below removes it — every message she has ever
+              sent you, gone for good. Her memories and your album stay as they
+              are.
             </p>
 
             <Button

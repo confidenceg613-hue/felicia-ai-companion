@@ -23,10 +23,11 @@ import { FELICIA, FELICIA_AVATAR_URL } from "@/lib/felicia";
 import { DEVELOP_MS, preloadImage } from "@/lib/photo";
 import { cn } from "@/lib/utils";
 import { beginVoiceNote, playAudioUrl, speakWithBrowser } from "@/lib/voice";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { motion } from "framer-motion";
 import {
   Camera,
+  Clock,
   Ellipsis,
   Images,
   Info,
@@ -59,6 +60,9 @@ function readAutoVoicePref(): boolean {
   }
 }
 
+/** How many messages "load earlier" pulls in at a time. */
+const MESSAGE_PAGE_SIZE = 80;
+
 const OPENERS = [
   "What are you doing right now?",
   "Send me a photo of where you are",
@@ -88,7 +92,11 @@ export default function Dashboard() {
   const { signOut } = useAuth();
   const navigate = useNavigate();
 
-  const messages = useQuery(api.felicia.messages);
+  const messagePages = usePaginatedQuery(
+    api.felicia.messagesPage,
+    {},
+    { initialNumItems: MESSAGE_PAGE_SIZE },
+  );
   const photos = useQuery(api.felicia.photos);
   const connection = useQuery(api.felicia.connectorStatus);
   const clearConversation = useMutation(api.felicia.clearConversation);
@@ -153,13 +161,17 @@ export default function Dashboard() {
   }, [pendingPhotoScene, photoScheduledAt, requestPhoto]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  /** Distance from the bottom, kept across a "load earlier" so the view holds. */
+  const restoreScrollRef = useRef<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const voiceRef = useRef<{
     end: () => Promise<string | null>;
     cancel: () => void;
   } | null>(null);
 
-  const list = messages ?? [];
+  // Pages arrive newest-first so "load earlier" can walk all the way back; the
+  // transcript itself reads oldest-to-newest.
+  const list = [...(messagePages.results ?? [])].reverse();
   const lastUserMessage = [...list].reverse().find((m) => m.role === "user");
   const showPending = pending !== null && lastUserMessage?.content !== pending;
   const composing = thinking || recording;
@@ -208,10 +220,27 @@ export default function Dashboard() {
       })),
   ].sort((a, b) => a.createdAt - b.createdAt);
 
+  // Follow the newest line only. Keyed on the last item rather than the count,
+  // so loading older messages above does not yank the reader to the bottom.
   useEffect(() => {
     const node = scrollRef.current;
     if (node) node.scrollTop = node.scrollHeight;
-  }, [items.length, showPending, developing, interim]);
+  }, [items[items.length - 1]?.id, showPending, developing, interim]);
+
+  // Older messages are prepended above, so the reader keeps their place: the
+  // distance from the bottom is remembered and put back.
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (!node || restoreScrollRef.current === null) return;
+    node.scrollTop = node.scrollHeight - restoreScrollRef.current;
+    restoreScrollRef.current = null;
+  }, [list.length]);
+
+  function loadEarlierMessages() {
+    const node = scrollRef.current;
+    if (node) restoreScrollRef.current = node.scrollHeight - node.scrollTop;
+    void messagePages.loadMore(MESSAGE_PAGE_SIZE);
+  }
 
   async function requestPhoto(scene: string) {
     if (!photosReady) return;
@@ -475,7 +504,9 @@ export default function Dashboard() {
             className="flex-1 overflow-y-auto px-4 sm:px-6"
           >
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
-              {items.length === 0 && !showPending && (
+              {items.length === 0 &&
+                !showPending &&
+                messagePages.status !== "LoadingFirstPage" && (
                 <div className="flex flex-col items-center justify-center px-4 py-16 text-center sm:px-6">
                   <div className="flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
                     <Heart className="size-6" />
@@ -497,6 +528,29 @@ export default function Dashboard() {
                       </button>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {messagePages.status === "CanLoadMore" && (
+                <div className="flex flex-col items-center gap-1 py-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-2 text-xs text-muted-foreground"
+                    disabled={messagePages.isLoading}
+                    onClick={loadEarlierMessages}
+                  >
+                    {messagePages.isLoading ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <Clock className="size-3.5" />
+                    )}
+                    Load earlier messages
+                  </Button>
+                  <p className="text-[11px] text-muted-foreground/70">
+                    Everything the two of you have said is kept — nothing here
+                    expires.
+                  </p>
                 </div>
               )}
 
