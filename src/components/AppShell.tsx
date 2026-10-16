@@ -101,12 +101,16 @@ export default function AppShell() {
     const handleOpenAppearance = () => setAppearanceOpen(true);
     const handleOpenMood = () => setMoodOpen(true);
 
-    window.addEventListener("open-appearance", handleOpenAppearance);
-    window.addEventListener("open-mood", handleOpenMood);
+    if (typeof window !== "undefined") {
+      window.addEventListener("open-appearance", handleOpenAppearance);
+      window.addEventListener("open-mood", handleOpenMood);
+    }
 
     return () => {
-      window.removeEventListener("open-appearance", handleOpenAppearance);
-      window.removeEventListener("open-mood", handleOpenMood);
+      if (typeof window !== "undefined") {
+        window.removeEventListener("open-appearance", handleOpenAppearance);
+        window.removeEventListener("open-mood", handleOpenMood);
+      }
     };
   }, []);
 
@@ -288,10 +292,12 @@ export default function AppShell() {
                     asChild
                     tooltip={item.description}
                     onClick={() => {
-                      if (item.href === "#appearance") {
-                        window.dispatchEvent(new CustomEvent("open-appearance"));
-                      } else if (item.href === "#mood") {
-                        window.dispatchEvent(new CustomEvent("open-mood"));
+                      if (typeof window !== "undefined") {
+                        if (item.href === "#appearance") {
+                          window.dispatchEvent(new CustomEvent("open-appearance"));
+                        } else if (item.href === "#mood") {
+                          window.dispatchEvent(new CustomEvent("open-mood"));
+                        }
                       }
                     }}
                   >
@@ -543,7 +549,9 @@ function UserMenu({
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => {
-              window.dispatchEvent(new CustomEvent("open-appearance"));
+              if (typeof window !== "undefined") {
+                window.dispatchEvent(new CustomEvent("open-appearance"));
+              }
               setOpen(false);
             }}
           >
@@ -557,7 +565,9 @@ function UserMenu({
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => {
-              window.dispatchEvent(new CustomEvent("open-mood"));
+              if (typeof window !== "undefined") {
+                window.dispatchEvent(new CustomEvent("open-mood"));
+              }
               setOpen(false);
             }}
           >
