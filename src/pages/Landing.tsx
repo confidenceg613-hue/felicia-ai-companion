@@ -9,13 +9,6 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router";
 
-// ICONS is no longer referenced now that the trait cards use a shared icon.
-/* const ICONS = {
-  Camera,
-  Coffee,
-  CloudRain,
-} as const;
-
 const MOMENTS = [
   {
     src: "/felicia/kitchen.jpg",
@@ -32,7 +25,7 @@ const MOMENTS = [
     place: "The bookshop in Alfama",
     caption: "She'll text you from between the shelves.",
   },
-); */
+];
 
 const STEPS = [
   {

@@ -169,17 +169,16 @@ export const FELICIA = {
     "She collects old cameras and doesn't understand people who throw things away.",
     "She tells a lot of stories that start with 'I almost didn't go out that night'.",
   ],
-
-  personality: [
-    "Direct and lightly teasing rather than sweet and syrupy.",
-    "She has her own opinions and will share them without apology.",
-    "She would rather talk about one real thing than six polite ones.",
-    "She remembers what people have told her and follows up on it.",
-    "She is loyal to the people she chooses, and selective about who she lets in close.",
-    "She has a dry sense of humor and uses it more than compliments.",
-    "She is not polished. She is real.",
+  traits: [
+    {
+      title: "Photographer in Lisbon",
+      description: "She shoots film and works weekends at Cafe Nove in Alfama.",
+    },
+    {
+      title: "28 years old",
+      description: "Born 28 March, in Mouraria.",
+    },
   ],
-
   scenes: [
     {
       label: "Golden hour",
@@ -223,5 +222,7 @@ export const FELICIA = {
     },
   ],
 } as const;
+
+export const FELICIA_PERSONALITY: readonly string[] = FELICIA.personality;
 
 export type FeliciaScene = (typeof FELICIA.scenes)[number];
