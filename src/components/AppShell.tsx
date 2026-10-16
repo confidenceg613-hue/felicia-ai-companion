@@ -30,6 +30,7 @@ import {
   SidebarMenuItem,
   SidebarProvider,
   SidebarTrigger,
+  useSidebar,
   SidebarInset,
 } from "@/components/ui/sidebar";
 import { toast } from "sonner";
@@ -89,6 +90,7 @@ const APP_CTA_ITEMS = [
 export default function AppShell() {
   const navigate = useNavigate();
   const { user, billingAccount, logout, clearConversation } = useUser();
+  const { open: sidebarOpen, setOpen: setSidebarOpen } = useSidebar();
   const [mounted, setMounted] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [moodOpen, setMoodOpen] = useState(false);
@@ -118,7 +120,7 @@ export default function AppShell() {
     <SidebarProvider>
       <SidebarInset>
         <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-background/90 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/70 sm:px-6">
-          <SidebarTrigger className="-ml-3 rounded-full text-muted-foreground hover:bg-muted" />
+          <SidebarTrigger className="-ml-3 rounded-full text-muted-foreground shadow-sm ring-1 ring-border/50 hover:bg-muted" aria-label="Open sidebar" />
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-3 text-sm font-medium">
               <span className="hidden sm:inline text-muted-foreground">Felicia</span>
@@ -242,6 +244,7 @@ export default function AppShell() {
 
       <Sidebar className="border-r bg-sidebar">
         <div className="flex h-14 items-center border-b px-4">
+          <SidebarTrigger className="hidden -ml-3 rounded-full text-muted-foreground shadow-sm ring-1 ring-border/50 hover:bg-muted" aria-label="Open sidebar" />
           <div className="flex items-center gap-3 text-sm font-medium">
             <span className="hidden sm:inline text-muted-foreground">Felicia</span>
             <span className="text-muted-foreground">/</span>
@@ -265,7 +268,7 @@ export default function AppShell() {
                   >
                     <a
                       href={item.href}
-                      className="flex items-center gap-3 rounded-lg bg-sidebar-accent/30 px-3 py-2 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
+                      className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                     >
                       <span className="flex size-6 items-center justify-center rounded-md bg-sidebar-accent-foreground/10 text-sidebar-accent-foreground">
                         {NAV_ICONS[item.href]}
@@ -292,12 +295,10 @@ export default function AppShell() {
                     asChild
                     tooltip={item.description}
                     onClick={() => {
-                      if (typeof window !== "undefined") {
-                        if (item.href === "#appearance") {
-                          window.dispatchEvent(new CustomEvent("open-appearance"));
-                        } else if (item.href === "#mood") {
-                          window.dispatchEvent(new CustomEvent("open-mood"));
-                        }
+                      if (item.href === "#appearance") {
+                        window.dispatchEvent(new CustomEvent("open-appearance"));
+                      } else if (item.href === "#mood") {
+                        window.dispatchEvent(new CustomEvent("open-mood"));
                       }
                     }}
                   >
@@ -549,9 +550,7 @@ function UserMenu({
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => {
-              if (typeof window !== "undefined") {
-                window.dispatchEvent(new CustomEvent("open-appearance"));
-              }
+              window.dispatchEvent(new CustomEvent("open-appearance"));
               setOpen(false);
             }}
           >
@@ -565,9 +564,7 @@ function UserMenu({
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => {
-              if (typeof window !== "undefined") {
-                window.dispatchEvent(new CustomEvent("open-mood"));
-              }
+              window.dispatchEvent(new CustomEvent("open-mood"));
               setOpen(false);
             }}
           >
