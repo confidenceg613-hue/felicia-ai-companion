@@ -396,7 +396,7 @@ export default function Album() {
                 </div>
               )}
 
-              {visible.map((photo) => (
+              {visible.map((photo: Parameters<typeof visible.map>[0]) => (
                 <motion.button
                   key={photo._id}
                   type="button"
@@ -585,8 +585,7 @@ export default function Album() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="gap-1.5 text-xs"
-                  disabled={developing || !ready}
+                  className="gap-1.5 text-xs"                    disabled={developing || !ready}
                   onClick={() =>
                     populateQueue(lastPhoto.scene ?? "close-up portrait of Felicia, warm focused light")
                   }

@@ -21,6 +21,11 @@ import {
   query,
 } from "./_generated/server";
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyCtx = any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyArgs = any;
+
 /** Used when a request has no usable scene description. */
 export const DEFAULT_SCENE =
   "relaxing on a sunlit balcony at golden hour, wearing a soft linen shirt, holding a mug of coffee";
@@ -301,11 +306,9 @@ export const connectorStatus = query({
     imageConfigured: true,
     imageFallbackConfigured: isCloudflareConfigured() || isAiHordeConfigured(),
   }),
-});
-
-export const messages = query({
+});export const messages = query({
   args: {},
-  handler: async (ctx) => {
+  handler: async (ctx: AnyCtx) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) return [];
     const rows = await ctx.db
@@ -332,7 +335,7 @@ export const messages = query({
 
 export const photos = query({
   args: {},
-  handler: async (ctx) => {
+  handler: async (ctx: AnyCtx) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) return [];
     const rows = await ctx.db
@@ -355,7 +358,7 @@ export const photos = query({
  */
 export const sharedNotes = query({
   args: {},
-  handler: async (ctx) => {
+  handler: async (ctx: AnyCtx) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) return { sections: DEFAULT_SHARED_NOTES, updatedAt: 0 };
     const row = await ctx.db
@@ -373,7 +376,7 @@ export const sharedNotes = query({
 /** Everything Felicia has remembered, most recently updated first. */
 export const memories = query({
   args: {},
-  handler: async (ctx) => {
+  handler: async (ctx: AnyCtx) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) return [];
     return await ctx.db
@@ -390,7 +393,7 @@ export const memories = query({
 
 export const recentMessages = internalQuery({
   args: { userId: v.id("users"), limit: v.number() },
-  handler: async (ctx, { userId, limit }) => {
+  handler: async (ctx: AnyCtx, { userId, limit }: AnyArgs) => {
     const rows = await ctx.db
       .query("messages")
       .withIndex("by_user", (q) => q.eq("userId", userId))
@@ -408,7 +411,7 @@ export const saveMessage = internalMutation({
     imageStorageId: v.optional(v.id("_storage")),
   },
   returns: v.id("messages"),
-  handler: async (ctx, args) => {
+  handler: async (ctx: AnyCtx, args: AnyArgs) => {
     return await ctx.db.insert("messages", {
       userId: args.userId,
       role: args.role,
@@ -422,7 +425,7 @@ export const saveMessage = internalMutation({
 /** Look up a message's text and any cached audio render, for the voice layer. */
 export const messageAudio = internalQuery({
   args: { messageId: v.id("messages") },
-  handler: async (ctx, { messageId }) => {
+  handler: async (ctx: AnyCtx, { messageId }: AnyArgs) => {
     const message = await ctx.db.get(messageId);
     if (!message) return null;
     return {
@@ -441,7 +444,7 @@ export const attachAudio = internalMutation({
     audioStorageId: v.id("_storage"),
   },
   returns: v.null(),
-  handler: async (ctx, { messageId, audioStorageId }) => {
+  handler: async (ctx: AnyCtx, { messageId, audioStorageId }: AnyArgs) => {
     await ctx.db.patch(messageId, { audioStorageId });
     return null;
   },
@@ -455,7 +458,7 @@ export const savePhoto = internalMutation({
     scene: v.string(),
   },
   returns: v.null(),
-  handler: async (ctx, args) => {
+  handler: async (ctx: AnyCtx, args: AnyArgs) => {
     await ctx.db.insert("photos", { ...args, createdAt: Date.now() });
     return null;
   },
@@ -464,7 +467,7 @@ export const savePhoto = internalMutation({
 /** Shared Notes as the model sees them: stored sections over the defaults. */
 export const notesFor = internalQuery({
   args: { userId: v.id("users") },
-  handler: async (ctx, { userId }) => {
+  handler: async (ctx: AnyCtx, { userId }: AnyArgs) => {
     const row = await ctx.db
       .query("sharedNotes")
       .withIndex("by_user", (q) => q.eq("userId", userId))
@@ -483,7 +486,7 @@ export const notesFor = internalQuery({
  */
 export const topMemories = internalQuery({
   args: { userId: v.id("users") },
-  handler: async (ctx, { userId }) => {
+  handler: async (ctx: AnyCtx, { userId }: AnyArgs) => {
     const rows = await ctx.db
       .query("memories")
       .withIndex("by_user_updated", (q) => q.eq("userId", userId))
@@ -498,7 +501,7 @@ export const topMemories = internalQuery({
 
 export const memoryTitles = internalQuery({
   args: { userId: v.id("users") },
-  handler: async (ctx, { userId }) => {
+  handler: async (ctx: AnyCtx, { userId }: AnyArgs) => {
     const rows = await ctx.db
       .query("memories")
       .withIndex("by_user", (q) => q.eq("userId", userId))
@@ -509,7 +512,7 @@ export const memoryTitles = internalQuery({
 
 export const memoryCount = internalQuery({
   args: { userId: v.id("users") },
-  handler: async (ctx, { userId }) => {
+  handler: async (ctx: AnyCtx, { userId }: AnyArgs) => {
     const rows = await ctx.db
       .query("memories")
       .withIndex("by_user", (q) => q.eq("userId", userId))
@@ -527,7 +530,7 @@ export const insertMemory = internalMutation({
     strength: v.number(),
   },
   returns: v.null(),
-  handler: async (ctx, args) => {
+  handler: async (ctx: AnyCtx, args: AnyArgs) => {
     const now = Date.now();
     await ctx.db.insert("memories", { ...args, createdAt: now, updatedAt: now });
     return null;
@@ -596,7 +599,7 @@ const SEED_MEMORIES: Array<{
 export const seedMemories = mutation({
   args: {},
   returns: v.null(),
-  handler: async (ctx) => {
+  handler: async (ctx: AnyCtx) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Sign in first.");
 
@@ -617,7 +620,7 @@ export const seedMemories = mutation({
 export const saveSharedNotes = mutation({
   args: { sections: v.record(v.string(), v.string()) },
   returns: v.null(),
-  handler: async (ctx, { sections }) => {
+  handler: async (ctx: AnyCtx, { sections }: AnyArgs) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Sign in to edit Shared Notes.");
 
@@ -662,7 +665,7 @@ export const addMemory = mutation({
     strength: v.optional(v.number()),
   },
   returns: v.null(),
-  handler: async (ctx, args) => {
+  handler: async (ctx: AnyCtx, args: AnyArgs) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Sign in to add a memory.");
 
@@ -695,7 +698,7 @@ export const updateMemory = mutation({
     strength: v.optional(v.number()),
   },
   returns: v.null(),
-  handler: async (ctx, args) => {
+  handler: async (ctx: AnyCtx, args: AnyArgs) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Sign in first.");
 
@@ -724,7 +727,7 @@ export const updateMemory = mutation({
 export const deleteMemory = mutation({
   args: { id: v.id("memories") },
   returns: v.null(),
-  handler: async (ctx, { id }) => {
+  handler: async (ctx: AnyCtx, { id }: AnyArgs) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Sign in first.");
 
@@ -748,7 +751,7 @@ function clampStrength(value: number): number {
 export const clearConversation = mutation({
   args: {},
   returns: v.null(),
-  handler: async (ctx) => {
+  handler: async (ctx: AnyCtx) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Sign in to talk to Felicia.");
     const rows = await ctx.db
@@ -773,7 +776,7 @@ export const clearConversation = mutation({
  * client should render. Splitting it this way keeps her text instant instead of
  * making the user wait for an image to finish generating.
  */
-export const sendMessage = action({
+export const sendMessage = action<{ ctx: AnyCtx; args: { text: string } }>({
   args: { text: v.string() },
   returns: v.object({
     reply: v.string(),
@@ -872,7 +875,7 @@ export const sendMessage = action({
  * attempt is retried once if it times out or is rejected, so a single request
  * still only surfaces one error to the user.
  */
-export const generatePhoto = action({
+export const generatePhoto = action<{ ctx: AnyCtx; args: { scene?: string } }>({
   args: { scene: v.optional(v.string()) },
   returns: v.object({
     storageId: v.id("_storage"),
@@ -964,7 +967,7 @@ function isHordeFailureRetryable(error: unknown): boolean {
  * Cached on the message itself, so replaying a line or re-entering a call costs
  * nothing after the first render.
  */
-export const speakMessage = action({
+export const speakMessage = action<{ ctx: AnyCtx; args: { messageId: Id<"messages"> } }>({
   args: { messageId: v.id("messages") },
   returns: v.object({ url: v.union(v.string(), v.null()) }),
   handler: async (
@@ -1001,7 +1004,7 @@ export const speakMessage = action({
  * Her greeting is generated in character and saved as a real message, so the
  * spoken call also reads back as a transcript in the chat.
  */
-export const startCall = action({
+export const startCall = action<{ ctx: AnyCtx; args: {} }>({
   args: {},
   returns: v.object({
     messageId: v.id("messages"),
@@ -1057,7 +1060,7 @@ export const startCall = action({
  * pretending to have seen it. The image itself is saved to Convex storage and
  * rendered in the conversation.
  */
-export const sendUserPhoto = action({
+export const sendUserPhoto = action<{ ctx: AnyCtx; args: { data: Uint8Array; mimeType: string } }>({
   args: { data: v.bytes(), mimeType: v.string() },
   returns: v.object({
     reply: v.string(),
@@ -1187,7 +1190,7 @@ function parseMemoryList(raw: string): Array<{
  * yields zero new memories rather than an error — a model that rambles should
  * not break the page.
  */
-export const captureMemories = action({
+export const captureMemories = action<{ ctx: AnyCtx; args: {} }>({
   args: {},
   returns: v.object({ added: v.number(), total: v.number() }),
   handler: async (

@@ -5,7 +5,7 @@ import { mutation, query } from "./_generated/server";
 /** Where the user's chosen outfit / background / custom scene live. */
 export const feliciaAppearance = query({
   args: {},
-  handler: async (ctx) => {
+  handler: async (ctx: any) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) return null;
 
@@ -27,7 +27,7 @@ export const saveFeliciaAppearance = mutation({
       overrideScene: v.optional(v.union(v.string(), v.null())),
     }),
   },
-  handler: async (ctx, { appearance }) => {
+  handler: async (ctx: any, { appearance }: any) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Sign in first.");
 

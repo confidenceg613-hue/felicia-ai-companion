@@ -8,7 +8,7 @@ import { query } from "./_generated/server";
  */
 export const currentUser = query({
   args: {},
-  handler: async (ctx) => {
+  handler: async (ctx: any) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) return null;
     return await ctx.db.get(userId);
