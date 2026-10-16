@@ -23,6 +23,7 @@ import {
   FELICIA_LOOK,
   type FeliciaAppearance,
 } from "@/lib/felicia";
+import { FELICIA_GALLERY, type GalleryPhoto } from "@/lib/gallery";
 import { DEVELOP_MS, preloadImage } from "@/lib/photo";
 import { sleep } from "@/lib/voice";
 import { useAction, useQuery } from "convex/react";
@@ -244,6 +245,10 @@ export default function Album() {
   const pendingCount = queue.length;
   const lastPhoto = allPhotos[0];
 
+  const lightboxCaption =
+    FELICIA_GALLERY.find((photo: GalleryPhoto) => photo.url === lightbox)
+      ?.title ?? `${FELICIA.name}'s photo`;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <header className="border-b border-border/50 px-4 py-4 sm:px-6">
@@ -263,7 +268,8 @@ export default function Album() {
               Her album
             </h1>
             <p className="text-sm text-muted-foreground">
-              Every photo Felicia has sent you, newest first.
+              Her permanent gallery, plus every photo she has sent you, newest
+              first.
             </p>
           </div>
 
@@ -321,7 +327,7 @@ export default function Album() {
             </DropdownMenu>
 
             <span className="text-xs text-muted-foreground">
-              {allPhotos.length} photos
+              {allPhotos.length + FELICIA_GALLERY.length} photos
             </span>
 
             <Button
@@ -343,6 +349,54 @@ export default function Album() {
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6">
         <div className="mx-auto w-full max-w-5xl">
+          {/* Her gallery — shipped with the app, so it is always here. */}
+          <section className="mb-8" aria-label="Her permanent gallery">
+            <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+              <div>
+                <h2 className="font-display text-lg font-semibold tracking-tight">
+                  Her gallery
+                </h2>
+                <p className="text-xs text-muted-foreground">
+                  Kept permanently in the app — these never leave.
+                </p>
+              </div>
+              <span className="rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-[10px] tracking-widest text-primary uppercase">
+                {FELICIA_GALLERY.length} permanent
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+              {FELICIA_GALLERY.map((photo: GalleryPhoto) => (
+                <motion.button
+                  key={photo.id}
+                  type="button"
+                  initial={{ opacity: 0, scale: 0.96 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.3 }}
+                  onClick={() => setLightbox(photo.url)}
+                  className="group relative overflow-hidden rounded-2xl border border-border/60 bg-card text-left"
+                  title={photo.title}
+                >
+                  <img
+                    src={photo.url}
+                    alt={photo.title}
+                    loading="lazy"
+                    className="aspect-square w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  />
+                </motion.button>
+              ))}
+            </div>
+          </section>
+
+          <div className="mb-3 flex items-end justify-between gap-2">
+            <h2 className="font-display text-lg font-semibold tracking-tight">
+              From her sessions
+            </h2>
+            <span className="text-xs text-muted-foreground">
+              {allPhotos.length} {allPhotos.length === 1 ? "photo" : "photos"}
+            </span>
+          </div>
+
           {!ready ? (
             <div className="flex h-40 items-center justify-center">
               <Loader2 className="size-5 animate-spin text-muted-foreground" />
@@ -350,10 +404,11 @@ export default function Album() {
           ) : visible.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 px-6 py-20 text-center">
               <Images className="size-6 text-muted-foreground" />
-              <h2 className="mt-4 font-display text-xl">Nothing here yet</h2>
+              <h2 className="mt-4 font-display text-xl">No new photos yet</h2>
               <p className="mt-2 max-w-sm text-sm text-muted-foreground">
-                Ask Felicia to send you something — or tap the palette to choose
-                how she looks before she does.
+                Her permanent gallery is above. Ask her to send you something
+                new — or tap the palette to choose how she looks before she
+                does.
               </p>
               <div className="mt-5 flex flex-wrap items-center gap-2">
                 <Button
@@ -421,9 +476,10 @@ export default function Album() {
             </div>
           )}
 
-          {ready && allPhotos.length > 0 && (
-            <p className="mt-6 text-center text-xs text-muted-foreground">
-              Generated with Cloudflare image/voice or Groq chat · kept in your account only.
+          {ready && (
+            <p className="mt-8 text-center text-xs text-muted-foreground">
+              {FELICIA_GALLERY.length} gallery photos are part of the app; new
+              ones she sends are kept in your account only.
             </p>
           )}
         </div>
@@ -435,8 +491,8 @@ export default function Album() {
       >
         <DialogContent className="max-w-3xl border-border/60 bg-card p-3">
           <DialogHeader className="sr-only">
-            <DialogTitle>{FELICIA.name}'s photo</DialogTitle>
-            <DialogDescription>A photo Felicia sent you</DialogDescription>
+            <DialogTitle>{lightboxCaption}</DialogTitle>
+            <DialogDescription>A photo of Felicia</DialogDescription>
           </DialogHeader>
           {lightbox && (
             <img
