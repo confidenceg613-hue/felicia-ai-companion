@@ -1,4 +1,3 @@
-import { ImageIcon } from "lucide-react";
 import { FELICIA_AVATAR_URL } from "@/lib/felicia";
 import { cn } from "@/lib/utils";
 

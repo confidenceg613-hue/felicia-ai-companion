@@ -182,6 +182,8 @@ export function FeliciaCall({
     primeVoices();
 
     async function run() {
+      if (!active()) return;
+
       setStatus("connecting");
 
       // Guarded so a StrictMode remount does not replay her opening line.
