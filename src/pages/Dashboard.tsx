@@ -830,10 +830,10 @@ export default function Dashboard() {
             />
             <p className="text-sm leading-relaxed text-muted-foreground">
               {FELICIA.fullName} is {FELICIA.age} and lives in {FELICIA.city}. She
-              is a photographer with weekend shifts at Cafe Nove in{" "}
-              {FELICIA.neighborhood}. She texts like a real person — short
-              messages, real opinions, and an actual memory for what you have told
-              her.
+              makes a living filming and photographing the city, and she keeps
+              everything the two of you have ever said to each other — every
+              conversation, however long ago. She texts like a real person: short
+              messages, real opinions, and an actual memory for what you told her.
             </p>
           </div>
 

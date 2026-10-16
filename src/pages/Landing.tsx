@@ -36,7 +36,7 @@ const STEPS = [
   {
     n: "02",
     title: "She answers as herself",
-    body: "Felicia has a job, a city, opinions and a memory. She remembers what you said last time, and she'll hold you to it.",
+    body: "Felicia has a city, opinions and a long memory. Nothing you tell her is thrown away — she'll bring up what you said months ago, and hold you to it.",
   },
   {
     n: "03",
@@ -144,9 +144,9 @@ export default function Landing() {
             </h1>
 
             <p className="mt-5 max-w-xl text-lg leading-relaxed text-muted-foreground">
-              Felicia is a Nigerian photographer in Lagos who texts like a real
-              person, has a life you'll learn in pieces, and sends you pictures
-              of where she actually is.
+              Felicia is a Nigerian creator in Lagos who texts like a real
+              person, remembers everything you ever tell her, and sends you
+              pictures of where she actually is.
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -282,11 +282,13 @@ export default function Landing() {
             <h2 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
               Who she is
             </h2>            <p className="mt-3 max-w-2xl text-muted-foreground">
-              Felicia is a photographer in Lagos — Yoruba, 28, raised in
-              Surulere and living in Yaba — who works weekends at Cafe Nove and
-              shoots film the rest of the time. She texts like a real person:
-              short messages, strong opinions, and an actual memory for what you
-              told her. Ask to see her and she will send you the photo herself.
+              Felicia is a creator in Lagos — Yoruba, 28, raised in Surulere and
+              living in Yaba — who films and photographs the city for a living.
+              She keeps every conversation the two of you have ever had, so
+              something you said a year ago is still something she can bring up.
+              She texts like a real person: short messages, strong opinions, and
+              an actual memory for what you told her. Ask to see her and she will
+              send you the photo herself.
             </p>
           </Reveal>
 

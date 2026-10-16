@@ -33,9 +33,9 @@ const PRESET_SCENES = [
       "a candid selfie, holding the camera at arm's length, soft window light, natural smile",
   },
   {
-    label: "At the cafe",
+    label: "Filming",
     scene:
-      "behind the counter of Cafe Nove, hair tied up, laughing at something off camera",
+      "at home filming a video, ring light and tripod behind her, hair tied up, laughing at something off camera",
   },
   {
     label: "Rainy evening",

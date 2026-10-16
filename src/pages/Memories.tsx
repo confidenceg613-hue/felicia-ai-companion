@@ -166,8 +166,19 @@ function layoutGraph(memories: Memory[]) {
   return { nodes, links };
 }
 
+/** "12 Mar – 2 Apr 2026" for a chapter's span, or one date if it is a single day. */
+function chapterRange(from: number, to: number) {
+  const start = new Date(from);
+  const end = new Date(to);
+  const sameDay = start.toDateString() === end.toDateString();
+  const day = (date: Date) =>
+    date.toLocaleDateString([], { day: "numeric", month: "short" });
+  return sameDay ? day(end) : `${day(start)} – ${day(end)}`;
+}
+
 export default function Memories() {
   const memories = useQuery(api.felicia.memories);
+  const chapters = useQuery(api.felicia.chapters);
   const addMemory = useMutation(api.felicia.addMemory);
   const updateMemory = useMutation(api.felicia.updateMemory);
   const deleteMemory = useMutation(api.felicia.deleteMemory);
@@ -375,6 +386,53 @@ export default function Memories() {
       {/* ------------------------------------------------------------- body */}
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6">
         <div className="mx-auto w-full max-w-5xl">
+          {chapters && chapters.length > 0 && (
+            <section className="mb-6 rounded-2xl border border-border/60 bg-card p-5">
+              <div className="flex flex-wrap items-end justify-between gap-2">
+                <div>
+                  <h2 className="font-display text-lg font-semibold tracking-tight">
+                    Long-term memory
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    Every stretch of your conversation, written up as it happened.
+                    She reads these back when something connects.
+                  </p>
+                </div>
+                <span className="rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-[10px] tracking-widest text-primary uppercase">
+                  {chapters.length} {chapters.length === 1 ? "chapter" : "chapters"}
+                </span>
+              </div>
+
+              <ul className="mt-4 space-y-4">
+                {chapters
+                  .slice(0, 12)
+                  .map(
+                    (chapter: {
+                      _id: string;
+                      title: string;
+                      summary: string;
+                      fromCreatedAt: number;
+                      toCreatedAt: number;
+                      messageCount: number;
+                    }) => (
+                      <li
+                        key={chapter._id}
+                        className="border-l border-border/60 pl-3"
+                      >
+                        <p className="text-[11px] tracking-widest text-primary uppercase">
+                          {chapterRange(chapter.fromCreatedAt, chapter.toCreatedAt)} ·{" "}
+                          {chapter.messageCount} messages
+                        </p>
+                        <p className="mt-1 text-sm font-medium">{chapter.title}</p>
+                        <p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">
+                          {chapter.summary}
+                        </p>
+                      </li>
+                    ),
+                  )}
+              </ul>
+            </section>
+          )}
           {filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 px-6 py-20 text-center">
               <BrainCircuit className="size-6 text-muted-foreground" />

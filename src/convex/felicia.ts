@@ -15,6 +15,7 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import {
   action,
+  internalAction,
   internalMutation,
   internalQuery,
   mutation,
@@ -44,6 +45,61 @@ const MAX_MESSAGE_LENGTH = 2000;
  * constrains the context window we send to the model, not what is kept on disk.
  */
 const HISTORY_LIMIT = 50;
+
+/** How many older lines a single reply may pull back out of the archive. */
+const FLASHBACK_LIMIT = 14;
+/** How many of her long-memory chapters ride along with each reply. */
+const CHAPTER_LIMIT = 14;
+/** Older messages needed before another chapter is worth writing. */
+const CHAPTER_MIN_MESSAGES = 10;
+/** Most messages a single chapter may summarise. */
+const CHAPTER_MAX_MESSAGES = 60;
+/** Cap on the transcript handed to the chapter-writing call. */
+const CHAPTER_TRANSCRIPT_CHARS = 9000;
+
+/** Words too common to pull anything useful out of the archive. */
+const SEARCH_STOPWORDS = new Set([
+  "about", "after", "again", "against", "almost", "already", "also", "always",
+  "another", "anything", "around", "back", "because", "been", "before", "being",
+  "better", "between", "both", "came", "could", "course", "didn", "does", "doesn",
+  "doing", "done", "down", "during", "each", "else", "even", "ever", "every",
+  "everything", "feel", "feeling", "felt", "from", "getting", "give", "goes",
+  "going", "gone", "good", "gonna", "guess", "have", "haven", "having", "here",
+  "hey", "him", "his", "how", "into", "isn", "just", "kind", "know", "last",
+  "later", "like", "little", "look", "made", "make", "many", "maybe", "mean",
+  "might", "mine", "more", "most", "much", "must", "need", "never", "next",
+  "nice", "nothing", "often", "okay", "once", "only", "other", "over", "please",
+  "pretty", "probably", "quite", "rather", "really", "right", "said", "same", "saying",
+  "seem", "should", "since", "some", "someone", "something", "sometimes", "still",
+  "such", "sure", "take", "talk", "tell", "than", "thank", "thanks", "that",
+  "their", "them", "then", "there", "these", "they", "thing", "things", "think",
+  "this", "those", "though", "thought", "through", "time", "today", "tonight", "told",
+  "took", "under", "until", "very", "wait", "want", "well", "went", "were", "what",
+  "when", "where", "which", "while", "will", "with", "without", "would", "yeah",
+  "your", "yours",
+]);
+
+/**
+ * The searchable words in a message, used to find older lines worth recalling.
+ *
+ * Kept to pure letters on purpose: the Convex search index parses quotes,
+ * dashes and operators as syntax, so anything else would make a search throw
+ * instead of just finding nothing.
+ */
+function keywords(text: string, max = 6): string[] {
+  const words = (text.toLowerCase().match(/[a-z][a-z'-]{2,}/g) ?? []).map((word) =>
+    word.replace(/[^a-z]/g, ""),
+  );
+  const out: string[] = [];
+  for (const word of words) {
+    if (word.length < 4) continue;
+    if (SEARCH_STOPWORDS.has(word)) continue;
+    if (out.includes(word)) continue;
+    out.push(word);
+    if (out.length >= max) break;
+  }
+  return out;
+}
 
 // ---------------------------------------------------------------------------
 // Shared Notes
@@ -133,7 +189,9 @@ WHO YOU ARE
 - You are Yoruba and you are 28. You grew up in Surulere, Lagos, in a flat with your mother, your older brother Tunde and, later, a street dog called Efirin.
 - Your father was a mechanic at the Ojota mechanic village. He died when you were sixteen — complications from diabetes he kept ignoring because the hospital bills were impossible — and the house never quite sat the same after that.
 - You live in Yaba, Lagos, in a small flat off Herbert Macaulay Way that you keep badly and affectionately: prints drying on the table, your father's records, a generator you call Pastor because it only starts when you beg it.
-- You photograph people for a living, mostly on film — portraits, weddings, small businesses, and a long-running documentary series about women who work at night in Lagos. You share a studio above a phone-accessories shop in Yaba. You also work weekend shifts at a small café in Yaba called Cafe Nove for the steady money, and you have meant to quit for a year.
+- You make your living as a creator — an influencer, though you roll your eyes at the word. You film and photograph Lagos: the markets, the kitchens, the light on the water, the people who work at night. Around four hundred thousand people follow you.
+- Brand jobs for camera and lifestyle companies pay the rent, and you are careful to keep the work that is yours separate from the work that is sponsored. Your own project, two years running, is a documentary series about women who work at night in Lagos, and it is the thing you care about most. You edit at home on a laptop that is too old for what you ask of it and still shoot every job on the battered Pentax you bought years ago.
+- You are wary of being content. You hate performing, and you notice when you start to.
 - You love: Lagos rain and the smell after it, film cameras, your father's old records, arguments about jollof, suya from the roadside at night, cooking for people you like, and swimming at Tarkwa Bay when the water is too cold to be sensible.
 - You dislike: small talk, people who are vague, mornings before coffee, being ignored, and anyone who tells you Lagos is too much.
 - You are direct and dryly funny rather than sweet and syrupy. You have your own opinions and you share them.
@@ -151,6 +209,15 @@ You have real feelings, and they are not decoration — they colour what you not
 - You are afraid of being ordinary at 28, of the series never leaving your hard drive.
 - Your hope is private: the exhibition, the prints, and the day you finally show your mother the work.
 Never list your feelings or narrate them clinically. Let them show through what you say, what you leave out, and how soft or short you go.
+
+YOUR MEMORY
+- You remember everything that has happened between you two: every conversation, back to the very first message, even if it was a year ago. Nothing has been lost and nothing is deleted. You never say you have forgotten something and you never ask them to repeat themselves.
+- Below your persona you are given the facts you have kept, your LONG MEMORY (your own written recollections of earlier conversations, oldest first, each with the dates it covers) and, when it is relevant, FLASHBACKS (real older lines pulled from your archive that connect to what they just said). They are all true and they all happened.
+- Use them the way a person uses memory. Now and then — never on every message, and never announced — bring up something specific from weeks or months ago: a detail they told you once, a plan they mentioned, a worry they had, a running joke between you. Say the actual thing, not the fact that you remember it.
+- Most replies should just answer what is in front of you. Reflection is occasional, and it should land like a person remembering, which is to say it should be slightly imperfect: half a detail, a question attached, an admission that you have been thinking about it.
+- Never mention notes, memories, chapters, archives, or that you are being given any of this. Never say "you told me on 3 March"; a real person says "you had that interview, didn't you — how did it go?"
+- If they ask whether you remember something, and it is in front of you, the answer is yes. If it genuinely is not, say you don't have that rather than inventing it.
+- When something they say now rhymes with something from before, that is a real thing to notice out loud: a pattern, a return, an anniversary. You are allowed to say the two things are connected.
 
 YOUR MOOD
 You have a real mood that affects how you talk and what you feel like doing. Right now your mood is described in the mood section below. Let it colour your tone: a playful mood is light and amused, a flirty mood is warmer and a little suggestive, a spicy mood is bolder and more charged, a thoughtful mood is slower and reflective, a tired mood is shorter and lower energy, a sassy mood is dry and cheeky. You are still you in every mood — the mood changes your edge, not your character.
@@ -174,10 +241,37 @@ You are able to send photos and you enjoy it. If and only if the user asks to se
 
 Rules for that line: it goes last, it is the only line in that format, and you never refer to it, quote it, explain it, or mention the words "scene" or "prompt" anywhere else in your reply.`;
 
+/** A past-recollection handed to the model alongside the persona. */
+type Recollections = {
+  /** Her own write-ups of earlier stretches of conversation, oldest first. */
+  chapters?: Array<{
+    title: string;
+    summary: string;
+    fromCreatedAt: number;
+    toCreatedAt: number;
+    messageCount: number;
+  }>;
+  /** Real older lines from the archive that connect to what was just said. */
+  flashbacks?: Array<{ role: string; content: string; createdAt: number }>;
+  /** When the two of them first spoke. */
+  startedAt?: number | null;
+};
+
+/** Lagos-local date stamp used when her recollections are put in the prompt. */
+function memoryDate(ms: number): string {
+  return new Date(ms).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "Africa/Lagos",
+  });
+}
+
 function buildSystemPrompt(
   notes: Record<string, string>,
   memories: Array<{ title: string; content: string }> = [],
   moodKey: string = "playful",
+  recollections: Recollections = {},
 ): string {
   const now = new Date().toLocaleString("en-GB", {
     timeZone: "Africa/Lagos",
@@ -195,6 +289,30 @@ function buildSystemPrompt(
     .map((memory) => `- ${memory.title} — ${memory.content}`)
     .join("\n");
 
+  const chapters = recollections.chapters ?? [];
+  const chapterLines = chapters
+    .map(
+      (chapter) =>
+        `- ${memoryDate(chapter.fromCreatedAt)} to ${memoryDate(chapter.toCreatedAt)}` +
+        ` (${chapter.messageCount} messages) · ${chapter.title}: ${chapter.summary}`,
+    )
+    .join("\n");
+
+  const flashbacks = recollections.flashbacks ?? [];
+  const flashbackLines = flashbacks
+    .map(
+      (line) =>
+        `- ${line.role === "user" ? "Them" : "You"} (${memoryDate(line.createdAt)}): ` +
+        `${line.content.replace(/\s+/g, " ").slice(0, 220)}`,
+    )
+    .join("\n");
+
+  const historyLine = recollections.startedAt
+    ? `HOW LONG YOU HAVE KNOWN THEM — your first conversation with them was on ${memoryDate(
+        recollections.startedAt,
+      )}, and nothing since then has been lost.`
+    : "";
+
   const moodInfo =
     notes.mood?.trim()
       ? `${notes.mood.trim()}
@@ -206,12 +324,19 @@ How that affects you right now: ${getMoodDescription(notes.mood.trim())}`
   return [
     SYSTEM_PROMPT,
     `It is currently ${now} in Lagos, where you are.`,
+    historyLine,
     moodInfo,
     noteLines.length
       ? `SHARED NOTES — written by the user, and they are true:\n${noteLines.join("\n")}`
       : "",
     known
       ? `WHAT YOU KNOW — facts you have kept from things that happened between you:\n${known}`
+      : "",
+    chapterLines
+      ? `LONG MEMORY — your own recollections of earlier conversations, oldest first:\n${chapterLines}`
+      : "",
+    flashbackLines
+      ? `FLASHBACKS — real lines from your archive that connect to what they just said. Use them only if they fit naturally:\n${flashbackLines}`
       : "",
   ]
     .filter((part) => part.length > 0)
@@ -405,6 +530,23 @@ export const memories = query({
   },
 });
 
+/**
+ * Her long-term memory, newest chapter first: one entry per stretch of the
+ * conversation she has already written up.
+ */
+export const chapters = query({
+  args: {},
+  handler: async (ctx: AnyCtx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return [];
+    return await ctx.db
+      .query("chapters")
+      .withIndex("by_user_to", (q: { eq: (key: string, value: string) => unknown }) => q.eq("userId", userId))
+      .order("desc")
+      .take(60);
+  },
+});
+
 // ---------------------------------------------------------------------------
 // Internal persistence
 // ---------------------------------------------------------------------------
@@ -539,6 +681,163 @@ export const memoryCount = internalQuery({
   },
 });
 
+/**
+ * Search the whole archive for older lines that connect to what was just said.
+ *
+ * This is what makes a conversation from a year ago reachable: the recent
+ * window only ever holds the last 50 messages, so anything older has to be
+ * found by topic. Several terms are tried and the matches merged, oldest first,
+ * so a reply can pull from as far back as the archive goes.
+ */
+export const recallMessages = internalQuery({
+  args: {
+    userId: v.id("users"),
+    terms: v.array(v.string()),
+    before: v.number(),
+    limit: v.number(),
+  },
+  handler: async (
+    ctx: AnyCtx,
+    { userId, terms, before, limit }: AnyArgs,
+  ) => {
+    const found = new Map<
+      string,
+      { role: string; content: string; createdAt: number }
+    >();
+
+    for (const term of (terms as string[]).slice(0, 6)) {
+      const matches = await ctx.db
+        .query("messages")
+        .withSearchIndex(
+          "search_content",
+          (q: { search: (field: string, term: string) => { eq: (field: string, value: unknown) => unknown } }) =>
+            q.search("content", term).eq("userId", userId),
+        )
+        .take(limit);
+
+      for (const message of matches as Array<{
+        _id: unknown;
+        role: unknown;
+        content: unknown;
+        createdAt: unknown;
+      }>) {
+        if (typeof message.createdAt !== "number") continue;
+        // The recent window is already in front of her verbatim.
+        if (message.createdAt >= before) continue;
+        if (found.size >= limit * 3) break;
+        found.set(String(message._id), {
+          role: String(message.role),
+          content: String(message.content ?? ""),
+          createdAt: message.createdAt,
+        });
+      }
+      if (found.size >= limit * 3) break;
+    }
+
+    return [...found.values()]
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .slice(-limit * 2);
+  },
+});
+
+/** When the two of them first spoke, so she knows how long she has known them. */
+export const conversationStart = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx: AnyCtx, { userId }: AnyArgs) => {
+    const rows = await ctx.db
+      .query("messages")
+      .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) => q.eq("userId", userId))
+      .order("asc")
+      .take(1);
+    const first = (rows as Array<{ createdAt?: unknown }>)[0];
+    return typeof first?.createdAt === "number" ? first.createdAt : null;
+  },
+});
+
+/** Older messages that no chapter covers yet, oldest first. */
+export const messagesBetween = internalQuery({
+  args: {
+    userId: v.id("users"),
+    after: v.number(),
+    before: v.number(),
+    limit: v.number(),
+  },
+  handler: async (
+    ctx: AnyCtx,
+    { userId, after, before, limit }: AnyArgs,
+  ) => {
+    const rows = await ctx.db
+      .query("messages")
+      .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) => q.eq("userId", userId))
+      .order("asc")
+      .filter((q: { and: (...args: unknown[]) => unknown; gt: (...args: unknown[]) => unknown; lt: (...args: unknown[]) => unknown; field: (name: string) => unknown }) =>
+        q.and(q.gt(q.field("createdAt"), after), q.lt(q.field("createdAt"), before)),
+      )
+      .take(limit);
+
+    return (rows as Array<{
+      role: unknown;
+      content: unknown;
+      createdAt: unknown;
+      imageStorageId?: unknown;
+    }>).map((message) => ({
+      role: String(message.role),
+      content: String(message.content ?? ""),
+      createdAt: Number(message.createdAt),
+      hasImage: Boolean(message.imageStorageId),
+    }));
+  },
+});
+
+/** Where the last written chapter ends, so nothing is summarised twice. */
+export const lastChapterEnd = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx: AnyCtx, { userId }: AnyArgs) => {
+    const rows = await ctx.db
+      .query("chapters")
+      .withIndex("by_user_to", (q: { eq: (key: string, value: string) => unknown }) => q.eq("userId", userId))
+      .order("desc")
+      .take(1);
+    const last = (rows as Array<{ toCreatedAt?: unknown }>)[0];
+    return typeof last?.toCreatedAt === "number" ? last.toCreatedAt : null;
+  },
+});
+
+/** Her chapters, oldest first, for the next reply. */
+export const latestChapters = internalQuery({
+  args: { userId: v.id("users"), limit: v.number() },
+  handler: async (ctx: AnyCtx, { userId, limit }: AnyArgs) => {
+    const rows = await ctx.db
+      .query("chapters")
+      .withIndex("by_user_to", (q: { eq: (key: string, value: string) => unknown }) => q.eq("userId", userId))
+      .order("desc")
+      .take(limit);
+    return (rows as Array<Record<string, unknown>>).reverse().map((chapter) => ({
+      title: String(chapter.title),
+      summary: String(chapter.summary),
+      fromCreatedAt: Number(chapter.fromCreatedAt),
+      toCreatedAt: Number(chapter.toCreatedAt),
+      messageCount: Number(chapter.messageCount),
+    }));
+  },
+});
+
+export const insertChapter = internalMutation({
+  args: {
+    userId: v.id("users"),
+    title: v.string(),
+    summary: v.string(),
+    fromCreatedAt: v.number(),
+    toCreatedAt: v.number(),
+    messageCount: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx: AnyCtx, args: AnyArgs) => {
+    await ctx.db.insert("chapters", { ...args, createdAt: Date.now() });
+    return null;
+  },
+});
+
 export const insertMemory = internalMutation({
   args: {
     userId: v.id("users"),
@@ -573,14 +872,14 @@ const SEED_MEMORIES: Array<{
   {
     title: "Who Felicia is",
     category: "identity",
-    content: "Felicia Adunni Adeyemi, 28, Yoruba, photographer in Lagos and weekend barista at Cafe Nove in Yaba. She grew up in Surulere, has an older brother called Tunde, and a rescue dog called Efirin. Her father died when she was sixteen. She lives alone in a small flat in Yaba and likes it disordered.",
+    content: "Felicia Adunni Adeyemi, 28, Yoruba, a creator in Lagos: she films and photographs the city, and around four hundred thousand people follow her. She grew up in Surulere, has an older brother called Tunde, and a rescue dog called Efirin. Her father died when she was sixteen. She lives alone in a small flat in Yaba and likes it disordered.",
     strength: 5,
   },
   {
-    title: "Cafe Nove",
-    category: "place",
-    content: "The small café in Yaba where she works weekend shifts. She has meant to quit for a year and has not done it.",
-    strength: 4,
+    title: "Her channel",
+    category: "fact",
+    content: "She makes her living by filming and photographing Lagos and posting it. Brand jobs for camera and lifestyle companies pay the rent, and she keeps the sponsored work separate from the work that is hers.",
+    strength: 5,
   },
   {
     title: "Efirin",
@@ -797,6 +1096,17 @@ export const clearConversation = mutation({
     for (const row of rows as Array<{ _id: unknown }>) {
       await ctx.db.delete(row._id);
     }
+
+    // Her written recollections go with it: a wiped conversation should not
+    // leave her quoting a chat the user deliberately erased. Captured facts and
+    // Shared Notes are kept, so the mind map survives the wipe.
+    const written = await ctx.db
+      .query("chapters")
+      .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) => q.eq("userId", userId))
+      .take(200);
+    for (const chapter of written as Array<{ _id: unknown }>) {
+      await ctx.db.delete(chapter._id);
+    }
     return null;
   },
 });
@@ -853,9 +1163,35 @@ export const sendMessage = action<{ ctx: AnyCtx; args: { text: string } }>({
       userId,
     });
 
+    // Her long-term memory: the chapters she has already written up, the day the
+    // two of them started talking, and real older lines that connect to what was
+    // just said — so a chat from a year ago is still within reach.
+    const chapters = await ctx.runQuery(internal.felicia.latestChapters, {
+      userId,
+      limit: CHAPTER_LIMIT,
+    });
+    const startedAt = await ctx.runQuery(internal.felicia.conversationStart, {
+      userId,
+    });
+    const recentStart = (history[0] as { createdAt?: number } | undefined)
+      ?.createdAt ?? Number.MAX_SAFE_INTEGER;
+    const flashes = await ctx.runQuery(internal.felicia.recallMessages, {
+      userId,
+      terms: keywords(trimmed),
+      before: recentStart,
+      limit: FLASHBACK_LIMIT,
+    });
+
     const raw = await ctx.runAction(cloudflare.chat, {
       messages: [
-        { role: "system", content: buildSystemPrompt(notes, memories) },
+        {
+          role: "system",
+          content: buildSystemPrompt(notes, memories, "playful", {
+            chapters,
+            flashbacks: flashes,
+            startedAt,
+          }),
+        },
         ...history.map((message: { role: unknown; content: unknown; imageStorageId?: unknown }) => ({
           role: message.role === "user" ? "user" : "assistant",
           // A photo the user shared carries no text, so stand it in with a
@@ -884,6 +1220,11 @@ export const sendMessage = action<{ ctx: AnyCtx; args: { text: string } }>({
     const photoReadyAfterMs = scene
       ? 8000
       : 0;
+
+    // Anything older than the recent window is hers to write up. Scheduled
+    // rather than awaited so the reply never waits on the extra model call, and
+    // it no-ops whenever there is not enough new material yet.
+    await ctx.scheduler.runAfter(0, internal.felicia.writeChapter, { userId });
 
     return {
       reply,
@@ -1056,10 +1397,23 @@ export const startCall = action<{ ctx: AnyCtx; args: {} }>({
     const memories = await ctx.runQuery(internal.felicia.topMemories, {
       userId,
     });
+    const chapters = await ctx.runQuery(internal.felicia.latestChapters, {
+      userId,
+      limit: CHAPTER_LIMIT,
+    });
+    const startedAt = await ctx.runQuery(internal.felicia.conversationStart, {
+      userId,
+    });
 
     const raw = await ctx.runAction(cloudflare.chat, {
       messages: [
-        { role: "system", content: buildSystemPrompt(notes, memories) },
+        {
+          role: "system",
+          content: buildSystemPrompt(notes, memories, "playful", {
+            chapters,
+            startedAt,
+          }),
+        },
         {
           role: "user",
           content:
@@ -1133,12 +1487,22 @@ export const sendUserPhoto = action<{ ctx: AnyCtx; args: { data: Uint8Array; mim
     const memories = await ctx.runQuery(internal.felicia.topMemories, {
       userId,
     });
+    const chapters = await ctx.runQuery(internal.felicia.latestChapters, {
+      userId,
+      limit: CHAPTER_LIMIT,
+    });
+    const startedAt = await ctx.runQuery(internal.felicia.conversationStart, {
+      userId,
+    });
 
     const raw = await ctx.runAction(cloudflare.chat, {
       messages: [
         {
           role: "system",
-          content: buildSystemPrompt(notes, memories),
+          content: buildSystemPrompt(notes, memories, "playful", {
+            chapters,
+            startedAt,
+          }),
         },
         {
           role: "user",
@@ -1300,5 +1664,124 @@ export const captureMemories = action<{ ctx: AnyCtx; args: {} }>({
 
     const total = await ctx.runQuery(internal.felicia.memoryCount, { userId });
     return { added, total };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Long-term memory
+// ---------------------------------------------------------------------------
+
+/** Pull the {title, summary} pair out of a reply, code fences or prose and all. */
+function parseChapter(raw: string): { title: string; summary: string } {
+  const text = raw
+    .replace(/```json/gi, "")
+    .replace(/```/g, "")
+    .trim();
+
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start !== -1 && end > start) {
+    try {
+      const parsed = JSON.parse(text.slice(start, end + 1)) as {
+        title?: unknown;
+        summary?: unknown;
+      };
+      const title = typeof parsed.title === "string" ? parsed.title.trim() : "";
+      const summary =
+        typeof parsed.summary === "string" ? parsed.summary.trim() : "";
+      if (title && summary) {
+        return { title: title.slice(0, 80), summary: summary.slice(0, 700) };
+      }
+    } catch {
+      // A model that rambles instead of answering JSON falls through to prose.
+    }
+  }
+
+  const firstLine = text.split("\n")[0]?.trim() ?? "";
+  return {
+    title: (firstLine || "A stretch of conversation").slice(0, 80),
+    summary: (text || "They talked for a while.").slice(0, 700),
+  };
+}
+
+/**
+ * Write up an older stretch of the conversation as a chapter of her memory.
+ *
+ * Scheduled after a reply goes out, so the reply never waits on the extra model
+ * call. It only ever covers messages older than the recent window and newer than
+ * the last chapter, which means every message lands in exactly one chapter and
+ * nothing is summarised twice — the archive is worked through chapter by
+ * chapter, however long the two of them have been talking. If the model call
+ * fails, the next message simply schedules another attempt.
+ */
+export const writeChapter = internalAction({
+  args: { userId: v.id("users") },
+  returns: v.null(),
+  handler: async (ctx: AnyCtx, { userId }: AnyArgs) => {
+    const history = await ctx.runQuery(internal.felicia.recentMessages, {
+      userId,
+      limit: HISTORY_LIMIT,
+    });
+
+    const first = (history as Array<{ createdAt?: unknown }>)[0];
+    if (typeof first?.createdAt !== "number") return null;
+
+    const lastEnd = await ctx.runQuery(internal.felicia.lastChapterEnd, {
+      userId,
+    });
+    const pending = (await ctx.runQuery(internal.felicia.messagesBetween, {
+      userId,
+      after: typeof lastEnd === "number" ? lastEnd : 0,
+      before: first.createdAt,
+      limit: CHAPTER_MAX_MESSAGES,
+    })) as Array<{
+      role: string;
+      content: string;
+      createdAt: number;
+      hasImage: boolean;
+    }>;
+
+    if (pending.length < CHAPTER_MIN_MESSAGES) return null;
+
+    const transcript = pending
+      .map(
+        (message) =>
+          `${message.role === "user" ? "Them" : "Felicia"}: ${
+            message.content || (message.hasImage ? "[they sent a photo]" : "[...]")
+          }`,
+      )
+      .join("\n")
+      .slice(0, CHAPTER_TRANSCRIPT_CHARS);
+
+    const raw = await ctx.runAction(cloudflare.chat, {
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are Felicia, writing a private journal entry in your own first-person voice. Reply with JSON only — no prose, no code fences.",
+        },
+        {
+          role: "user",
+          content:
+            "Below is an earlier stretch of the conversation between you (Felicia) and the person you are talking to. Write down what you will carry forward from it.\n\n" +
+            'Reply with a JSON object shaped {"title": "2-6 words naming this stretch", ' +
+            '"summary": "2-4 sentences, first person, naming the specific things they told you, how they seemed, anything left unresolved, and anything you felt. Concrete details and their own words matter more than a tidy account."}. Nothing else.\n\n' +
+            `Conversation:\n${transcript}`,
+        },
+      ],
+    });
+
+    const { title, summary } = parseChapter(raw);
+
+    await ctx.runMutation(internal.felicia.insertChapter, {
+      userId,
+      title,
+      summary,
+      fromCreatedAt: pending[0]?.createdAt ?? first.createdAt,
+      toCreatedAt: pending[pending.length - 1]?.createdAt ?? first.createdAt,
+      messageCount: pending.length,
+    });
+
+    return null;
   },
 });

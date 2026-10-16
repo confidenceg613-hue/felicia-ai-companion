@@ -45,7 +45,14 @@ const schema = defineSchema(
       // these so the conversation renders the image alone, the way a shared
       // picture appears in a real chat.
       imageStorageId: v.optional(v.id("_storage")),
-    }).index("by_user", ["userId"]),
+    })
+      .index("by_user", ["userId"])
+      // Felicia's whole archive is searchable so a message from a year ago can
+      // be pulled back into the prompt when the topic comes up again.
+      .searchIndex("search_content", {
+        searchField: "content",
+        filterFields: ["userId"],
+      }),
 
     // Photos Felicia has generated for a user, stored in Convex file storage.
     photos: defineTable({
@@ -79,6 +86,21 @@ const schema = defineSchema(
       sections: v.record(v.string(), v.string()),
       updatedAt: v.number(),
     }).index("by_user", ["userId"]),
+
+    // Felicia's long-term memory of earlier conversations: one row per stretch
+    // of chat she has written up, so something said a year ago is still
+    // something she can bring up in detail. Written from the real transcript.
+    chapters: defineTable({
+      userId: v.id("users"),
+      title: v.string(),
+      summary: v.string(),
+      fromCreatedAt: v.number(),
+      toCreatedAt: v.number(),
+      messageCount: v.number(),
+      createdAt: v.number(),
+    })
+      .index("by_user", ["userId"])
+      .index("by_user_to", ["userId", "toCreatedAt"]),
 
     // Felicia's persisted appearance choice: outfit, background and optional
     // custom scene. This is what the photo prompt is built from once the user
