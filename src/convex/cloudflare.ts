@@ -87,8 +87,8 @@ export const cloudflare = {
         throw new Error(
           "CLOUDFLARE_ACCOUNT_ID is not configured, so voice rendering is unavailable.",
         );
-      }      throw new Error("Not wired yet.");
+      }
+      throw new Error("Not wired yet.");
     },
   }),
 };
-

@@ -1,0 +1,15 @@
+src/pages/Dashboard.tsx:169:        connection.configured === false && "GROQ_API_KEY (chat)",
+src/pages/Dashboard.tsx:170:        connection.voiceConfigured === false &&
+src/pages/Dashboard.tsx:172:        connection.imageConfigured === false && "AI_HORDE_API_KEY (photos)",
+src/convex/felicia.ts:292:    configured: isGroqConfigured(),
+src/convex/felicia.ts:293:    chatBackend: "groq",
+src/convex/felicia.ts:294:    chatConfigured: isGroqConfigured(),
+src/convex/felicia.ts:295:    voiceConfigured: isGroqConfigured() || isCloudflareConfigured(),
+src/convex/felicia.ts:301:    imageConfigured: true,
+src/convex/felicia.ts:302:    imageFallbackConfigured: isCloudflareConfigured() || isAiHordeConfigured(),
+src/convex/cloudflare.ts:15:      if (!apiKey) throw new Error("GROQ_API_KEY is not configured."),
+src/convex/cloudflare.ts:62:          "CLOUDFLARE_API_TOKEN is not configured, so photo generation is unavailable.",
+src/convex/cloudflare.ts:67:          "CLOUDFLARE_ACCOUNT_ID is not configured, so photo generation is unavailable.",
+src/convex/cloudflare.ts:83:          "CLOUDFLARE_API_TOKEN is not configured, so voice rendering is unavailable.",
+src/convex/cloudflare.ts:88:          "CLOUDFLARE_ACCOUNT_ID is not configured, so voice rendering is unavailable.",
+src/convex/config.ts:43: * backend that was never configured.

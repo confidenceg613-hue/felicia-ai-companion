@@ -10,6 +10,7 @@ import {
   isCloudflareConfigured,
   isGroqConfigured,
 } from "./config";
+import { cloudflare } from "./cloudflare";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import {
@@ -813,7 +814,7 @@ export const sendMessage = action({
       userId,
     });
 
-    const raw = await ctx.runAction(internal.cloudflare.chat, {
+    const raw = await ctx.runAction(cloudflare.chat, {
       messages: [
         { role: "system", content: buildSystemPrompt(notes, memories) },
         ...history.map((message) => ({
@@ -902,7 +903,7 @@ export const generatePhoto = action({
 
     for (const prompt of candidates) {
       try {
-        const attempt = await ctx.runAction(internal.cloudflare.generateImage, {
+        const attempt = await ctx.runAction(cloudflare.generateImage, {
           prompt,
         });
         success = { prompt, storageId: attempt.storageId };
@@ -912,12 +913,10 @@ export const generatePhoto = action({
           throw error;
         }
       }
-    }
-
-    if (!success) {
+    }    if (!success) {
       throw new Error(
         "Couldn't generate that photo right now — neither Nano Banana on " +
-          "Cloudflare nor the AI Horde could deliver it. Try again in a moment.",
+        "Cloudflare could deliver it. Try again in a moment.",
       );
     }
 
@@ -984,7 +983,7 @@ export const speakMessage = action({
       return { url: await ctx.storage.getUrl(info.audioStorageId) };
     }
 
-    const audio = await ctx.runAction(internal.cloudflare.speak, {
+    const audio = await ctx.runAction(cloudflare.speak, {
       text: info.content,
     });
     await ctx.runMutation(internal.felicia.attachAudio, {
@@ -1019,7 +1018,7 @@ export const startCall = action({
       userId,
     });
 
-    const raw = await ctx.runAction(internal.cloudflare.chat, {
+    const raw = await ctx.runAction(cloudflare.chat, {
       messages: [
         { role: "system", content: buildSystemPrompt(notes, memories) },
         {
@@ -1096,7 +1095,7 @@ export const sendUserPhoto = action({
       userId,
     });
 
-    const raw = await ctx.runAction(internal.cloudflare.chat, {
+    const raw = await ctx.runAction(cloudflare.chat, {
       messages: [
         {
           role: "system",
@@ -1221,7 +1220,7 @@ export const captureMemories = action({
       .filter((line) => !line.endsWith(": [...]"))
       .join("\n");
 
-    const raw = await ctx.runAction(internal.cloudflare.chat, {
+    const raw = await ctx.runAction(cloudflare.chat, {
       messages: [
         {
           role: "system",
