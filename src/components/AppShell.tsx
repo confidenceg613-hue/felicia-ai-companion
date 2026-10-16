@@ -2,8 +2,6 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "@/hooks/use-auth";
 import { useUser } from "@/hooks/useUser";
-import { useMutation } from "convex/react";
-import { api } from "@/convex/_generated/api";
 import { toast } from "sonner";
 import { FELICIA, FELICIA_AVATAR_URL, FELICIA_MOODS } from "@/lib/felicia";
 import { cn } from "@/lib/utils";
@@ -25,8 +23,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Chat,
-  MessageSquare,
   Images,
   Lightbulb,
   Brain,
@@ -38,11 +34,9 @@ import {
   Sparkles,
   Trash2,
   Loader2,
-} from "lucide-react";
-
-export default function AppShell() {
+} from "lucide-react";export default function AppShell() {
   const navigate = useNavigate();
-  const { billingAccount, logout } = useUser();
+  const { user, billingAccount, logout, clearConversation } = useUser();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [artOpen, setArtOpen] = useState(false);
@@ -52,6 +46,7 @@ export default function AppShell() {
   useEffect(() => {
     setMounted(true);
   }, []);
+  
 
   return (
     <>
@@ -92,17 +87,16 @@ export default function AppShell() {
               </svg>
             </button>
           </div>
-          <div className="flex flex-col gap-2 p-2">
-            <button
-              className="flex flex-col items-start gap-1 rounded-lg p-3 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              onClick={() => {
-                setSidebarOpen(false);
-                navigate("/dashboard");
-              }}
-            >
-              <Chat className="h-5 w-5" />
-              Chat
-            </button>
+          <div className="flex flex-col gap-2 p-2">              <button
+                className="flex flex-col items-start gap-1 rounded-lg p-3 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                onClick={() => {
+                  setSidebarOpen(false);
+                  navigate("/dashboard");
+                }}
+              >
+                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                Chat
+              </button>
             <button
               className="flex flex-col items-start gap-1 rounded-lg p-3 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               onClick={() => {
@@ -172,7 +166,7 @@ export default function AppShell() {
                   Change mood
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem
+                          <DropdownMenuItem
                   onClick={() => {
                     setSidebarOpen(false);
                     clearConversation();
@@ -241,7 +235,7 @@ export default function AppShell() {
                   className="flex flex-col items-start gap-1 rounded-lg p-3 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                   onClick={() => navigate("/dashboard")}
                 >
-                  <Chat className="h-5 w-5" />
+                  <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                   Chat
                 </button>
               </DropdownMenuTrigger>
@@ -319,13 +313,7 @@ export default function AppShell() {
               <Brain className="h-5 w-5" />
               Memories
             </button>
-            <button
-              className="flex flex-col items-start gap-1 rounded-lg p-3 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              onClick={() => {
-                setSettingsOpen(false);
-                setSettingsOpen(true);
-              }}
-            >
+            <button>
               <Settings className="h-5 w-5" />
               Settings
             </button>
@@ -368,8 +356,7 @@ export default function AppShell() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <ThemePicker />
-              <NavItems />
+              <NavAvatar />
             </div>
           </header>
           <main className="flex flex-1 flex-col">
@@ -395,193 +382,16 @@ export default function AppShell() {
           </footer>
         </div>
       </div>
-
-      {/* Appearance picker */}
-      <FeliciaAppearancePicker
-        open={artOpen}
-        onOpenChange={setArtOpen}
-        value={{
-          outfitKey: "ribbedTop",
-          backgroundKey: "goldenHourBalcony",
-          overrideScene: null,
-        }}
-        onChange={() => {
-          setArtOpen(false);
-          toast.success("Look saved — she'll wear that next time you ask for a photo.");
-        }}
-      />
-
-      {/* Mood picker is a separate placeholder; mood logic is not part of this PR */}
-      <Dialog open={moodOpen} onOpenChange={setMoodOpen}>
-        <DialogContent className="max-w-md border-border/60 bg-card">
-          <DialogHeader>
-            <DialogTitle className="font-display text-xl flex items-center gap-2">
-              <span className="flex size-7 items-center justify-center rounded-full bg-primary/10 text-primary">
-                <Sparkles className="size-4" />
-              </span>
-              Felicia's mood
-            </DialogTitle>
-            <DialogDescription>
-              Pick how she is feeling. It changes the tone of her replies.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="mt-3 space-y-3">
-            {FELICIA_MOODS.map((mood) => (
-              <button
-                key={mood.key}
-                type="button"
-                onClick={() => {
-                  setMoodOpen(false);
-                  toast.success(`Mood set to ${mood.label}.`);
-                }}
-                className="flex w-full items-center gap-3 rounded-xl border border-border/60 bg-background/40 px-4 py-3 text-left transition-colors hover:border-primary/50 hover:text-foreground"
-              >
-                <span className="size-8 shrink-0">{mood.emoji}</span>
-                <div>
-                  <p className="font-medium">{mood.label}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {mood.description}
-                  </p>
-                </div>
-              </button>
-            ))}
-          </div>
-
-          <div className="mt-4 flex justify-end gap-2 border-t border-border/50 pt-4">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setMoodOpen(false)}
-            >
-              Close
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }
 
-// Sub-components moved inline to preserve the surrounding context and avoid
-// unrelated edits to the rest of the file.
-
-function NavItems({ onNavigate }: { onNavigate?: () => void }) {
-  const navigate = useNavigate();
-  const { user } = useAuth();
+function NavAvatar() {
   const [mounted, setMounted] = useState(false);
-  const clearConversation = useMutation(api.felicia.clearConversation);
-  const billingAccount = null;
 
   useEffect(() => {
     setMounted(true);
   }, []);
-
-  function handleClearConversation() {
-    if (confirm("Are you sure you want to clear the conversation?")) {
-      clearConversation();
-    }
-  }
-
-  // Wait for the app to be mounted before rendering anything that depends on
-  // theme or user data
-  if (!mounted) {
-    return (
-      <div className="flex size-12 items-center justify-center rounded-xl bg-muted/50">
-        <Loader2 className="size-5 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex size-12 items-center justify-center rounded-xl bg-muted/50 text-muted-foreground">
-      {user?.image ? (
-        <img
-          src={user.image}
-          alt={user.email ?? undefined}
-          className="size-12 rounded-full object-cover ring-2 ring-background"
-        />
-      ) : (
-        <span className="text-lg font-semibold">
-          {user?.email?.[0]?.toUpperCase() ?? "?"}
-        </span>
-      )}
-    </div>
-  );
-}
-
-function ThemePicker({ compact = false }: { compact?: boolean }) {
-  const [mounted, setMounted] = useState(false);
-  const theme = "light";
-  const setTheme = () => {};
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  const colorSchemes = [
-    {
-      theme: "light",
-      icon: (
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <circle cx="12" cy="12" r="4" />
-          <path d="M12 2v2" />
-          <path d="M12 20v2" />
-          <path d="m4.93 4.93 1.41 1.41" />
-          <path d="m17.66 17.66 1.41 1.41" />
-          <path d="M2 12h2" />
-          <path d="M20 12h2" />
-          <path d="m6.34 17.66-1.41 1.41" />
-          <path d="m19.07 4.93-1.41 1.41" />
-        </svg>
-      ),
-    },
-    {
-      theme: "dark",
-      icon: (
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-        </svg>
-      ),
-    },
-    {
-      theme: "system",
-      icon: (
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-          <line x1="8" x2="16" y1="21" y2="21" />
-          <line x1="12" x2="12" y1="17" y2="21" />
-        </svg>
-      ),
-    },
-  ];
 
   if (!mounted) {
     return (
@@ -592,60 +402,8 @@ function ThemePicker({ compact = false }: { compact?: boolean }) {
   }
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            "size-9 flex items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground",
-            !compact && "hover:bg-muted/50",
-          )}
-          aria-label="Change theme"
-        >
-          {colorSchemes.find((s) => s.theme === resolvedTheme)?.icon ??
-            colorSchemes[2].icon}
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        {colorSchemes.map(({ theme, icon }) => (
-          <DropdownMenuItem
-            key={theme}
-            onSelect={() => setTheme(theme)}
-            className={cn(theme === resolvedTheme && "bg-accent")}
-          >
-            <span className="mr-2">{icon}</span>
-            {theme}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-function CompanionCard() {
-  // const { data: subscription } = SpkeSubscriptions();
-  // const { data: feature } = SpkeFeatures();
-  return (
-    <div className="flex items-center justify-center gap-2 border-t border-muted pb-4 pt-4 sm:pb-6 sm:pt-6">
-      <div>
-        <p className="text-sm font-semibold text-muted-foreground">
-          Powered by
-          <span className="hidden sm:inline"> Spke</span>
-        </p>
-        <p className="text-xs text-muted-foreground">
-          {FELICIA.fullName}, your companion for a day
-        </p>
-      </div>
-      <img
-        src={FELICIA_AVATAR_URL}
-        className={cn("size-12 rounded-full object-cover", "shadow-md")}
-        alt="Companion"
-      />
-      {/* {subscription?.status === "active" ? (
-        <SpkeButton plan="Pro" variant="primary" />
-      ) : (
-        <SpkeButton plan="Pro" variant="primary" />
-      )} */}
+    <div className="flex size-9 items-center justify-center rounded-lg bg-muted/50">
+      <span className="text-lg font-semibold">?</span>
     </div>
   );
 }
