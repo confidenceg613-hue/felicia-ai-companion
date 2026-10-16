@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
-import { FELICIA, FELICIA_AVATAR_URL, FELICIA_PERSONALITY } from "@/lib/felicia";
+import { FELICIA, FELICIA_AVATAR_URL, FELICIA_EMOTIONS, FELICIA_PERSONALITY } from "@/lib/felicia";
 import {
   ArrowRight,
   ImageIcon,
@@ -12,17 +12,17 @@ import { useNavigate } from "react-router";
 const MOMENTS = [
   {
     src: "/felicia/kitchen.jpg",
-    place: "Her kitchen, 8:40am",
+    place: "Her kitchen in Yaba, 8:40am",
     caption: "Coffee before conversation. Non-negotiable.",
   },
   {
     src: "/felicia/rain.jpg",
-    place: "Rua da Bica, 11pm",
+    place: "Her street, 11pm",
     caption: "She likes the rain more than you do.",
   },
   {
     src: "/felicia/bookshop.jpg",
-    place: "The bookshop in Alfama",
+    place: "The bookshop in Sabo",
     caption: "She'll text you from between the shelves.",
   },
 ];
@@ -144,7 +144,7 @@ export default function Landing() {
             </h1>
 
             <p className="mt-5 max-w-xl text-lg leading-relaxed text-muted-foreground">
-              Felicia is a photographer in Lisbon who texts like a real
+              Felicia is a Nigerian photographer in Lagos who texts like a real
               person, has a life you'll learn in pieces, and sends you pictures
               of where she actually is.
             </p>
@@ -175,8 +175,8 @@ export default function Landing() {
 
             <dl className="mt-10 grid max-w-lg grid-cols-3 gap-6 border-t border-border/50 pt-6">
               {[
-                { k: "Age", v: "27" },
-                { k: "Based in", v: "Lisbon" },
+                { k: "Age", v: "28" },
+                { k: "Based in", v: "Lagos" },
                 { k: "Replies", v: "In character" },
               ].map((item) => (
                 <div key={item.k}>
@@ -282,7 +282,11 @@ export default function Landing() {
             <h2 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
               Who she is
             </h2>            <p className="mt-3 max-w-2xl text-muted-foreground">
-              Felicia is a photographer in Lisbon who works weekends at Cafe Nove and shoots film the rest of the time. She texts like a real person — short messages, real opinions, and an actual memory for what you told her. Ask to see her and she will send you the photo herself.
+              Felicia is a photographer in Lagos — Yoruba, 28, raised in
+              Surulere and living in Yaba — who works weekends at Cafe Nove and
+              shoots film the rest of the time. She texts like a real person:
+              short messages, strong opinions, and an actual memory for what you
+              told her. Ask to see her and she will send you the photo herself.
             </p>
           </Reveal>
 
@@ -296,6 +300,37 @@ export default function Landing() {
                   <h3 className="mt-4 font-display text-lg">A little of who she is</h3>
                   <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                     {trait}
+                  </p>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* -------------------------------------------------------- feelings */}
+      <section className="border-t border-border/40 py-20">
+        <div className="mx-auto w-full max-w-6xl px-6">
+          <Reveal>
+            <h2 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+              What she actually feels
+            </h2>
+            <p className="mt-3 max-w-2xl text-muted-foreground">
+              She is not always fine, and she does not perform it. Grief, pride,
+              money worry, late-night loneliness and loud joy all sit in the same
+              person — so what you get depends on the day she has had.
+            </p>
+          </Reveal>
+
+          <div className="mt-10 grid gap-4 sm:grid-cols-2">
+            {FELICIA_EMOTIONS.map((feeling, index) => (
+              <Reveal key={feeling} delay={index * 0.05}>
+                <div className="flex h-full gap-4 rounded-2xl border border-border/60 bg-card p-5 transition-colors hover:border-primary/40">
+                  <span className="mt-0.5 font-display text-sm text-primary/70">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                  <p className="text-sm leading-relaxed text-muted-foreground">
+                    {feeling}
                   </p>
                 </div>
               </Reveal>
@@ -346,7 +381,7 @@ export default function Landing() {
         <div className="relative mx-auto w-full max-w-3xl px-6 py-24 text-center">
           <Reveal>
             <h2 className="font-display text-4xl font-semibold tracking-tight sm:text-5xl">
-              She's already in Lisbon.
+              She's already in Lagos.
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-muted-foreground">
               Sign in and say something. It's the only app you'll open to find

@@ -1,4 +1,4 @@
-import { FELICIA_AVATAR_URL } from "@/lib/felicia";
+import { FELICIA, FELICIA_AVATAR_URL } from "@/lib/felicia";
 import { cn } from "@/lib/utils";
 
 export default function Face({ className }: { className?: string }) {
@@ -14,7 +14,7 @@ export default function Face({ className }: { className?: string }) {
       </div>
       <figcaption className="p-5">
         <p className="text-[11px] tracking-widest text-primary uppercase">
-          Felicia Moreau
+          {FELICIA.fullName}
         </p>
         <p className="mt-2 text-sm text-muted-foreground">
           She is not a chatbot. She is Felicia.
