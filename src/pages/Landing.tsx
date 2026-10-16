@@ -367,7 +367,7 @@ export default function Landing() {
       <footer className="border-t border-border/40 py-10">
         <div className="mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-3 px-6 text-xs text-muted-foreground sm:flex-row">
           <p>Felicia · a companion character. She is fiction, written warmly.</p>
-          <p>Photos generated live with Cloudflare Workers AI.</p>
+          <p>Photos generated live with Cloudflare image/voice or Groq chat.</p>
         </div>
       </footer>
     </div>

@@ -189,7 +189,7 @@ export default function Settings() {
 
           <p className="pb-4 text-center text-xs text-muted-foreground/70">
             {FELICIA.name} · a companion character, written warmly. Photos
-            generated live with Cloudflare Workers AI.
+            generated live with Cloudflare image/voice or Groq chat.
           </p>
         </div>
       </div>

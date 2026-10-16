@@ -423,7 +423,7 @@ export default function Album() {
 
           {ready && allPhotos.length > 0 && (
             <p className="mt-6 text-center text-xs text-muted-foreground">
-              Generated with Cloudflare Workers AI · kept in your account only.
+              Generated with Cloudflare image/voice or Groq chat · kept in your account only.
             </p>
           )}
         </div>
