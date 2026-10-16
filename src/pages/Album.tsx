@@ -7,10 +7,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { api } from "@/convex/_generated/api";
+import { useSelfie } from "@/hooks/use-selfie";
 import { FELICIA } from "@/lib/felicia";
 import { DEVELOP_MS, preloadImage } from "@/lib/photo";
 import { sleep } from "@/lib/voice";
-import { useAction, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { motion } from "framer-motion";
 import { Camera, Images, Loader2, Sparkles } from "lucide-react";
 import { useState } from "react";
@@ -34,7 +35,8 @@ function timeLabel(ms: number) {
  */
 export default function Album() {
   const photos = useQuery(api.felicia.photos);
-  const generatePhoto = useAction(api.felicia.generatePhoto);
+  // Puter renders her photos in the browser; the server path is the fallback.
+  const selfie = useSelfie();
 
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [hiddenCount, setHiddenCount] = useState<number | null>(null);
@@ -59,7 +61,7 @@ export default function Album() {
     setHiddenCount(allPhotos.length);
     setDeveloping(true);
     try {
-      const result = await generatePhoto({ scene });
+      const result = await selfie(scene);
       const remaining = DEVELOP_MS - (Date.now() - startedAt);
       if (remaining > 0) await sleep(remaining);
       if (result.url) await preloadImage(result.url);

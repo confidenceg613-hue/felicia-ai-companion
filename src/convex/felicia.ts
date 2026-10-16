@@ -208,7 +208,12 @@ export const connectorStatus = query({
     chatBackend: "groq",
     chatConfigured: isGroqConfigured(),
     voiceConfigured: isGroqConfigured() || isCloudflareConfigured(),
-    imageConfigured: isAiHordeConfigured(),
+    // Photos render in the browser through Puter, which needs no key at all, so
+    // they work on every deployment — including one with no image key set. The
+    // AI Horde is only the server-side fallback, so a missing Horde key is no
+    // longer a reason to warn that photos are broken.
+    imageConfigured: true,
+    imageFallbackConfigured: isAiHordeConfigured(),
   }),
 });
 
@@ -808,6 +813,102 @@ export const generatePhoto = action({
       storageId: success.storageId,
       url: await ctx.storage.getUrl(success.storageId),
     };
+  },
+});
+
+/**
+ * The prompt for a selfie, built server-side for Puter.js to render.
+ *
+ * Puter renders in the browser, but the face must not live there: the
+ * appearance descriptor sits in the user's editable Appearance note, so asking
+ * for the prompt here is what keeps a Puter-rendered selfie looking like the
+ * same woman as one from the server-side generator.
+ *
+ * The framing differs from `buildImagePrompt` on purpose — that one insists on
+ * a head-to-toe full body for the Horde, which contradicts a selfie scene like
+ * "holding the camera at arm's length" and makes the model compromise between
+ * two incompatible instructions.
+ */
+function buildSelfiePrompt(scene: string, look: string): string {
+  return (
+    `Photorealistic photo of ${look}, ${scene}, warm natural light, candid ` +
+    "unposed, true-to-life deep brown skin and dark hair, high detail face, " +
+    "high resolution, natural portrait framing."
+  );
+}
+
+export const selfiePrompt = action({
+  args: { scene: v.optional(v.string()) },
+  returns: v.object({ prompt: v.string(), scene: v.string() }),
+  handler: async (
+    ctx,
+    { scene },
+  ): Promise<{ prompt: string; scene: string }> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Sign in to see Felicia's photos.");
+
+    const requested = (scene ?? "").trim() || DEFAULT_SCENE;
+    const notes = await ctx.runQuery(internal.felicia.notesFor, { userId });
+    const look = (notes.appearance ?? "").trim() || FELICIA_LOOK;
+
+    return { prompt: buildSelfiePrompt(requested, look), scene: requested };
+  },
+});
+
+/**
+ * Persist a selfie the browser generated with Puter.js.
+ *
+ * The bytes come straight from the client when Puter returned a `data:` URI;
+ * a hosted URL is downloaded here instead, because those images sit on whatever
+ * bucket the chosen provider used and a browser fetch would be at the mercy of
+ * its CORS headers. Either way the photo lands in Convex storage under the same
+ * `photos` row the server path writes, so the conversation, the album and the
+ * reveal timing need no idea which engine produced it.
+ */
+export const saveSelfie = action({
+  args: {
+    scene: v.string(),
+    prompt: v.string(),
+    image: v.union(
+      v.object({
+        kind: v.literal("bytes"),
+        bytes: v.bytes(),
+        mimeType: v.string(),
+      }),
+      v.object({ kind: v.literal("url"), url: v.string() }),
+    ),
+  },
+  returns: v.object({
+    storageId: v.id("_storage"),
+    url: v.union(v.string(), v.null()),
+  }),
+  handler: async (
+    ctx,
+    { scene, prompt, image },
+  ): Promise<{ storageId: Id<"_storage">; url: string | null }> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Sign in to see Felicia's photos.");
+
+    let blob: Blob;
+    if (image.kind === "bytes") {
+      blob = new Blob([image.bytes], { type: image.mimeType });
+    } else {
+      const response = await fetch(image.url);
+      if (!response.ok) {
+        throw new Error("Puter's image couldn't be downloaded.");
+      }
+      blob = await response.blob();
+    }
+
+    const storageId = await ctx.storage.store(blob);
+    await ctx.runMutation(internal.felicia.savePhoto, {
+      userId,
+      storageId,
+      prompt,
+      scene,
+    });
+
+    return { storageId, url: await ctx.storage.getUrl(storageId) };
   },
 });
 

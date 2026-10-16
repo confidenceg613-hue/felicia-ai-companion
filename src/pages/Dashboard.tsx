@@ -19,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useAuth } from "@/hooks/use-auth";
+import { useSelfie } from "@/hooks/use-selfie";
 import { FELICIA } from "@/lib/felicia";
 import { DEVELOP_MS, preloadImage } from "@/lib/photo";
 import { cn } from "@/lib/utils";
@@ -99,10 +100,12 @@ export default function Dashboard() {
   const connection = useQuery(api.felicia.connectorStatus);
   const clearConversation = useMutation(api.felicia.clearConversation);
   const sendMessage = useAction(api.felicia.sendMessage);
-  const generatePhoto = useAction(api.felicia.generatePhoto);
   const sendUserPhoto = useAction(api.felicia.sendUserPhoto);
   const speakMessage = useAction(api.felicia.speakMessage);
   const startCall = useAction(api.felicia.startCall);
+  // Her selfies: rendered by Puter in the browser, with the server-side
+  // generator as the fallback if Puter can't deliver.
+  const selfie = useSelfie();
 
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState<string | null>(null);
@@ -211,7 +214,8 @@ export default function Dashboard() {
 
   /**
    * Ask Felicia for a photo, then reveal it only once it is genuinely finished:
-   * generated on the server, decoded by the browser, and DEVELOP_MS old.
+   * rendered (Puter first, the server as its fallback), decoded by the browser
+   * and DEVELOP_MS old.
    */
   async function requestPhoto(scene: string) {
     if (!photosReady) return;
@@ -219,8 +223,8 @@ export default function Dashboard() {
     setHiddenCount(allPhotos.length);
     setDeveloping(true);
     try {
-      const result = await generatePhoto({ scene });
-      // The Horde action already waited for the image to exist, so the only
+      const result = await selfie(scene);
+      // Generation has already finished by the time this returns, so the only
       // remaining gate is browser decode. Preload it once; if it has already
       // loaded, the promise resolves immediately.
       if (result.url) await preloadImage(result.url);

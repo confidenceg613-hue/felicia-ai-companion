@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import { useSelfie } from "@/hooks/use-selfie";
 import { FELICIA } from "@/lib/felicia";
 import { DEVELOP_MS, preloadImage } from "@/lib/photo";
 import {
@@ -73,8 +74,9 @@ export function FeliciaCall({
   onClose: () => void;
 }) {
   const sendMessage = useAction(api.felicia.sendMessage);
-  const generatePhoto = useAction(api.felicia.generatePhoto);
   const speakMessage = useAction(api.felicia.speakMessage);
+  // Mid-call photos go through Puter first, same as the chat and the album.
+  const selfie = useSelfie();
 
   const [status, setStatus] = useState<CallStatus>("connecting");
   const [interim, setInterim] = useState("");
@@ -148,7 +150,7 @@ export function FeliciaCall({
     async (scene: string, active: () => boolean) => {
       const startedAt = Date.now();
       try {
-        const result = await generatePhoto({ scene });
+        const result = await selfie(scene);
         const remaining = DEVELOP_MS - (Date.now() - startedAt);
         if (remaining > 0) await sleep(remaining);
         if (result.url) {
@@ -159,7 +161,7 @@ export function FeliciaCall({
         // A failed photo should never drop the call.
       }
     },
-    [generatePhoto],
+    [selfie],
   );
 
   useEffect(() => {
