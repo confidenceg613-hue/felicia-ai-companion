@@ -90,7 +90,7 @@ const APP_CTA_ITEMS = [
 export default function AppShell() {
   const navigate = useNavigate();
   const { user, billingAccount, logout, clearConversation } = useUser();
-  const { open: sidebarOpen, setOpen: setSidebarOpen } = useSidebar();
+  const { open: sidebarOpen, setOpen: setSidebarOpen } = useSidebarSafe();
   const [mounted, setMounted] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [moodOpen, setMoodOpen] = useState(false);
@@ -649,4 +649,16 @@ function NavCta({
       </span>
     </button>
   );
+}
+
+function useSidebarSafe() {
+  if (typeof window === "undefined") {
+    return { open: false, setOpen: () => {} };
+  }
+
+  try {
+    return useSidebar();
+  } catch {
+    return { open: false, setOpen: () => {} };
+  }
 }
