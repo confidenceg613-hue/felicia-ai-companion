@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { api } from "@/convex/_generated/api";
 import { useAuth } from "@/hooks/use-auth";
-import { FELICIA } from "@/lib/felicia";
+import { FELICIA, FELICIA_AVATAR_URL } from "@/lib/felicia";
 import { THEME_OPTIONS, useTheme, type Theme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { useMutation } from "convex/react";
@@ -122,7 +122,7 @@ export default function Settings() {
             <div className="mt-4 flex items-center gap-4">
               <div className="relative shrink-0">
                 <img
-                  src="/felicia/hero.jpg"
+                  src={FELICIA_AVATAR_URL}
                   alt=""
                   className="size-12 rounded-full border border-border/60 object-cover"
                 />

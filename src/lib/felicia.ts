@@ -19,12 +19,15 @@
  * description.
  */
 export const FELICIA_LOOK =
-  "Felicia, a beautiful 28-year-old African American woman with glowing rich " +
-  "deep brown skin, a smooth even complexion with a natural warm glow, full " +
-  "lips, high cheekbones, a small straight nose, and dark expressive eyes with " +
-  "long natural lashes, a confident easy smile, long dark hair with a glossy " +
-  "healthy sheen, a lithe curvy figure, full hips, toned waist, long legs, " +
-  "elegant posture, photorealistic, high detail face, true-to-life skin and hair";
+  "portrait of a beautiful 28-year-old African American woman with long dark " +
+  "curly hair parted on the side, deep brown skin, defined brows, dark eyes, " +
+  "glossy lips, wearing a black ribbed cropped short-sleeve top with a " +
+  "sweetheart neckline and a black satin high-waisted skirt, gold jewelry: " +
+  "small hoop earrings, two layered gold necklaces with round pendants, a thin " +
+  "gold bracelet on her left wrist and a ring on her left hand, her right hand " +
+  "resting on her hip while her left arm is raised touching her hairline above " +
+  "her head, indoor softly lit room, warm light, natural portrait framing, " +
+  "photorealistic, high detail face, true-to-life skin and hair";
 
 /**
  * Shared Notes — the editable context that shapes who Felicia is.
@@ -107,6 +110,31 @@ export const DEFAULT_SHARED_NOTES: Record<string, string> = {
     "than one emoji, if any.",
 };
 
+/**
+ * Felicia's permanent avatar URL.
+ *
+ * Currently pinned to the approved portrait generated through her image backend;
+ * update the env var `FELICIA_IMAGE_URL` on the Convex deployment whenever
+ * her look is re-generated.
+ *
+ * At build time this resolves on the server side, so the deployed bundle can
+ * embed the real URL instead of the fallback asset.
+ */
+export const FELICIA_AVATAR_URL =
+  ((process.env.FELICIA_IMAGE_URL as unknown as string | undefined) || "/felicia/hero.jpg");
+
+/**
+ * Felicia's character sheet.
+ *
+ * One source of truth: the server prepends it to every photo prompt so her face
+ * and figure stay consistent from picture to picture, and Shared Notes opens on
+ * it as her Appearance section, so you can edit it without touching code.
+ *
+ * Figure and posture cues are described in tasteful terms. The goal is a real,
+ * attractive photograph of a woman — not a catalogue entry and not explicit
+ * anatomy — so the prompt reads as a portrait brief rather than a medical
+ * description.
+ */
 export const FELICIA = {
   name: "Felicia",
   fullName: "Felicia Moreau",

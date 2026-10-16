@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useAuth } from "@/hooks/use-auth";
-import { FELICIA } from "@/lib/felicia";
+import { FELICIA, FELICIA_AVATAR_URL } from "@/lib/felicia";
 import { THEME_OPTIONS, useTheme, type Theme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import {
@@ -118,7 +118,7 @@ function CompanionCard() {
     <div className="flex items-center gap-3 px-2">
       <div className="relative shrink-0">
         <img
-          src="/felicia/hero.jpg"
+          src={FELICIA_AVATAR_URL}
           alt={FELICIA.name}
           className="size-10 rounded-full border border-border/60 object-cover"
         />
@@ -131,6 +131,12 @@ function CompanionCard() {
     </div>
   );
 }
+
+/**
+ * The companion card's portrait is a permanent asset, so it is loaded once and
+ * shown whether or not the voice call or the chat is active.
+ */
+CompanionCard.displayName = "CompanionCard";
 
 export default function AppShell() {
   const { user, signOut } = useAuth();

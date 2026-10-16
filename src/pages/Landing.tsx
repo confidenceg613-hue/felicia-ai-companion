@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { FELICIA } from "@/lib/felicia";
+import { FELICIA, FELICIA_AVATAR_URL } from "@/lib/felicia";
 import { motion } from "framer-motion";
 import {
   ArrowRight,
@@ -214,7 +214,7 @@ export default function Landing() {
               <div className="absolute -inset-4 rounded-[2rem] bg-primary/15 blur-3xl" />
               <div className="relative overflow-hidden rounded-[1.75rem] border border-border/60 bg-card shadow-2xl">
                 <img
-                  src="/felicia/hero.jpg"
+                  src={FELICIA_AVATAR_URL}
                   alt="Felicia at golden hour"
                   className="aspect-4/5 w-full object-cover"
                 />

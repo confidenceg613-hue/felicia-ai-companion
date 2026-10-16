@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
-import { FELICIA } from "@/lib/felicia";
+import { FELICIA, FELICIA_AVATAR_URL } from "@/lib/felicia";
 import { DEVELOP_MS, preloadImage } from "@/lib/photo";
 import {
   hasSpeechRecognition,
@@ -303,7 +303,7 @@ export function FeliciaCall({
     <div className="fixed inset-0 z-50 flex flex-col bg-background">
       <div aria-hidden className="absolute inset-0 overflow-hidden">
         <img
-          src={photoUrl ?? "/felicia/hero.jpg"}
+          src={FELICIA_AVATAR_URL}
           alt=""
           className="size-full scale-110 object-cover opacity-25 blur-2xl"
         />
@@ -343,7 +343,7 @@ export function FeliciaCall({
               />
             ) : (
               <img
-                src="/felicia/hero.jpg"
+                src={FELICIA_AVATAR_URL}
                 alt="Felicia"
                 className="relative size-44 rounded-full border border-border/60 object-cover shadow-2xl"
               />

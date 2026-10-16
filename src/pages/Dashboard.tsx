@@ -19,7 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useAuth } from "@/hooks/use-auth";
-import { FELICIA } from "@/lib/felicia";
+import { FELICIA, FELICIA_AVATAR_URL } from "@/lib/felicia";
 import { DEVELOP_MS, preloadImage } from "@/lib/photo";
 import { cn } from "@/lib/utils";
 import { beginVoiceNote, playAudioUrl, speakWithBrowser } from "@/lib/voice";
@@ -421,7 +421,7 @@ export default function Dashboard() {
         <div className="flex min-w-0 items-center gap-3">
           <div className="relative shrink-0">
             <img
-              src="/felicia/hero.jpg"
+              src={FELICIA_AVATAR_URL}
               alt={FELICIA.name}
               className="size-10 rounded-full border border-border/60 object-cover"
             />
@@ -586,7 +586,7 @@ export default function Dashboard() {
                   className="flex justify-start gap-2.5"
                 >
                   <img
-                    src="/felicia/hero.jpg"
+                    src={FELICIA_AVATAR_URL}
                     alt=""
                     className="mt-1 size-7 shrink-0 rounded-full object-cover"
                   />
@@ -625,7 +625,7 @@ export default function Dashboard() {
               >
                 {!isUser && (
                   <img
-                    src="/felicia/hero.jpg"
+                    src={FELICIA_AVATAR_URL}
                     alt=""
                     className="mt-1 size-7 shrink-0 rounded-full object-cover"
                   />
@@ -709,7 +709,7 @@ export default function Dashboard() {
           {thinking && (
             <div className="flex justify-start gap-2.5">
               <img
-                src="/felicia/hero.jpg"
+                src={FELICIA_AVATAR_URL}
                 alt=""
                 className="size-7 shrink-0 rounded-full object-cover"
               />
@@ -728,7 +728,7 @@ export default function Dashboard() {
           {developing && (
             <div className="flex justify-start gap-2.5">
               <img
-                src="/felicia/hero.jpg"
+                src={FELICIA_AVATAR_URL}
                 alt=""
                 className="size-7 shrink-0 rounded-full object-cover"
               />
@@ -943,7 +943,7 @@ export default function Dashboard() {
 
           <div className="mt-1 flex items-start gap-4">
             <img
-              src="/felicia/hero.jpg"
+              src={FELICIA_AVATAR_URL}
               alt={FELICIA.name}
               className="size-20 shrink-0 rounded-2xl border border-border/60 object-cover"
             />
