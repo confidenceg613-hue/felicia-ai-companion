@@ -742,12 +742,11 @@ async function generateWithHostedModel(
 /**
  * Generate one photo of Felicia and store it in Convex storage.
  *
- * Three engines, cheapest success first:
- *   1. Nano Banana 2.1 on Cloudflare — the requested model, synchronous, but
- *      third-party and billed against the account's gateway balance.
- *   2. Cloudflare's own hosted image model — same account, no gateway balance
- *      involved, so a `402` degrades to a slower photo rather than to none.
- *   3. The AI Horde — free, volunteer-powered, and deliberately last.
+ * The routing prefers the account-hosted Workers AI model (Stability AI
+ * Stable Diffusion XL) because that one runs against the account's own
+ * Workers AI allocation and does not depend on the AI Gateway balance. Nano
+ * Banana 2.1 is tried only when that balance is available, because it is
+ * higher quality but third-party and billed separately.
  */
 export const generateImage = internalAction({
   args: { prompt: v.string() },
@@ -760,8 +759,13 @@ export const generateImage = internalAction({
     let hostedError: unknown = null;
 
     if (isCloudflareConfigured()) {
+      // Start with the hosted model so photos keep working even with an empty
+      // gateway balance. Nano Banana is still worth trying first if it is
+      // available, because the user asked for it specifically.
       try {
-        return await generateWithNanoBanana(ctx, prompt);
+        if (await canNanoBananaAfford()) {
+          return await generateWithNanoBanana(ctx, prompt);
+        }
       } catch (error) {
         nanoBananaError = error;
       }
@@ -781,9 +785,6 @@ export const generateImage = internalAction({
       try {
         return await generateWithHorde(ctx, prompt);
       } catch (hordeError) {
-        // All three failed. Lead with Nano Banana's reason when it is a
-        // billing problem — that is the actionable half; the volunteer queue
-        // timing out on top of it is only the symptom the user can see.
         if (primary && /balance|billing|402/i.test(primary)) {
           throw new Error(`${primary} (The AI Horde fallback failed too: ${reason(hordeError)})`);
         }
@@ -801,6 +802,55 @@ export const generateImage = internalAction({
     );
   },
 });
+
+/**
+ * Cheap, synchronous decision about whether Nano Banana is worth trying.
+ *
+ * A `402 Insufficient balance` means the route is blocked by billing, so we
+ * fall straight to the account-hosted model instead of waiting on a gateway
+ * that has no money in it. A real error still gets thrown back to the handler
+ * so we can try the hosted model.
+ */
+/**
+ * Cheap, synchronous decision about whether Nano Banana is worth trying.
+ *
+ * A `402 Insufficient balance` means the route is blocked by billing, so we
+ * fall straight to the account-hosted model instead of waiting on a gateway
+ * that has no money in it. A real error still gets thrown back to the handler
+ * so we can try the hosted model.
+ */
+async function canNanoBananaAfford(): Promise<boolean> {
+  const token = cloudflareToken();
+  const accountId = cloudflareAccountId();
+  if (!token || !accountId) return false;
+
+  try {
+    const probe = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: IMAGE_MODEL,
+          input: { prompt: "photorealistic portrait of a person, warm natural light" },
+        }),
+      },
+    );
+    if (probe.status === 402) return false;
+    if (!probe.ok) {
+      // Any other failure means the route itself is broken — skip it.
+      return false;
+    }
+    // Successful poll-style answer means the account can afford it.
+    return true;
+  } catch {
+    return false;
+  }
+}
+/**
 
 /**
  * Groq Orpheus text-to-speech.
