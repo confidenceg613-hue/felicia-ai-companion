@@ -298,7 +298,7 @@ export default function Dashboard() {
       }
       if (result.photoScene) {
         setPendingPhotoScene(result.photoScene);
-        setPhotoScheduledAt(Date.now() + (result.photoReadyAfterMs ?? 8000));
+        setPhotoScheduledAt(Date.now() + 8000);
       }
     } catch (error) {
       setPending(null);

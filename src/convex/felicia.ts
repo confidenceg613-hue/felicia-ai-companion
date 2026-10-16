@@ -854,6 +854,10 @@ export const sendMessage = action({
   },
 });
 
+// ---------------------------------------------------------------------------
+// Photo backend arrangements
+// ---------------------------------------------------------------------------
+
 /**
  * Generate a photo of Felicia for the signed-in user.
  *
