@@ -8,4 +8,18 @@ declare global {
   }
 }
 
+export type NonNullableUser =
+  | {
+      _id: import("convex").Id<"users">;
+      _creationTime: number;
+      image?: string | undefined;
+      name?: string | undefined;
+      role?: "admin" | "user" | "member" | undefined;
+      email?: string | undefined;
+      emailVerificationTime?: number | undefined;
+      isAnonymous?: boolean | undefined;
+    }
+  | null
+  | undefined;
+
 export {};
