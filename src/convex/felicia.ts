@@ -209,11 +209,12 @@ export const connectorStatus = query({
     chatConfigured: isGroqConfigured(),
     voiceConfigured: isGroqConfigured() || isCloudflareConfigured(),
     // Photos render in the browser through Puter, which needs no key at all, so
-    // they work on every deployment — including one with no image key set. The
-    // AI Horde is only the server-side fallback, so a missing Horde key is no
-    // longer a reason to warn that photos are broken.
+    // they work on every deployment. The server-side generator — Cloudflare's
+    // Nano Banana first, the AI Horde as its free fallback — only matters when
+    // Puter can't deliver, so it is reported as a fallback rather than a
+    // blocker: missing keys there cost a slower photo, not an absent one.
     imageConfigured: true,
-    imageFallbackConfigured: isAiHordeConfigured(),
+    imageFallbackConfigured: isCloudflareConfigured() || isAiHordeConfigured(),
   }),
 });
 
@@ -746,9 +747,10 @@ export const sendMessage = action({
  * FELICIA_LOOK from `lib/felicia.ts`), and the only thing that changes between
  * photos is the scene the model or the user asked for.
  *
- * Generating a good stock photo can take a couple of minutes on the AI Horde.
- * Each attempt is retried once if it times out or is rejected, so a single
- * request still only surfaces one error to the user.
+ * Generating a photo takes a moment: Nano Banana on Cloudflare answers in one
+ * round trip, while the AI Horde fallback can take a couple of minutes. Each
+ * attempt is retried once if it times out or is rejected, so a single request
+ * still only surfaces one error to the user.
  */
 export const generatePhoto = action({
   args: { scene: v.optional(v.string()) },
@@ -795,8 +797,8 @@ export const generatePhoto = action({
 
     if (!success) {
       throw new Error(
-        "Couldn't generate that photo right now. The AI Horde is volunteer-powered, " +
-          "so it can be slow or unavailable — try again in a moment.",
+        "Couldn't generate that photo right now — neither Nano Banana on " +
+          "Cloudflare nor the AI Horde could deliver it. Try again in a moment.",
       );
     }
 

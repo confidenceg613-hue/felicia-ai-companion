@@ -7,18 +7,20 @@ import {
   cloudflareToken,
   groqApiKey,
   groqVoiceEnabled,
+  isCloudflareConfigured,
 } from "./config";
 import type { Id } from "./_generated/dataModel";
-import { internalAction } from "./_generated/server";
+import { internalAction, type InternalActionCtx } from "./_generated/server";
 
 /**
- * AI Horde — image generation only.
+ * Image and voice backends.
  *
  * Text and voice have their own backends now:
  *   chat  → Groq chat completions
  *   speak → Cloudflare Workers AI voice models, with Groq Orpheus TTS as an
  *           alternative when Cloudflare is unavailable
- *   image → AI Horde
+ *   image → Cloudflare's unified AI endpoint with google/nano-banana-2.1,
+ *           falling back to the AI Horde (free, volunteer-powered)
  *
  * The token and account id are read from the deployment environment so the
  * secret never reaches the browser bundle. Add them in the project's
@@ -273,6 +275,217 @@ function groqFailure(status: number, raw: string): string {
 }
 
 /**
+ * Felicia's image model, called through Cloudflare's unified AI endpoint.
+ *
+ * Two details that are easy to get wrong and cost a full debugging session:
+ * Nano Banana 2.1 is a *third-party* (Google) model, so it is posted to
+ * `/ai/run` with the model in the body — the older `/ai/run/{model}` path
+ * answers `400 No route for that URI` for it — and it bills against the
+ * account's AI Gateway balance rather than the Workers AI neuron pool, so an
+ * empty balance comes back as `402 Insufficient balance` rather than as an
+ * auth error.
+ */
+const IMAGE_MODEL = "google/nano-banana-2.1";
+
+/** Decode base64 (with or without padding) into plain bytes. */
+function decodeBase64(base64: string): Uint8Array {
+  return new Uint8Array(Buffer.from(base64, "base64"));
+}
+
+/** Split a `data:` URI into bytes and a MIME type, or null if it is malformed. */
+function decodeDataUri(
+  uri: string,
+): { bytes: Uint8Array; mimeType: string } | null {
+  const match = /^data:([^;,]*)(;base64)?,([\s\S]*)$/.exec(uri);
+  if (!match) return null;
+
+  const mimeType = match[1] || "image/png";
+  if (!match[2]) {
+    return {
+      bytes: new TextEncoder().encode(decodeURIComponent(match[3])),
+      mimeType,
+    };
+  }
+  return { bytes: decodeBase64(match[3]), mimeType };
+}
+
+/** Turn a Cloudflare error body into something a person can act on. */
+function cloudflareFailure(status: number, raw: string): string {
+  try {
+    const parsed = JSON.parse(raw) as {
+      errors?: Array<{ message?: string }>;
+      messages?: Array<{ message?: string }>;
+    };
+    const message =
+      parsed.errors?.[0]?.message ?? parsed.messages?.[0]?.message ?? null;
+    if (message && message.trim()) {
+      if (status === 402 || /insufficient balance/i.test(message)) {
+        return (
+          `Cloudflare can't render photos right now: ${IMAGE_MODEL} is a ` +
+          "third-party model and the account has no balance for it. Add " +
+          "credits (or bring your own key) in the Cloudflare dashboard."
+        );
+      }
+      return `Cloudflare could not render the photo: ${message}`;
+    }
+  } catch {
+    // fall through to the raw body
+  }
+  if (raw.trim()) return `Cloudflare returned status ${status}: ${raw.slice(0, 200)}`;
+  return `Cloudflare returned status ${status}`;
+}
+
+/**
+ * Pull an image source out of whatever the endpoint answered with.
+ *
+ * The documented success shape is `{ state, result: { image: <url> } }`, but a
+ * hosted Workers AI model returns raw image bytes and other routes have shipped
+ * base64 and arrays, so every plausible location is checked in order.
+ */
+function nanoBananaSource(payload: unknown): string | null {
+  if (typeof payload === "string" && payload) return payload;
+  if (!payload || typeof payload !== "object") return null;
+
+  const record = payload as Record<string, unknown>;
+  const result = record.result;
+  const candidates: unknown[] = [record.image, result];
+
+  if (result && typeof result === "object" && !Array.isArray(result)) {
+    const inner = result as Record<string, unknown>;
+    candidates.push(inner.image, inner.images, inner.url, inner.output);
+  }
+
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate) return candidate;
+    if (!Array.isArray(candidate) || candidate.length === 0) continue;
+
+    const first = candidate[0];
+    if (typeof first === "string" && first) return first;
+    if (first && typeof first === "object") {
+      const item = first as Record<string, unknown>;
+      if (typeof item.image === "string" && item.image) return item.image;
+      if (typeof item.url === "string" && item.url) return item.url;
+      if (typeof item.b64_json === "string" && item.b64_json) {
+        return `data:image/png;base64,${item.b64_json}`;
+      }
+    }
+  }
+
+  return null;
+}
+
+/** Persist raw image bytes in Convex storage and report what they are. */
+async function storeImage(
+  ctx: InternalActionCtx,
+  bytes: Uint8Array,
+  mimeType: string,
+): Promise<{ storageId: Id<"_storage">; mimeType: string }> {
+  if (bytes.byteLength === 0) {
+    throw new Error("Cloudflare returned an empty image.");
+  }
+  const storageId = await ctx.storage.store(new Blob([bytes], { type: mimeType }));
+  return { storageId, mimeType };
+}
+
+/**
+ * Generate one photo of Felicia with Nano Banana 2.1 and store it.
+ *
+ * Unlike the Horde this is synchronous: one request comes back with the finished
+ * image (as a URL, a data URI, or raw bytes), so there is nothing to poll.
+ */
+async function generateWithNanoBanana(
+  ctx: InternalActionCtx,
+  prompt: string,
+): Promise<{ storageId: Id<"_storage">; mimeType: string }> {
+  const token = cloudflareToken();
+  const accountId = cloudflareAccountId();
+  if (!token || !accountId) {
+    throw new Error(
+      "Cloudflare is not connected yet. Add CLOUDFLARE_API_TOKEN and " +
+        "CLOUDFLARE_ACCOUNT_ID in your project's Keys/API keys settings.",
+    );
+  }
+
+  const response = await fetch(
+    `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: IMAGE_MODEL,
+        // 2:3 portrait — the frame every photo slot in the app expects.
+        input: { prompt, aspect_ratio: "2:3" },
+      }),
+    },
+  );
+
+  // A hosted Workers AI model answers with raw image bytes; the third-party
+  // route answers with JSON. Branch on the content type before reading the body
+  // so binary data is never mangled through text().
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.startsWith("image/")) {
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (!response.ok || bytes.byteLength === 0) {
+      throw new Error(cloudflareFailure(response.status, ""));
+    }
+    return storeImage(ctx, bytes, contentType.split(";")[0]?.trim() || "image/jpeg");
+  }
+
+  const raw = await response.text();
+  if (!response.ok) {
+    throw new Error(cloudflareFailure(response.status, raw));
+  }
+
+  let payload: unknown;
+  try {
+    payload = JSON.parse(raw);
+  } catch {
+    throw new Error("Cloudflare returned an unreadable photo response.");
+  }
+
+  const source = nanoBananaSource(payload);
+  if (!source) {
+    throw new Error(cloudflareFailure(response.status, raw));
+  }
+
+  if (source.startsWith("data:")) {
+    const decoded = decodeDataUri(source);
+    if (!decoded) throw new Error("Cloudflare returned malformed image data.");
+    return storeImage(ctx, decoded.bytes, decoded.mimeType);
+  }
+
+  if (/^https?:\/\//i.test(source)) {
+    const imageResponse = await fetch(source, {
+      headers: { accept: "image/*" },
+    });
+    if (!imageResponse.ok) {
+      throw new Error(
+        "Cloudflare returned an image URL that stopped working before we could download it.",
+      );
+    }
+    const mime =
+      (imageResponse.headers.get("content-type") ?? "image/jpeg")
+        .split(";")[0]
+        ?.trim() || "image/jpeg";
+    return storeImage(
+      ctx,
+      new Uint8Array(await imageResponse.arrayBuffer()),
+      mime,
+    );
+  }
+
+  // Bare base64 with no data: prefix.
+  if (source.length > 64 && /^[A-Za-z0-9+/=\s]+$/.test(source)) {
+    return storeImage(ctx, decodeBase64(source), "image/png");
+  }
+
+  throw new Error("Cloudflare returned no usable image.");
+}
+
+/**
  * Generate one photo of Felicia on the AI Horde and store it in Convex storage.
  *
  * The Horde is asynchronous: submit the job, poll `/check/{id}` until it is done,
@@ -285,13 +498,10 @@ function groqFailure(status: number, raw: string): string {
  * already waits for generation + browser decode + a short develop window, so this
  * action is free to take as long as the Horde needs.
  */
-export const generateImage = internalAction({
-  args: { prompt: v.string() },
-  returns: v.object({ storageId: v.id("_storage"), mimeType: v.string() }),
-  handler: async (
-    ctx,
-    { prompt },
-  ): Promise<{ storageId: Id<"_storage">; mimeType: string }> => {
+async function generateWithHorde(
+  ctx: InternalActionCtx,
+  prompt: string,
+): Promise<{ storageId: Id<"_storage">; mimeType: string }> {
     const apiKey = aiHordeApiKey();
     if (!apiKey) {
       throw new Error(
@@ -462,6 +672,65 @@ export const generateImage = internalAction({
     );
 
     return { storageId, mimeType };
+}
+
+/**
+ * Generate one photo of Felicia and store it in Convex storage.
+ *
+ * Nano Banana 2.1 on Cloudflare is the first choice — synchronous, one request,
+ * no volunteer queue. The AI Horde stays behind it as a free fallback, because
+ * the Nano Banana route bills against the account's AI Gateway balance: a
+ * balance that has run dry should degrade to a slow photo rather than to none.
+ */
+export const generateImage = internalAction({
+  args: { prompt: v.string() },
+  returns: v.object({ storageId: v.id("_storage"), mimeType: v.string() }),
+  handler: async (
+    ctx,
+    { prompt },
+  ): Promise<{ storageId: Id<"_storage">; mimeType: string }> => {
+    let nanoBananaError: unknown = null;
+
+    if (isCloudflareConfigured()) {
+      try {
+        return await generateWithNanoBanana(ctx, prompt);
+      } catch (error) {
+        nanoBananaError = error;
+      }
+    }
+
+    if (aiHordeApiKey()) {
+      try {
+        return await generateWithHorde(ctx, prompt);
+      } catch (hordeError) {
+        // Both engines failed. Lead with Nano Banana's reason when it is a
+        // billing problem — that is the actionable half; the volunteer queue
+        // timing out on top of it is only the symptom the user can see.
+        const primary =
+          nanoBananaError instanceof Error
+            ? nanoBananaError.message
+            : nanoBananaError
+              ? String(nanoBananaError)
+              : null;
+        if (primary && /balance|billing|402/i.test(primary)) {
+          const secondary =
+            hordeError instanceof Error ? hordeError.message : String(hordeError);
+          throw new Error(`${primary} (The AI Horde fallback failed too: ${secondary})`);
+        }
+        throw hordeError;
+      }
+    }
+
+    if (nanoBananaError instanceof Error) {
+      throw new Error(
+        `${nanoBananaError.message} The free AI Horde fallback is not configured ` +
+          "either — add AI_HORDE_API_KEY to use it.",
+      );
+    }
+    throw new Error(
+      "No photo backend is configured. Add CLOUDFLARE_API_TOKEN + " +
+        "CLOUDFLARE_ACCOUNT_ID (Nano Banana), or AI_HORDE_API_KEY (free fallback).",
+    );
   },
 });
 
