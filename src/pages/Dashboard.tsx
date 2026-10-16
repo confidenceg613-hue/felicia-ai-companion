@@ -148,6 +148,22 @@ export default function Dashboard() {
   // live recording actually blocks it.
   const composing = thinking || recording;
 
+  // Environment variables are per-deployment: a key added while working in the
+  // preview is not on the published deployment, which is the usual reason an
+  // app that works in the preview does nothing once published. Naming each
+  // missing backend is what makes that visible.
+  // Compared against `false` on purpose: a deployment still running the older
+  // connectorStatus does not return the newer fields at all, and treating that
+  // `undefined` as "missing" would show a false alarm on the key it does have.
+  const missingKeys = connection
+    ? [
+        connection.configured === false && "GROQ_API_KEY (chat)",
+        connection.voiceConfigured === false &&
+          "a voice key — GROQ_API_KEY, or CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID",
+        connection.imageConfigured === false && "AI_HORDE_API_KEY (photos)",
+      ].filter((value): value is string => Boolean(value))
+    : [];
+
   const allPhotos = photos ?? [];
   // Photo requests are blocked until the gallery has loaded, because the reveal
   // gate works by counting photos. Capturing a baseline while the list is still
@@ -511,21 +527,15 @@ export default function Dashboard() {
       </header>
 
       {/* ------------------------------------------------------- config note */}
-      {connection && !connection.configured && (
+      {connection && missingKeys.length > 0 && (
         <div className="border-b border-primary/30 bg-primary/10 px-4 py-3 text-xs sm:px-6">
           <p className="font-medium text-primary">
-            Felicia's chat backend isn't connected
+            Not connected on this deployment
           </p>
           <p className="mt-0.5 text-muted-foreground">
-            Add <code className="rounded bg-background/60 px-1">GROQ_API_KEY</code>{" "}
-            in your project's Keys settings so Felicia can reply to you.
-            Photos still use the AI Horde. Voice uses Groq's Orpheus voice first
-            and falls back to Cloudflare Workers AI when Groq can't speak —
-            for those you'll need
-            <code className="rounded bg-background/60 px-1">AI_HORDE_API_KEY</code>{" "}
-            <code className="rounded bg-background/60 px-1">CLOUDFLARE_API_TOKEN</code>{" "}
-            <code className="rounded bg-background/60 px-1">CLOUDFLARE_ACCOUNT_ID</code>{" "}
-            for voice.
+            Add {missingKeys.join(", ")} in this project's Keys settings. Keys
+            belong to a single deployment, so anything added while working in
+            the preview has to be added again for the published app.
           </p>
         </div>
       )}

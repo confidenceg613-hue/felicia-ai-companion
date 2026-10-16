@@ -6,6 +6,7 @@ import {
   SHARED_NOTE_SECTIONS,
 } from "../lib/felicia";
 import {
+  isAiHordeConfigured,
   isCloudflareConfigured,
   isGroqConfigured,
 } from "./config";
@@ -129,18 +130,6 @@ function buildImagePrompt(scene: string, look: string = FELICIA_LOOK): string {
 }
 
 /**
- * A restrained fallback prompt, kept only in case the richer prompt is ever
- * rejected by a worker's safety layer.
- */
-function plainImagePrompt(scene: string): string {
-  return (
-    "Photorealistic full-body shot of Felicia, a beautiful 28-year-old African " +
-    "American woman with deep brown skin and long dark hair, " +
-    `${scene}, head to toe in frame, warm natural light.`
-  );
-}
-
-/**
  * Cloudflare's prompt classifier rejects harmless prompts at random rather than
  * on particular words, so a rejection is worth retrying rather than reporting.
  */
@@ -201,17 +190,25 @@ function extractScene(
 // ---------------------------------------------------------------------------
 
 /**
- * Whether Felicia's backends are present on this deployment.
+ * Which of Felicia's backends are present on this deployment.
  *
- * Chat needs Groq. Photo generation needs the AI Horde. Voice needs Cloudflare
- * Workers AI. We report the chat backend here because that is the one the user
- * notices first when Felicia does not reply.
+ * Chat needs Groq. Photo generation needs the AI Horde. Voice needs Groq's
+ * Orpheus voice or Cloudflare Workers AI.
+ *
+ * Environment variables are per-deployment, so a key added while working in
+ * the preview is not on the published deployment. Reporting each backend
+ * separately is what makes that visible instead of showing a single generic
+ * "not connected" banner that cannot say which one is missing.
  */
 export const connectorStatus = query({
   args: {},
   handler: async () => ({
+    // Chat is the one the user notices first when she does not reply.
     configured: isGroqConfigured(),
     chatBackend: "groq",
+    chatConfigured: isGroqConfigured(),
+    voiceConfigured: isGroqConfigured() || isCloudflareConfigured(),
+    imageConfigured: isAiHordeConfigured(),
   }),
 });
 

@@ -37,9 +37,13 @@ export function isCloudflareConfigured(): boolean {
  * `apikey` header. Store it as `AI_HORDE_API_KEY` in the project's Keys/API
  * keys settings. The documented anonymous key `0000000000` also works, but it
  * has the lowest queue priority, so a real key is strongly preferred.
+ *
+ * Keys added through the Keys UI have also landed as `AI_Horde_API`, so both
+ * spellings are accepted — a silently unrecognised key looks exactly like a
+ * backend that was never configured.
  */
 export function aiHordeApiKey(): string | null {
-  return process.env.AI_HORDE_API_KEY ?? null;
+  return process.env.AI_HORDE_API_KEY ?? process.env.AI_Horde_API ?? null;
 }
 
 export function isAiHordeConfigured(): boolean {
@@ -58,9 +62,19 @@ export function isAiHordeConfigured(): boolean {
  *
  * The same key is also used for Groq text-to-speech, via the Audio API
  * `POST /openai/v1/audio/speech` endpoint.
+ *
+ * A key entered as "groq Ai API key" is stored as `GROQ_AI_API_KEY`, which does
+ * not match `GROQ_API_KEY`, so that spelling is accepted too. Without this the
+ * app silently falls back to a different key — or to none at all, which reads
+ * as "works in the preview but not when published".
  */
 export function groqApiKey(): string | null {
-  return process.env.GROQ_API_KEY ?? null;
+  return (
+    process.env.GROQ_API_KEY ??
+    process.env.GROQ_AI_API_KEY ??
+    process.env.Groq_API_Key ??
+    null
+  );
 }
 
 export function isGroqConfigured(): boolean {

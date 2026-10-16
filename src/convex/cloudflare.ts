@@ -203,7 +203,14 @@ export const chat = internalAction({
           model: "openai/gpt-oss-120b",
           messages,
           temperature: 0.85,
-          max_completion_tokens: 400,
+          // gpt-oss is a reasoning model: it spends completion tokens on hidden
+          // reasoning before writing any visible text. "low" keeps that spending
+          // near ~50 tokens instead of ~200, which both cuts latency and stops a
+          // long system prompt from burning the whole budget and returning an
+          // empty reply. The ceiling is generous so the visible reply always has
+          // room even when the model reasons more than usual.
+          reasoning_effort: "low",
+          max_completion_tokens: 700,
         }),
       },
     );
@@ -214,7 +221,10 @@ export const chat = internalAction({
     }
 
     let payload: {
-      choices?: Array<{ message?: { content?: unknown } }>;
+      choices?: Array<{
+        message?: { content?: unknown };
+        finish_reason?: string;
+      }>;
       error?: { message?: string };
     };
     try {
@@ -227,13 +237,18 @@ export const chat = internalAction({
       throw new Error(payload.error.message || "Groq returned an error.");
     }
 
+    const choice = payload.choices?.[0];
     const text =
-      typeof payload.choices?.[0]?.message?.content === "string"
-        ? payload.choices[0].message.content
-        : "";
+      typeof choice?.message?.content === "string" ? choice.message.content : "";
 
     if (!text.trim()) {
-      throw new Error("Felicia's model returned an empty reply.");
+      // A reasoning model that ran out of budget before writing any visible text
+      // looks exactly like a broken model from here, so say which it is.
+      throw new Error(
+        choice?.finish_reason === "length"
+          ? "Felicia ran out of room before she finished that thought. Try a shorter message."
+          : "Felicia's model returned an empty reply.",
+      );
     }
     return text.trim();
   },
@@ -285,18 +300,26 @@ export const generateImage = internalAction({
       );
     }
 
-    const baseUrl = "https://aihorde.com/api/v2";
+    // The API lives on stablehorde.net. aihorde.com is the project's website,
+    // and it answers every /api/v2 request with a 404 — which surfaced as
+    // "AI Horde rejected the request: AI Horde returned status 404" and meant
+    // no photo ever generated.
+    const baseUrl = "https://stablehorde.net/api/v2";
     const headers = {
       apikey: apiKey,
       "content-type": "application/json",
     };
 
     /**
-     * A realistic portrait aspect ratio for a full-body social photo.
-     * Native SDXL / Flux-friendly resolution, portrait orientation.
+     * A 2:3 portrait frame for a full-body social photo.
+     *
+     * The Horde refuses anything above a 786x786 pixel budget for clients that
+     * have not banked kudos yet ("requires 20.13 kudos to fulfil"). 640x960 is
+     * 614,400 pixels — the largest true portrait ratio that fits under that cap,
+     * so it produces the sharpest photo an unauthenticated-tier key can request.
      */
-    const width = 832;
-    const height = 1216;
+    const width = 640;
+    const height = 960;
 
     const submit = await fetch(`${baseUrl}/generate/async`, {
       method: "POST",
