@@ -108,6 +108,9 @@ export default function Dashboard() {
   const [greeting, setGreeting] = useState<CallGreeting | null>(null);
   const [callError, setCallError] = useState<string | null>(null);
   const [speakingId, setSpeakingId] = useState<string | null>(null);
+  const [pendingPhotoScene, setPendingPhotoScene] = useState<string | null>(null);
+  const [photoScheduledAt, setPhotoScheduledAt] = useState<number | null>(null);
+  const photoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [artOpen, setArtOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
@@ -121,6 +124,33 @@ export default function Dashboard() {
   useEffect(() => {
     autoVoiceRef.current = autoVoice;
   }, [autoVoice]);
+
+  useEffect(() => {
+    if (photoTimerRef.current) {
+      clearTimeout(photoTimerRef.current);
+      photoTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (photoScheduledAt === null) return;
+    const remaining = photoScheduledAt - Date.now();
+    if (remaining <= 0) {
+      setPhotoScheduledAt(null);
+      setPendingPhotoScene(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setPhotoScheduledAt(null);
+      if (pendingPhotoScene) void requestPhoto(pendingPhotoScene);
+      setPendingPhotoScene(null);
+    }, remaining);
+    photoTimerRef.current = timer;
+    return () => {
+      clearTimeout(timer);
+      photoTimerRef.current = null;
+    };
+  }, [pendingPhotoScene, photoScheduledAt, requestPhoto]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -267,7 +297,8 @@ export default function Dashboard() {
         void playMessage(result.replyMessageId, result.reply);
       }
       if (result.photoScene) {
-        void requestPhoto(result.photoScene);
+        setPendingPhotoScene(result.photoScene);
+        setPhotoScheduledAt(Date.now() + (result.photoReadyAfterMs ?? 8000));
       }
     } catch (error) {
       setPending(null);

@@ -778,6 +778,7 @@ export const sendMessage = action({
     reply: v.string(),
     photoScene: v.union(v.string(), v.null()),
     replyMessageId: v.id("messages"),
+    photoReadyAfterMs: v.number(),
   }),
   handler: async (
     ctx,
@@ -786,6 +787,7 @@ export const sendMessage = action({
     reply: string;
     photoScene: string | null;
     replyMessageId: Id<"messages">;
+    photoReadyAfterMs: number;
   }> => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Sign in to talk to Felicia.");
@@ -818,6 +820,7 @@ export const sendMessage = action({
           role: message.role === "user" ? "user" : "assistant",
           // A photo the user shared carries no text, so stand it in with a
           // marker the model can respond to instead of an empty turn.
+
           content:
             message.content ||
             (message.imageStorageId ? "[they sent a photo]" : "[...]"),
@@ -833,7 +836,21 @@ export const sendMessage = action({
       content: reply,
     });
 
-    return { reply, photoScene: scene, replyMessageId };
+    // She only sends a photo when she chose to, and the photo takes a moment
+    // to generate on the voice/image backend. The client should still show her
+    // reply immediately, then start the photo roughly eight seconds later so
+    // the generation has time to line up with the conversation rather than
+    // feeling instant and disconnected.
+    const photoReadyAfterMs = scene
+      ? 8000
+      : 0;
+
+    return {
+      reply,
+      photoScene: scene,
+      replyMessageId,
+      photoReadyAfterMs,
+    };
   },
 });
 
