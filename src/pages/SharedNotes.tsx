@@ -2,28 +2,24 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
-import { SHARED_NOTE_SECTIONS } from "@/lib/felicia";
+import {
+  SHARED_NOTE_SECTIONS,
+} from "@/lib/felicia";
 import { useMutation, useQuery } from "convex/react";
 import { motion } from "framer-motion";
-import { Check, Loader2, NotebookPen, Undo2 } from "lucide-react";
+import {
+  Check,
+  Loader2,
+  NotebookPen,
+  Undo2,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
-/**
- * Shared Notes — the page that actually decides who Felicia is.
- *
- * Every non-empty section is written into her prompt before she replies, and
- * Appearance doubles as the character sheet her photos are generated from, so
- * editing this page changes both how she talks and how she looks.
- */
 export default function SharedNotes() {
   const notes = useQuery(api.felicia.sharedNotes);
   const saveNotes = useMutation(api.felicia.saveSharedNotes);
 
-  // The server copy is the base and your edits are a patch on top of it.
-  // Deriving the visible text rather than copying it into state means a
-  // background refetch can't wipe what you're halfway through typing, and there
-  // is no effect shuttling values around.
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
@@ -42,9 +38,10 @@ export default function SharedNotes() {
     setSaving(true);
     try {
       await saveNotes({ sections });
-      // The server now holds what's on screen, so the patch is spent.
       setEdits({});
-      toast.success("Shared Notes saved. She'll read them next time you speak.");
+      toast.success(
+        "Shared Notes saved. She'll read them next time you speak.",
+      );
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Couldn't save your notes.",
@@ -131,7 +128,10 @@ export default function SharedNotes() {
                   key={section.key}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: Math.min(index * 0.04, 0.3) }}
+                  transition={{
+                    duration: 0.3,
+                    delay: Math.min(index * 0.04, 0.3),
+                  }}
                   className="rounded-2xl border border-border/60 bg-card p-5"
                 >
                   <div className="flex items-baseline justify-between gap-3">
@@ -152,8 +152,12 @@ export default function SharedNotes() {
                   <Textarea
                     id={`note-${section.key}`}
                     value={sections[section.key] ?? ""}
-                    onChange={(event) => edit(section.key, event.target.value)}
-                    rows={section.key === "appearance" ? 4 : 3}
+                    onChange={(event) =>
+                      edit(section.key, event.target.value)
+                    }
+                    rows={
+                      section.key === "appearance" ? 4 : 3
+                    }
                     maxLength={4000}
                     className="mt-3 resize-y leading-relaxed"
                   />

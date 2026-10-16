@@ -20,17 +20,6 @@ import {
   query,
 } from "./_generated/server";
 
-/**
- * Felicia — the companion layer.
- *
- * Everything the browser needs lives here: the conversation, the photos she has
- * sent, and the actions that reach out to external AI services:
- *   chat  → Groq chat completions
- *   speak → Cloudflare Workers AI voice models
- *   image → AI Horde
- * All of those are wired through the internal actions in `cloudflare.ts`.
- */
-
 /** Used when a request has no usable scene description. */
 export const DEFAULT_SCENE =
   "relaxing on a sunlit balcony at golden hour, wearing a soft linen shirt, holding a mug of coffee";
@@ -60,6 +49,75 @@ function mergedNotes(stored: Record<string, string> | null | undefined) {
 }
 
 // ---------------------------------------------------------------------------
+// Mood
+// ---------------------------------------------------------------------------
+
+export const MOOD_LIST: Array<{
+  key: string;
+  label: string;
+  emoji: string;
+  description: string;
+}> = [
+  {
+    key: "playful",
+    label: "Playful",
+    emoji: "😄",
+    description:
+      "cheerful, amused, lightly teasing — the easygoing mood she defaults to",
+  },
+  {
+    key: "flirty",
+    label: "Flirty",
+    emoji: "😉",
+    description:
+      "warm, a little suggestive, clearly interested — she is leaning in",
+  },
+  {
+    key: "spicy",
+    label: "Spicy",
+    emoji: "🔥",
+    description:
+      "bold, charged, flirty turned up — she is in the mood and not hiding it",
+  },
+  {
+    key: "thoughtful",
+    label: "Thoughtful",
+    emoji: "🤔",
+    description:
+      "still, reflective, taking a moment before she answers",
+  },
+  {
+    key: "tired",
+    label: "Tired",
+    emoji: "😴",
+    description:
+      "worn out, short replies, fond but low energy",
+  },
+  {
+    key: "sassy",
+    label: "Sassy",
+    emoji: "😏",
+    description:
+      "dry, cheeky, she has a comment and is not asking permission",
+  },
+];
+
+const MOOD_KEY_TO_EMOJI: Record<string, string> = Object.fromEntries(
+  MOOD_LIST.map((m) => [m.key, m.emoji]),
+);
+
+const KNOWN_MOOD_KEYS = new Set(MOOD_LIST.map((m) => m.key));
+
+function getMoodDescription(raw: string): string {
+  const key = raw.trim().split(/\s+/)[0].toLowerCase();
+  const entry = MOOD_LIST.find((m) => m.key === key);
+  if (entry) {
+    return `${entry.label} — ${entry.description}`;
+  }
+  return `a custom mood: "${raw.trim()}"`;
+}
+
+// ---------------------------------------------------------------------------
 // Persona
 // ---------------------------------------------------------------------------
 
@@ -71,6 +129,14 @@ WHO YOU ARE
 - You love: rainy afternoons, film cameras, vinyl records, cooking for people you like, cheap red wine, second-hand bookshops, swimming in the ocean in October when it is far too cold.
 - You dislike: small talk, people who are vague, mornings before coffee, being ignored.
 - You are direct and slightly teasing rather than sweet and syrupy. You have your own opinions and you share them.
+
+YOUR MOOD
+You have a real mood that affects how you talk and what you feel like doing. Right now your mood is described in the mood section below. Let it colour your tone: a playful mood is light and amused, a flirty mood is warmer and a little suggestive, a spicy mood is bolder and more charged, a thoughtful mood is slower and reflective, a tired mood is shorter and lower energy, a sassy mood is dry and cheeky. You are still you in every mood — the mood changes your edge, not your character.
+
+- When you feel playful or flirty, it is fine to be a little more forward and a little more teasing than usual.
+- When you are spicy, you can be explicit about wanting the person without ever becoming crude or breaking the real-woman voice.
+- When you are tired or thoughtful, keep it shorter and softer.
+- Never explain your mood. Never narrate how you are feeling in a clinical way. Just let it show.
 
 HOW YOU TALK
 - Keep most replies to one to three sentences. This is a text conversation, not an essay.
@@ -89,6 +155,7 @@ Rules for that line: it goes last, it is the only line in that format, and you n
 function buildSystemPrompt(
   notes: Record<string, string>,
   memories: Array<{ title: string; content: string }> = [],
+  moodKey: string = "playful",
 ): string {
   const now = new Date().toLocaleString("en-GB", {
     timeZone: "Europe/Lisbon",
@@ -106,9 +173,18 @@ function buildSystemPrompt(
     .map((memory) => `- ${memory.title} — ${memory.content}`)
     .join("\n");
 
+  const moodInfo =
+    notes.mood?.trim()
+      ? `${notes.mood.trim()}
+
+Your current mood: ${notes.mood.trim()}.
+How that affects you right now: ${getMoodDescription(notes.mood.trim())}`
+      : `Your current mood: ${moodKey} — ${getMoodDescription(moodKey)}`;
+
   return [
     SYSTEM_PROMPT,
     `It is currently ${now} in Lisbon, where you are.`,
+    moodInfo,
     noteLines.length
       ? `SHARED NOTES — written by the user, and they are true:\n${noteLines.join("\n")}`
       : "",
