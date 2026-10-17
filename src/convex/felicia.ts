@@ -11,11 +11,15 @@ import {
   isAiHordeConfigured,
   isCloudflareConfigured,
   isGroqConfigured,
+  groqApiKey,
+  groqVoiceModel,
 } from "./config";
-import { cloudflare } from "./cloudflare";
 import { internal } from "./_generated/api";
+import { cloudflare } from "./cloudflare";
 import type { Id } from "./_generated/dataModel";
 import { paginationOptsValidator } from "convex/server";
+import { isGroqConfigured, groqApiKey } from "./config";
+import { groqVoiceModel } from "./config";
 import {
   action,
   internalAction,

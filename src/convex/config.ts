@@ -72,13 +72,28 @@ export function groqApiKey(): string | null {
   return (
     process.env.GROQ_API_KEY ??
     process.env.GROQ_AI_API_KEY ??
-    process.env.Groq_API_Key ??
     null
   );
 }
 
+export const GROQ_VOICE_MODELS = [
+  "openai-gpt-4o-mini-tts",
+  "gpt-4o-mini-tts",
+  "gpt-4o-mini-tts-2024-07-18",
+  "gpt-4o-transcribe",
+  "gpt-4o-transcribe-2024-12-19",
+  "gpt-4o-mini-transcribe",
+  "gpt-4o-mini-transcribe-2024-07-18",
+] as const;
+
 export function isGroqConfigured(): boolean {
   return Boolean(groqApiKey());
+}
+
+export function groqVoiceModel(): string | null {
+  if (!isGroqConfigured()) return null;
+  const fallback = process.env.GROQ_VOICE_MODEL ?? GROQ_VOICE_MODELS[0];
+  return fallback ?? null;
 }
 
 /**
