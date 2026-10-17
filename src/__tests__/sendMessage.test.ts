@@ -2,10 +2,11 @@
 // runs under `bun test` and is excluded from the app's `tsc`/`vite` builds.
 // Run it with: bun test src/__tests__/sendMessage.test.ts
 
-import { sendMessage } from "../convex/felicia.js";
-import type { ActionBuilder } from "convex/server";
 // @ts-expect-error — `bun:test` is a Bun builtin and is not declared for tsc.
 import { expect, test, describe, beforeEach } from "bun:test";
+
+import { sendMessage } from "../convex/felicia.js";
+import type { ActionBuilder } from "convex/server";
 
 // `sendMessage` is exported as a Convex action. The object Convex builds
 // exposes `invokeAction`, which is the public entry point the runtime calls.
@@ -103,15 +104,6 @@ function withCollabs(): CollabBag {
   const ctx = makePlainCtx();
   const messages: Array<{ role: string; content: string; _id: string }> = [];
   const photos: Array<Record<string, unknown>> = [];
-
-    const _id = `${table}:${messages.length + photos.length + 1}`;
-    if (table === "messages") {
-      messages.push({ ...row, _id } as { role: string; content: string; _id: string });
-    } else if (table === "photos") {
-      photos.push({ ...row, _id });
-    }
-    return { _id };
-  };
 
   const insert: MockDb["insert"] = (table, row) => {
     const _id = `${table}:${messages.length + photos.length + 1}`;
@@ -245,8 +237,8 @@ describe("sendMessage", () => {
   });
 
   test("persists both sides of the exchange and returns a usable reply", async () => {
-    expect((sendMessageApi as { invokeAction?: unknown }).invokeAction).toBeTypeScriptFunction();
-    const raw = await (sendMessageApi as { invokeAction: (requestId: string, argsStr: string) => Promise<unknown> }).invokeAction(
+    const send = (sendMessageApi as { invokeAction: (requestId: string, argsStr: string) => Promise<unknown> }).invokeAction;
+    const raw = await send(
       "req:test",
       JSON.stringify({ text: "I'm in the kitchen cooking jollof right now" }),
     );
@@ -275,7 +267,8 @@ describe("sendMessage", () => {
   });
 
   test("sends an existing gallery photo when one fits the conversation", async () => {
-    const raw = await (sendMessageApi as { invokeAction: (requestId: string, argsStr: string) => Promise<unknown> }).invokeAction(
+    const send = (sendMessageApi as { invokeAction: (requestId: string, argsStr: string) => Promise<unknown> }).invokeAction;
+    const raw = await send(
       "req:test",
       JSON.stringify({ text: "show me something from the kitchen" }),
     );
@@ -303,13 +296,13 @@ describe("sendMessage", () => {
   });
 
   test("rejects an empty message", async () => {
-    await expect(
-      (sendMessageApi as { invokeAction: (requestId: string, argsStr: string) => Promise<unknown> }).invokeAction("req:test", JSON.stringify({ text: "   " })),
-    ).rejects.toThrow(/write something/i);
+    const send = (sendMessageApi as { invokeAction: (requestId: string, argsStr: string) => Promise<unknown> }).invokeAction;
+    await expect(send("req:test", JSON.stringify({ text: "   " }))).rejects.toThrow(/write something/i);
   });
 });
 
-// Suppress the unused-variable diagnostic so the harness keeps tsc-clean when
-// build tooling accidentally includes it.
-declare const _: { invokeAction: () => never };
-export { _ as __suppressUnusedSendMessageApi };
+export const __sendMessageHarnessSentinel = sendMessageApi;
+
+});
+
+export { sendMessageApi as __sendMessageHarnessSentinel };
