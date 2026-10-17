@@ -298,11 +298,7 @@ describe("sendMessage", () => {
   test("rejects an empty message", async () => {
     const send = (sendMessageApi as { invokeAction: (requestId: string, argsStr: string) => Promise<unknown> }).invokeAction;
     await expect(send("req:test", JSON.stringify({ text: "   " }))).rejects.toThrow(/write something/i);
-  });
-});
-
-export const __sendMessageHarnessSentinel = sendMessageApi;
-
+  });  });
 });
 
 export { sendMessageApi as __sendMessageHarnessSentinel };
