@@ -1,10 +1,9 @@
-import { expect, test, describe, beforeEach } from "bun:test";import { sendMessage } from "../convex/felicia.js";
-import type { ActionBuilder } from "convex/server";
+// This harness is a development helper, not part of the shipped app. It is
+// excluded from the TypeScript project so `bun:test` types and the Convex
+// runtime shim do not become build errors in the app's `tsc -b && vite build`.
+// Run it with: bun test src/__tests__/sendMessage.test.ts
 
-// `sendMessage` is exported as a Convex action. The object Convex builds
-// exposes `invokeAction`, which is the public entry point the runtime calls.
-// We call that directly with our deterministic mock context so the test proves
-// the wiring end-to-end without talking to a deployed backend.
+import { expect, test, describe, beforeEach } from "bun:test";
 import { sendMessage } from "../convex/felicia.js";
 
 // `sendMessage` is exported as a Convex action. The object Convex builds
@@ -116,7 +115,11 @@ function buildMockCtx(): MockCtx {
     auth: { getUserIdentity: async () => ({ subject: "user-one|session" }) },
     db,
     storage: { getUrl: async () => null },
-    runQuery: (name, args) => {
+    runQuery: async (name, maybeArgs) => {
+      // The Convex action runtime always hands runQuery a parsed Convex value.
+      // We narrow defensively so an edge-case payload (e.g. `null`) still
+      // behaves like an empty args object instead of throwing on spread.
+      const args = maybeArgs ?? {};
       if (name === "internal.felicia.notesFor") {
         return {
           appearance:
@@ -153,14 +156,14 @@ function buildMockCtx(): MockCtx {
       }
       throw new Error(`unmocked runQuery: ${name}`);
     },
-    runMutation: async (name, args) => {
-      // `args` here is the Convex-JSON value the action runtime parsed from
-      // the wire payload, which is the same shape we build above.
+    runMutation: async (name, maybeArgs) => {
+      const args = maybeArgs ?? {};
       if (name === "internal.felicia.saveMessage") {
+        const a = args as { userId: string; role: string; content: string };
         db.insert("messages", {
-          userId: (args as { userId: string }).userId,
-          role: (args as { role: string }).role,
-          content: (args as { content: string }).content,
+          userId: a.userId,
+          role: a.role,
+          content: a.content,
           createdAt: Date.parse("2026-01-01"),
         });
         const last = messages[messages.length - 1];
@@ -169,28 +172,32 @@ function buildMockCtx(): MockCtx {
         };
       }
       if (name === "internal.felicia.savePhoto") {
+        const a = args as {
+          userId: string;
+          url?: string | null;
+          galleryId?: string | null;
+          label?: string | null;
+          scene: string;
+          prompt: string;
+        };
         db.insert("photos", {
-          userId: (args as { userId: string }).userId,
-          url: (args as { url?: string | null }).url ?? null,
-          galleryId: (args as { galleryId?: string | null }).galleryId ?? null,
-          label: (args as { label?: string | null }).label ?? null,
-          scene: (args as { scene: string }).scene ?? "",
-          prompt: (args as { prompt: string }).prompt ?? "",
+          userId: a.userId,
+          url: a.url ?? null,
+          galleryId: a.galleryId ?? null,
+          label: a.label ?? null,
+          scene: a.scene ?? "",
+          prompt: a.prompt ?? "",
           createdAt: Date.parse("2026-01-01"),
         });
         return null;
       }
       throw new Error(`unmocked runMutation: ${name}`);
     },
-    runAction: async (name, args) => {
+    runAction: async (name, maybeArgs) => {
+      const args = maybeArgs ?? {};
       if (name === "cloudflare.chat") {
-        const messages_: Array<{
-          role: string;
-          content: string;
-        }> = args.messages as Array<{
-          role: string;
-          content: string;
-        }>;
+        const a = args as { messages: Array<{ role: string; content: string }> };
+        const messages_ = a.messages;
         const lastUser = [...messages_]
           .reverse()
           .find((m) => m.role === "user");
