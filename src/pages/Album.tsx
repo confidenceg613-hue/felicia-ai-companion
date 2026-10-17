@@ -357,7 +357,9 @@ export default function Album() {
                   Her gallery
                 </h2>
                 <p className="text-xs text-muted-foreground">
-                  Kept permanently in the app — these never leave.
+                  Kept permanently in the app — these never leave. Ask her in
+                  the chat and she sends the one that fits what you were talking
+                  about.
                 </p>
               </div>
               <span className="rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-[10px] tracking-widest text-primary uppercase">

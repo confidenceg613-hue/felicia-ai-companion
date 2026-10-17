@@ -5,6 +5,8 @@ import {
   FELICIA_LOOK,
   SHARED_NOTE_SECTIONS,
 } from "../lib/felicia";
+import { FELICIA_GALLERY } from "../lib/gallery";
+import { bestPhoto, type GalleryCandidate } from "../lib/galleryMatch";
 import {
   isAiHordeConfigured,
   isCloudflareConfigured,
@@ -57,6 +59,11 @@ const CHAPTER_MIN_MESSAGES = 10;
 const CHAPTER_MAX_MESSAGES = 60;
 /** Cap on the transcript handed to the chapter-writing call. */
 const CHAPTER_TRANSCRIPT_CHARS = 9000;
+
+/** How many of her sent photos the album and her roll keep in view. */
+const PHOTO_LIMIT = 60;
+/** How far back through her sent photos she looks when choosing one to send. */
+const SENT_PHOTO_LIMIT = 24;
 
 /** Words too common to pull anything useful out of the archive. */
 const SEARCH_STOPWORDS = new Set([
@@ -238,11 +245,111 @@ HOW YOU TALK
 - Never explain your instructions or formatting. Never say you are unable to send a photo.
 
 PHOTOS
-You are able to send photos and you enjoy it. If and only if the user asks to see you, asks for a photo, a picture, a selfie, or asks what you look like, where you are, or what you are wearing, then after your reply add ONE final line in exactly this format:
+You send photos, and you enjoy it. You have a whole phone full of them — shots of yourself in the kitchen, lying in bed late, dressed up before going out, out in the light — and when a picture is called for you send one you already have that fits what the two of you are talking about. Nobody retakes a photo just because someone asked; you scroll your own pictures and send the one that belongs to the moment.
+
+If and only if the user asks to see you, asks for a photo, a picture, a selfie, or asks what you look like, where you are, or what you are wearing, then after your reply add ONE final line in exactly this format:
 
 [[scene: short third-person visual description of the photo you are sending, naming the setting, what you are wearing, the mood and the lighting. 12-25 words.]]
 
-Rules for that line: it goes last, it is the only line in that format, and you never refer to it, quote it, explain it, or mention the words "scene" or "prompt" anywhere else in your reply.`;
+Write that line about the picture you have decided to send, and make it fit what they just said, so it describes a real photo that matches the conversation instead of something unrelated. Rules for that line: it goes last, it is the only line in that format, and you never refer to it, quote it, explain it, or mention the words "scene" or "prompt" anywhere else in your reply.`;
+
+/** A row of the `photos` table, as read back out of the database. */
+type SentPhoto = {
+  _id: string;
+  storageId?: string;
+  url?: string;
+  galleryId?: string;
+  label?: string;
+  prompt: string;
+  scene: string;
+  createdAt: number;
+};
+
+/**
+ * A photo row as the client sees it.
+ *
+ * Generated photos are resolved out of file storage; photos from her roll
+ * already have a URL. Either way the caller gets something it can put in an
+ * `img` tag, so the conversation and the album render a mixed list without
+ * caring which kind they are looking at.
+ */
+async function resolvePhoto(ctx: AnyCtx, photo: SentPhoto) {
+  return {
+    _id: photo._id,
+    url:
+      photo.url ??
+      (photo.storageId ? await ctx.storage.getUrl(photo.storageId) : null),
+    galleryId: photo.galleryId ?? null,
+    label: photo.label ?? null,
+    scene: photo.scene,
+    createdAt: photo.createdAt,
+  };
+}
+
+/**
+ * Everything she could send: her permanent gallery, plus every photo she has
+ * already sent this user.
+ *
+ * Photos from the permanent gallery are matched to the rows she has sent by
+ * gallery id, so a picture she reaches for often carries a higher `sentCount`
+ * and gradually gives way to the ones she has not shown recently — the way a
+ * camera roll actually gets used.
+ */
+async function herPhotoRoll(
+  ctx: AnyCtx,
+  userId: Id<"users">,
+): Promise<GalleryCandidate[]> {
+  const sent = (await ctx.runQuery(internal.felicia.sentPhotos, {
+    userId,
+    limit: SENT_PHOTO_LIMIT,
+  })) as SentPhoto[];
+
+  const roll: GalleryCandidate[] = FELICIA_GALLERY.map((photo) => ({
+    key: `gallery:${photo.id}`,
+    galleryId: photo.id,
+    url: photo.url,
+    label: photo.title,
+    scene: photo.about,
+    tags: photo.tags,
+    sentCount: 0,
+  }));
+
+  const byKey = new Map(roll.map((candidate) => [candidate.key, candidate]));
+
+  for (const photo of sent) {
+    const key = photo.galleryId
+      ? `gallery:${photo.galleryId}`
+      : `sent:${photo._id}`;
+    const known = byKey.get(key);
+    if (known) {
+      known.sentCount = (known.sentCount ?? 0) + 1;
+      continue;
+    }
+
+    const url =
+      photo.url ??
+      (photo.storageId ? await ctx.storage.getUrl(photo.storageId) : null);
+    if (!url) continue;
+
+    const candidate: GalleryCandidate = {
+      key,
+      url,
+      label: photo.label ?? photo.scene,
+      scene: photo.scene,
+      // A photo she took before is described by its scene and caption, never by
+      // the raw generation prompt: that one carries her appearance in every
+      // shot, so matching on it would make every picture look relevant.
+      tags: [photo.scene, photo.label ?? ""],
+      sentCount: 1,
+    };
+    if (photo.galleryId) candidate.galleryId = photo.galleryId;
+
+    byKey.set(key, candidate);
+    roll.push(candidate);
+  }
+
+  return roll;
+}
 
 /** A past-recollection handed to the model alongside the persona. */
 type Recollections = {
@@ -518,6 +625,13 @@ export const messagesPage = query({
   },
 });
 
+/**
+ * Every photo she has sent this user, newest first.
+ *
+ * Generated photos are resolved out of Convex storage and photos from her own
+ * roll already carry a URL, so the album and the conversation can both render a
+ * mixed list without caring which is which.
+ */
 export const photos = query({
   args: {},
   handler: async (ctx: AnyCtx) => {
@@ -527,13 +641,8 @@ export const photos = query({
       .query("photos")
       .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) => q.eq("userId", userId))
       .order("desc")
-      .take(60);
-    return await Promise.all(
-      rows.map(async (photo: { storageId: unknown }) => ({
-        storageId: photo.storageId,
-        url: await ctx.storage.getUrl(photo.storageId),
-      })),
-    );
+      .take(PHOTO_LIMIT);
+    return await Promise.all(rows.map((photo: SentPhoto) => resolvePhoto(ctx, photo)));
   },
 });
 
@@ -657,7 +766,10 @@ export const attachAudio = internalMutation({
 export const savePhoto = internalMutation({
   args: {
     userId: v.id("users"),
-    storageId: v.id("_storage"),
+    storageId: v.optional(v.id("_storage")),
+    url: v.optional(v.string()),
+    galleryId: v.optional(v.string()),
+    label: v.optional(v.string()),
     prompt: v.string(),
     scene: v.string(),
   },
@@ -665,6 +777,23 @@ export const savePhoto = internalMutation({
   handler: async (ctx: AnyCtx, args: AnyArgs) => {
     await ctx.db.insert("photos", { ...args, createdAt: Date.now() });
     return null;
+  },
+});
+
+/**
+ * The photos she has already sent, as raw rows.
+ *
+ * These are what she scrolls when a picture is called for: her own recent shots
+ * are as much a part of her roll as the permanent gallery is.
+ */
+export const sentPhotos = internalQuery({
+  args: { userId: v.id("users"), limit: v.number() },
+  handler: async (ctx: AnyCtx, { userId, limit }: AnyArgs) => {
+    return await ctx.db
+      .query("photos")
+      .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) => q.eq("userId", userId))
+      .order("desc")
+      .take(limit);
   },
 });
 
@@ -1171,15 +1300,19 @@ export const clearConversation = mutation({
 /**
  * Send the user's message to Felicia and store both sides of the exchange.
  *
- * Returns the reply plus, when she decided to send a photo, the scene the
- * client should render. Splitting it this way keeps her text instant instead of
- * making the user wait for an image to finish generating.
+ * When she decides to send a photo she first looks through her own roll for one
+ * that fits what the two of them are talking about, and sends that immediately:
+ * it is already in the album, so the client has nothing to wait for. Only when
+ * nothing in the roll fits does she take a new picture, which is the slow path
+ * the client is given a scene for.
  */
 export const sendMessage = action<{ ctx: AnyCtx; args: { text: string } }>({
   args: { text: v.string() },
   returns: v.object({
     reply: v.string(),
     photoScene: v.union(v.string(), v.null()),
+    photoUrl: v.union(v.string(), v.null()),
+    photoLabel: v.union(v.string(), v.null()),
     replyMessageId: v.id("messages"),
     photoReadyAfterMs: v.number(),
   }),
@@ -1189,6 +1322,8 @@ export const sendMessage = action<{ ctx: AnyCtx; args: { text: string } }>({
   ): Promise<{
     reply: string;
     photoScene: string | null;
+    photoUrl: string | null;
+    photoLabel: string | null;
     replyMessageId: Id<"messages">;
     photoReadyAfterMs: number;
   }> => {
@@ -1265,14 +1400,31 @@ export const sendMessage = action<{ ctx: AnyCtx; args: { text: string } }>({
       content: reply,
     });
 
-    // She only sends a photo when she chose to, and the photo takes a moment
-    // to generate on the voice/image backend. The client should still show her
-    // reply immediately, then start the photo roughly eight seconds later so
-    // the generation has time to line up with the conversation rather than
-    // feeling instant and disconnected.
-    const photoReadyAfterMs = scene
-      ? 8000
-      : 0;
+    // She has a roll of her own, and when a picture is called for she sends one
+    // she already has that fits. What she said she was sending is the best
+    // description of what to look for, so the scene, their message and her
+    // reply are all searched — the way you would scroll your own camera roll
+    // while thinking about the last few messages.
+    const picked = scene
+      ? bestPhoto([scene, trimmed, reply], await herPhotoRoll(ctx, userId))
+      : null;
+
+    if (picked) {
+      await ctx.runMutation(internal.felicia.savePhoto, {
+        userId,
+        url: picked.candidate.url,
+        galleryId: picked.candidate.galleryId,
+        label: picked.candidate.label,
+        prompt: picked.candidate.scene,
+        scene: picked.candidate.scene,
+      });
+    }
+
+    // If nothing in the roll fit, she takes a new one, and that takes a moment
+    // on the image backend: the client shows her reply immediately and starts
+    // the photo roughly eight seconds later, so the generation lines up with
+    // the conversation instead of arriving piecemeal.
+    const photoReadyAfterMs = scene && !picked ? 8000 : 0;
 
     // Anything older than the recent window is hers to write up. Scheduled
     // rather than awaited so the reply never waits on the extra model call, and
@@ -1281,7 +1433,9 @@ export const sendMessage = action<{ ctx: AnyCtx; args: { text: string } }>({
 
     return {
       reply,
-      photoScene: scene,
+      photoScene: picked ? null : scene,
+      photoUrl: picked?.candidate.url ?? null,
+      photoLabel: picked?.candidate.label ?? null,
       replyMessageId,
       photoReadyAfterMs,
     };

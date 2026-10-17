@@ -162,6 +162,18 @@ export function FeliciaCall({
     [generatePhoto],
   );
 
+  /**
+   * Show a picture she already had in her roll. There is no developing time to
+   * honour: it only has to be decoded before it appears.
+   */
+  const showExisting = useCallback(
+    async (url: string, active: () => boolean) => {
+      await preloadImage(url);
+      if (active()) setPhotoUrl(url);
+    },
+    [],
+  );
+
   useEffect(() => {
     if (!greeting) {
       // She never picked up — show why, and let the call screen stay usable.
@@ -240,7 +252,8 @@ export function FeliciaCall({
         try {
           const result = await sendMessage({ text: heard.text });
           if (!active()) return;
-          if (result.photoScene) void showPhoto(result.photoScene, active);
+          if (result.photoUrl) void showExisting(result.photoUrl, active);
+          else if (result.photoScene) void showPhoto(result.photoScene, active);
           await say(result.replyMessageId, result.reply, active);
         } catch (error) {
           if (!active()) return;
@@ -260,7 +273,7 @@ export function FeliciaCall({
       abortRef.current = null;
       stopBrowserSpeech();
     };
-  }, [greeting, initialNote, sendMessage, say, showPhoto, micSupported]);
+  }, [greeting, initialNote, sendMessage, say, showPhoto, showExisting, micSupported]);
 
   /** Typing is only available when the voice loop is idle (e.g. muted). */
   async function handleTyped(event: React.FormEvent<HTMLFormElement>) {
@@ -277,7 +290,8 @@ export function FeliciaCall({
     try {
       const result = await sendMessage({ text });
       if (!active()) return;
-      if (result.photoScene) void showPhoto(result.photoScene, active);
+      if (result.photoUrl) void showExisting(result.photoUrl, active);
+      else if (result.photoScene) void showPhoto(result.photoScene, active);
       await say(result.replyMessageId, result.reply, active);
     } catch (error) {
       if (!active()) return;

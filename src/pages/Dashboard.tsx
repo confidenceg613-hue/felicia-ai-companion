@@ -85,7 +85,17 @@ type TimelineItem = {
   content: string;
   imageUrl: string | null;
   scene?: string;
+  label?: string | null;
   messageId?: Id<"messages">;
+};
+
+/** A photo as `api.felicia.photos` returns it, with its URL already resolved. */
+type PhotoRow = {
+  _id: unknown;
+  createdAt: number;
+  url?: string | null;
+  scene?: string | null;
+  label?: string | null;
 };
 
 export default function Dashboard() {
@@ -208,8 +218,8 @@ export default function Dashboard() {
       messageId: message._id,
     })),
     ...allPhotos
-      .filter((photo: { _id: unknown; createdAt: number; url?: string | null; scene?: string | null }) => !hiddenPhotoIds.has(String(photo._id)))
-      .map((photo: { _id: unknown; createdAt: number; url?: string | null; scene?: string | null }) => ({
+      .filter((photo: PhotoRow) => !hiddenPhotoIds.has(String(photo._id)))
+      .map((photo: PhotoRow) => ({
         id: `p${photo._id}`,
         kind: "photo" as const,
         role: "felicia" as const,
@@ -217,6 +227,7 @@ export default function Dashboard() {
         content: "",
         imageUrl: photo.url,
         scene: photo.scene,
+        label: photo.label,
       })),
   ].sort((a, b) => a.createdAt - b.createdAt);
 
@@ -325,9 +336,13 @@ export default function Dashboard() {
       if (autoVoiceRef.current) {
         void playMessage(result.replyMessageId, result.reply);
       }
-      if (result.photoScene) {
+      if (result.photoUrl) {
+        // She picked one she already had, so it is on its way the moment her
+        // reply lands. Waiting on the decode is all that is left to do.
+        await preloadImage(result.photoUrl);
+      } else if (result.photoScene) {
         setPendingPhotoScene(result.photoScene);
-        setPhotoScheduledAt(Date.now() + 8000);
+        setPhotoScheduledAt(Date.now() + (result.photoReadyAfterMs || 8000));
       }
     } catch (error) {
       setPending(null);
@@ -579,13 +594,13 @@ export default function Dashboard() {
                       >
                         <img
                           src={item.imageUrl}
-                          alt={item.scene ?? "Felicia sent a photo"}
+                          alt={item.label ?? item.scene ?? "Felicia sent a photo"}
                           loading="lazy"
                           className="block max-h-[26rem] w-full max-w-xs object-cover transition-transform duration-500 group-hover:scale-[1.02]"
                         />
-                        {item.scene && (
+                        {(item.label ?? item.scene) && (
                           <p className="px-3 py-2 text-[11px] leading-snug text-muted-foreground">
-                            {item.scene}
+                            {item.label ?? item.scene}
                           </p>
                         )}
                       </button>
@@ -957,7 +972,9 @@ export default function Dashboard() {
               Ask her for a photo
             </DialogTitle>
             <DialogDescription>
-              She'll tell you where she is, then send the picture.
+              She'll take a new one here. Ask her in the chat instead and she
+              sends the picture from her album that fits what you were talking
+              about.
             </DialogDescription>
           </DialogHeader>
 

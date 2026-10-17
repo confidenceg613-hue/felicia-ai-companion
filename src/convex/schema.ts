@@ -54,10 +54,18 @@ const schema = defineSchema(
         filterFields: ["userId"],
       }),
 
-    // Photos Felicia has generated for a user, stored in Convex file storage.
+    // Every photo Felicia has sent a user: the ones generated for them, and the
+    // ones she picked off her own roll. A generated photo lives in Convex file
+    // storage; a roll photo keeps its public URL, because it is part of the app
+    // rather than something uploaded to this account.
     photos: defineTable({
       userId: v.id("users"),
-      storageId: v.id("_storage"),
+      storageId: v.optional(v.id("_storage")),
+      url: v.optional(v.string()),
+      // Which permanent gallery photo it is, when it came from there.
+      galleryId: v.optional(v.string()),
+      // Caption shown under the photo, when it has one worth showing.
+      label: v.optional(v.string()),
       prompt: v.string(),
       scene: v.string(),
       createdAt: v.number(),

@@ -41,7 +41,7 @@ const STEPS = [
   {
     n: "03",
     title: "Ask and she sends a photo",
-    body: "Ask to see her and she'll say where she is and what she's doing — then the photo of that exact moment arrives.",
+    body: "Ask to see her and she'll say where she is and what she's doing — then she sends the picture from her own album that fits it, or takes a new one.",
   },
 ];
 
@@ -243,8 +243,9 @@ export default function Landing() {
             </h2>
             <p className="mt-3 max-w-2xl text-muted-foreground">
               Ask to see her and Felicia describes where she is, then sends the
-              picture. Not a stock portrait — a photo of the moment you asked
-              about.
+              picture. Not a stock portrait — the photo that belongs to the
+              moment you asked about, out of the album she keeps, and a brand
+              new one whenever nothing in it fits.
             </p>
           </Reveal>
 
@@ -404,7 +405,7 @@ export default function Landing() {
       <footer className="border-t border-border/40 py-10">
         <div className="mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-3 px-6 text-xs text-muted-foreground sm:flex-row">
           <p>Felicia · a companion character. She is fiction, written warmly.</p>
-          <p>Photos generated live with Cloudflare image/voice or Groq chat.</p>
+          <p>Photos from her album, plus new ones generated with Cloudflare image/voice.</p>
         </div>
       </footer>
     </div>
