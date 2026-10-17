@@ -6,16 +6,10 @@
 import { expect, test, describe, beforeEach } from "bun:test";
 
 import { sendMessage } from "../convex/felicia.js";
-import type { ActionBuilder } from "convex/server";
 
-// `sendMessage` is exported as a Convex action. The object Convex builds
-// exposes `invokeAction`, which is the public entry point the runtime calls.
-// We call it with a JSON stringified args block, the same shape the runtime
-// would pass over the wire, and wire the collaborators underneath to our
-// deterministic mocks.
-const sendMessageApi = sendMessage as
-  | { invokeAction: (requestId: string, argsStr: string) => Promise<unknown> }
-  | ActionBuilder<unknown, "public", Record<string, unknown>, { text: string }>;
+const sendMessageApi = sendMessage as unknown as {
+  invokeAction: (requestId: string, argsStr: string) => Promise<unknown>;
+};
 
 interface MockQueryApi {
   withIndex: (
@@ -54,11 +48,29 @@ interface MockCtx {
   scheduler: { runAfter: (delayMs: number, name: string, args: Record<string, unknown>) => unknown };
 }
 
+interface MockViews {
+  notesFor(userId: string): Promise<{ appearance: string; mood: string }>;
+  topMemories(userId: string): Promise<unknown[]>;
+  conversationStart(userId: string): Promise<number>;
+  recentMessages(userId: string, limit: number): Promise<unknown[]>;
+  recallMessages(userId: string, options: Record<string, unknown>): Promise<unknown[]>;
+  sentPhotos(userId: string): Promise<unknown[]>;
+}
+
+interface StoredMessage {
+  _id: string;
+  role: string;
+  content: string;
+  createdAt: number;
+}
+
+interface CollabBag {
+  ctx: MockCtx;
+  messages: StoredMessage[];
+  photos: Array<Record<string, unknown>>;
+}
+
 function makePlainCtx(): MockCtx {
-  // Convex's action runtime deep-copies `ctx` via structured clone, but
-  // Bun's structured-clone path rejects function-shaped values. We never call
-  // structuredClone on our ctx at all; instead we build it fresh each test
-  // from plain only-data and wire the function slots directly after.
   return {
     auth: { getUserIdentity: () => Promise.resolve({ subject: "user-one|session" }) },
     db: {
@@ -77,7 +89,7 @@ function makePlainCtx(): MockCtx {
           if (entry) Object.assign(entry.row, patch);
         };
       })(),
-      query: (() => ({ withIndex: () => ({ order: () => ({ take: () => [] }) }) }))(),
+      query: (_: string) => ({ withIndex: () => ({ order: () => ({ take: () => [] }) }) }),
       delete: (() => {
         const store: Array<{ _id: string }> = [];
         return function (id: string) {
@@ -94,21 +106,49 @@ function makePlainCtx(): MockCtx {
   };
 }
 
-type CollabBag = {
-  ctx: MockCtx;
-  messages: Array<{ role: string; content: string; _id: string }>;
-  photos: Array<Record<string, unknown>>;
-};
+function makeMockViews(bag: CollabBag): MockViews {
+  return {
+    async notesFor() {
+      return { appearance: "soft natural light, no makeup, hair loose", mood: "playful" };
+    },
+    async topMemories() {
+      return [];
+    },
+    async conversationStart() {
+      return 1700000000000;
+    },
+    async recentMessages(_, limit) {
+      return bag.messages
+        .slice()
+        .reverse()
+        .slice(0, limit)
+        .map((m) => ({
+          _id: m._id,
+          role: m.role,
+          content: m.content,
+          createdAt: Date.parse("2026-01-01"),
+          imageStorageId: null,
+        }));
+    },
+    async recallMessages() {
+      return [];
+    },
+    async sentPhotos() {
+      return bag.photos.slice(-24);
+    },
+  };
+}
 
 function withCollabs(): CollabBag {
   const ctx = makePlainCtx();
-  const messages: Array<{ role: string; content: string; _id: string }> = [];
+  const messages: StoredMessage[] = [];
   const photos: Array<Record<string, unknown>> = [];
+  const views = makeMockViews({ ctx, messages, photos });
 
   const insert: MockDb["insert"] = (table, row) => {
     const _id = `${table}:${messages.length + photos.length + 1}`;
     if (table === "messages") {
-      messages.push({ ...row, _id } as { role: string; content: string; _id: string });
+      messages.push({ ...row, _id } as StoredMessage);
     } else if (table === "photos") {
       photos.push({ ...row, _id });
     }
@@ -125,54 +165,70 @@ function withCollabs(): CollabBag {
 
   const del: MockDb["delete"] = (id) => {
     for (const list of [messages, photos]) {
-      const idx = list.findIndex((entry) => (entry as { _id: string })._id === id);
+      const idx = list.findIndex((entry) => entry._id === id);
       if (idx >= 0) list.splice(idx, 1);
     }
   };
 
-  const query: MockDb["query"] = (_table) => ({
-    withIndex: () => ({
-      order: (dir: "asc" | "desc") => ({
-        take: (n: number) => {
-          const ordered = dir === "asc" ? [...messages] : [...messages].reverse();
-          return ordered.slice(-n) as unknown[];
-        },
+  ctx.db = {
+    insert,
+    patch,
+    query: (_table: string) => ({
+      withIndex: () => ({
+        order: (dir: "asc" | "desc") => ({
+          take: (n: number) => {
+            const ordered = dir === "asc" ? [...messages] : [...messages].reverse();
+            return ordered.slice(-n) as unknown[];
+          },
+        }),
       }),
     }),
-  });
+    delete: del,
+  } as MockDb;
 
-  ctx.db = { insert, patch, query, delete: del } as MockDb;
+  function recentMessages(ctx: MockCtx, name: string, args: Record<string, unknown>, userId: string, limit: number) {
+    if (name === "internal.felicia.notesFor") {
+      return views.notesFor(userId);
+    }
+    if (name === "internal.felicia.topMemories") {
+      return views.topMemories(userId);
+    }
+    if (name === "internal.felicia.conversationStart") {
+      return views.conversationStart(userId);
+    }
+    if (name === "internal.felicia.recentMessages") {
+      return views.recentMessages(userId, args.limit ?? 50);
+    }
+    if (name === "internal.felicia.recallMessages") {
+      return views.recallMessages(userId, args);
+    }
+    if (name === "internal.felicia.sentPhotos") {
+      return views.sentPhotos(userId);
+    }
+    throw new Error(`unmocked runQuery: ${name}`);
+  }
 
   ctx.runQuery = async (name: string, args: Record<string, unknown>) => {
     if (name === "internal.felicia.notesFor") {
-      return { appearance: "soft natural light, no makeup, hair loose", mood: "playful" };
+      return views.notesFor("user-one");
     }
     if (name === "internal.felicia.topMemories") {
-      return [];
+      return views.topMemories("user-one");
     }
     if (name === "internal.felicia.latestChapters") {
-      return [];
+      return views.latestChapters("user-one");
     }
     if (name === "internal.felicia.conversationStart") {
-      return 1700000000000;
+      return views.conversationStart("user-one");
     }
     if (name === "internal.felicia.recentMessages") {
-      return [...messages]
-        .reverse()
-        .slice(0, 50)
-        .map((m) => ({
-          _id: m._id,
-          role: m.role,
-          content: m.content,
-          createdAt: Date.parse("2026-01-01"),
-          imageStorageId: null,
-        }));
+      return recentMessages(ctx, name, args, "user-one", args.limit ?? 50);
     }
     if (name === "internal.felicia.recallMessages") {
-      return [];
+      return views.recallMessages("user-one", args);
     }
     if (name === "internal.felicia.sentPhotos") {
-      return photos.slice(-24);
+      return views.sentPhotos("user-one");
     }
     throw new Error(`unmocked runQuery: ${name}`);
   };
@@ -213,7 +269,8 @@ function withCollabs(): CollabBag {
 
   ctx.runAction = async (name: string, args: Record<string, unknown>) => {
     if (name === "cloudflare.chat") {
-      const messages_ = ((args as { messages?: Array<{ role: string; content: string }> }).messages) ?? [];
+      const messages_ = ((args as { messages?: Array<{ role: string; content: string }> })
+        .messages) ?? [];
       const lastUser = [...messages_]
         .reverse()
         .find((m) => m.role === "user");
@@ -229,6 +286,22 @@ function withCollabs(): CollabBag {
   return { ctx, messages, photos };
 }
 
+async function storedMessages(bag: CollabBag) {
+  return bag.ctx.db.query("messages")
+    .withIndex()
+    .order("asc")
+    .take(10)
+    .filter((m): m is StoredMessage => Boolean(m));
+}
+
+async function storedPhotos(bag: CollabBag) {
+  return bag.ctx.db.query("photos")
+    .withIndex()
+    .order("asc")
+    .take(10)
+    .filter((m): m is { url?: string | null; galleryId?: string | null } => Boolean(m));
+}
+
 describe("sendMessage", () => {
   let bag: CollabBag;
 
@@ -237,7 +310,7 @@ describe("sendMessage", () => {
   });
 
   test("persists both sides of the exchange and returns a usable reply", async () => {
-    const send = (sendMessageApi as { invokeAction: (requestId: string, argsStr: string) => Promise<unknown> }).invokeAction;
+    const send = sendMessageApi.invokeAction;
     const raw = await send(
       "req:test",
       JSON.stringify({ text: "I'm in the kitchen cooking jollof right now" }),
@@ -256,18 +329,14 @@ describe("sendMessage", () => {
     expect(result.photoReadyAfterMs).toBeGreaterThan(0);
     expect(result.replyMessageId).toMatch(/^messages:/);
 
-    const inOrder = (bag.ctx.db.query("messages").withIndex().order("asc").take(10) as Array<{
-      role: string;
-      content: string;
-    }>).filter(Boolean);
-
+    const inOrder = (await storedMessages(bag)).sort((a, b) => a._id.localeCompare(b._id));
     expect(inOrder.map((m) => m.role)).toEqual(["user", "felicia"]);
     expect(inOrder[0].content).toBe("I'm in the kitchen cooking jollof right now");
     expect(inOrder[1].content).toContain("kitchen");
   });
 
   test("sends an existing gallery photo when one fits the conversation", async () => {
-    const send = (sendMessageApi as { invokeAction: (requestId: string, argsStr: string) => Promise<unknown> }).invokeAction;
+    const send = sendMessageApi.invokeAction;
     const raw = await send(
       "req:test",
       JSON.stringify({ text: "show me something from the kitchen" }),
@@ -285,20 +354,16 @@ describe("sendMessage", () => {
     expect(result.photoUrl).toMatch(/^https?:\/\//);
     expect(result.photoReadyAfterMs).toBe(0);
 
-    const savedPhotos = (bag.ctx.db.query("photos").withIndex().order("asc").take(10) as Array<{
-      url?: string;
-      galleryId?: string;
-    }>).filter(Boolean);
-
+    const savedPhotos = await storedPhotos(bag);
     expect(savedPhotos).toHaveLength(1);
     expect(savedPhotos[0].url).toBe(result.photoUrl);
     expect(savedPhotos[0].galleryId).toBeTruthy();
   });
 
   test("rejects an empty message", async () => {
-    const send = (sendMessageApi as { invokeAction: (requestId: string, argsStr: string) => Promise<unknown> }).invokeAction;
-    await expect(send("req:test", JSON.stringify({ text: "   " }))).rejects.toThrow(/write something/i);
-  });  });
+    const send = sendMessageApi.invokeAction;
+    await expect(
+      send("req:test", JSON.stringify({ text: "   " })),
+    ).rejects.toThrow(/write something/i);
+  });
 });
-
-export { sendMessageApi as __sendMessageHarnessSentinel };
