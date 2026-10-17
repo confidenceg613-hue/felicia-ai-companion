@@ -26,7 +26,7 @@ export type GalleryPhoto = {
   tags: readonly string[];
 };
 
-export const FELICIA_GALLERY: readonly GalleryPhoto[] = [
+export const FELICIA_GALLERY = [
   {
     id: "portrait-natural-light",
     url: "https://i.postimg.cc/HVLQhtCj/1113447a-e7a9-41f7-b426-cc81e34f04e1.png",
@@ -222,4 +222,23 @@ export const FELICIA_GALLERY: readonly GalleryPhoto[] = [
       "quiet",
     ],
   },
-];
+] as const satisfies readonly GalleryPhoto[];
+
+/** The id of one of her photos, checked at compile time. */
+export type GalleryPhotoId = (typeof FELICIA_GALLERY)[number]["id"];
+
+/**
+ * One of her photos by id.
+ *
+ * Pages that are built around a particular picture — the portrait on the front
+ * page, the avatar in the chat — name it here rather than hardcoding a URL, so
+ * swapping the picture is a one-line change and a mistyped id is a type error
+ * instead of a broken image.
+ */
+export function galleryPhoto(id: GalleryPhotoId): GalleryPhoto {
+  const photo = FELICIA_GALLERY.find((candidate) => candidate.id === id);
+  if (!photo) {
+    throw new Error(`No such photo in her gallery: ${id}`);
+  }
+  return photo;
+}

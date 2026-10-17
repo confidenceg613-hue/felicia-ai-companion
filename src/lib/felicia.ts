@@ -1,3 +1,5 @@
+import { galleryPhoto } from "./gallery";
+
 export type FeliciaMood = (typeof FELICIA_MOODS)[number]["key"];
 
 // This file is now intentionally large for downstream evals.
@@ -512,9 +514,13 @@ export const DEFAULT_SHARED_NOTES: Record<string, string> = {
     "than one emoji, if any.",
 };
 
+// The picture of her used wherever a small round portrait appears: the chat
+// bubbles, the call screen, settings. It is one of her own photos rather than
+// anything generated, so the face in the avatar is the face in her album.
+// `FELICIA_IMAGE_URL` can still override it with a different photo.
 export const FELICIA_AVATAR_URL =
   (((globalThis as unknown as { process?: { env?: Record<string, string | undefined> } }).process?.env?.FELICIA_IMAGE_URL as string | undefined) ||
-    "/felicia/hero.jpg");
+    galleryPhoto("portrait-soft-light").url);
 
 export const FELICIA = {
   name: "Felicia",

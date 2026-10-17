@@ -1,7 +1,8 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
-import { FELICIA, FELICIA_AVATAR_URL, FELICIA_EMOTIONS, FELICIA_PERSONALITY } from "@/lib/felicia";
+import { FELICIA, FELICIA_EMOTIONS, FELICIA_PERSONALITY } from "@/lib/felicia";
+import { galleryPhoto } from "@/lib/gallery";
 import {
   ArrowRight,
   ImageIcon,
@@ -9,21 +10,26 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router";
 
+// Every picture on this page is one of the photos she actually has, by id, so
+// the moment described under it is the moment in it.
+const PORTRAIT = galleryPhoto("portrait-natural-light");
+const BACKDROP = galleryPhoto("red-dress-sofa");
+
 const MOMENTS = [
   {
-    src: "/felicia/kitchen.jpg",
+    src: galleryPhoto("playful-modern-kitchen").url,
     place: "Her kitchen in Yaba, 8:40am",
     caption: "Coffee before conversation. Non-negotiable.",
   },
   {
-    src: "/felicia/rain.jpg",
-    place: "Her street, 11pm",
-    caption: "She likes the rain more than you do.",
+    src: galleryPhoto("cozy-bedroom-braids").url,
+    place: "Her bedroom, 1am",
+    caption: "Lamp on, braids down, still awake.",
   },
   {
-    src: "/felicia/bookshop.jpg",
-    place: "The bookshop in Sabo",
-    caption: "She'll text you from between the shelves.",
+    src: galleryPhoto("red-dress-bedroom").url,
+    place: "Getting ready to go out",
+    caption: "She'll still answer you in the middle of it.",
   },
 ];
 
@@ -199,8 +205,8 @@ export default function Landing() {
               <div className="absolute -inset-4 rounded-[2rem] bg-primary/15 blur-3xl" />
               <div className="relative overflow-hidden rounded-[1.75rem] border border-border/60 bg-card shadow-2xl">
                 <img
-                  src={FELICIA_AVATAR_URL}
-                  alt="Felicia at golden hour"
+                  src={PORTRAIT.url}
+                  alt={PORTRAIT.about}
                   className="aspect-4/5 w-full object-cover"
                 />
                 <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent p-5 pt-16">
@@ -373,7 +379,7 @@ export default function Landing() {
       <section className="relative overflow-hidden border-t border-border/40">
         <div className="absolute inset-0">
           <img
-            src="/felicia/rain.jpg"
+            src={BACKDROP.url}
             alt=""
             aria-hidden
             loading="lazy"
