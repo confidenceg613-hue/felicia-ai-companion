@@ -12,12 +12,18 @@ import {
   isCloudflareConfigured,
   isGroqConfigured,
 } from "./config";
-import { cloudflare } from "./cloudflare";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { paginationOptsValidator } from "convex/server";
-import { isGroqConfigured, groqApiKey } from "./config";
-import { groqVoiceModel } from "./config";
+import {
+  cloudflareChatAction,
+  cloudflareGenerateImageAction,
+  cloudflareSpeakAction,
+} from "./cloudflare";
+
+// Cloudflare Workers AI actions are registered by the Cloudflare Workers app
+// (see the Cloudflare Workers deploy pipeline). These action constants are the
+// names Convex uses at runtime to call them via ctx.runAction(...).
 import {
   action,
   internalAction,
@@ -1372,7 +1378,8 @@ export const sendMessage = action<{ ctx: AnyCtx; args: { text: string } }>({
       limit: FLASHBACK_LIMIT,
     });
 
-    const raw = await ctx.runAction(cloudflare.chat, {
+    const raw = await ctx.runAction(cloudflareChatAction, {
+
       messages: [
         {
           role: "system",
@@ -1464,7 +1471,8 @@ export const debugSay = internalAction({
       userId,
     });
 
-    const raw = await ctx.runAction(cloudflare.chat, {
+    const raw = await ctx.runAction(cloudflareChatAction, {
+
       messages: [
         {
           role: "system",
@@ -1534,7 +1542,8 @@ export const generatePhoto = action<{ ctx: AnyCtx; args: { scene?: string } }>({
 
     for (const prompt of candidates) {
       try {
-        const attempt = await ctx.runAction(cloudflare.generateImage, {
+        const attempt = await ctx.runAction(cloudflareGenerateImageAction, {
+
           prompt,
         });
         success = { prompt, storageId: attempt.storageId };
@@ -1614,7 +1623,8 @@ export const speakMessage = action<{ ctx: AnyCtx; args: { messageId: Id<"message
       return { url: await ctx.storage.getUrl(info.audioStorageId) };
     }
 
-    const audio = await ctx.runAction(cloudflare.speak, {
+    const audio = await ctx.runAction(cloudflareSpeakAction, {
+
       text: info.content,
     });
     await ctx.runMutation(internal.felicia.attachAudio, {
@@ -1656,7 +1666,8 @@ export const startCall = action<{ ctx: AnyCtx; args: {} }>({
       userId,
     });
 
-    const raw = await ctx.runAction(cloudflare.chat, {
+    const raw = await ctx.runAction(cloudflareChatAction, {
+
       messages: [
         {
           role: "system",
@@ -1746,7 +1757,8 @@ export const sendUserPhoto = action<{ ctx: AnyCtx; args: { data: Uint8Array; mim
       userId,
     });
 
-    const raw = await ctx.runAction(cloudflare.chat, {
+    const raw = await ctx.runAction(cloudflareChatAction, {
+
       messages: [
         {
           role: "system",
@@ -1874,7 +1886,8 @@ export const captureMemories = action<{ ctx: AnyCtx; args: {} }>({
       .filter((line: string) => !line.endsWith(": [...]"))
       .join("\n");
 
-    const raw = await ctx.runAction(cloudflare.chat, {
+    const raw = await ctx.runAction(cloudflareChatAction, {
+
       messages: [
         {
           role: "system",
@@ -2004,7 +2017,8 @@ export const writeChapter = internalAction({
       .join("\n")
       .slice(0, CHAPTER_TRANSCRIPT_CHARS);
 
-    const raw = await ctx.runAction(cloudflare.chat, {
+    const raw = await ctx.runAction(cloudflareChatAction, {
+
       messages: [
         {
           role: "system",
