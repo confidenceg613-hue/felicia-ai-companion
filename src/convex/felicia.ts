@@ -15,15 +15,11 @@ import {
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { paginationOptsValidator } from "convex/server";
-import {
-  cloudflareChatAction,
-  cloudflareGenerateImageAction,
-  cloudflareSpeakAction,
-} from "./cloudflare";
 
-// Cloudflare Workers AI actions are registered by the Cloudflare Workers app
-// (see the Cloudflare Workers deploy pipeline). These action constants are the
-// names Convex uses at runtime to call them via ctx.runAction(...).
+// Her words come from Groq and her photos from Cloudflare Workers AI with the
+// AI Horde as a fallback. Both are real Convex actions (`groq.ts`, `images.ts`)
+// rather than the placeholder action names this file used to pass to
+// ctx.runAction, which is what made her chat look connected but never reply.
 import {
   action,
   internalAction,
@@ -50,12 +46,26 @@ const MAX_MESSAGE_LENGTH = 2000;
 /**
  * How much recent conversation history Felicia can see when replying.
  *
- * Raised from 16 to 50 so she has a real working window into today's chat and
- * the last few exchanges, instead of responding as if only the last couple of
- * lines exist. The conversation itself is still stored in full; this limit only
- * constrains the context window we send to the model, not what is kept on disk.
+ * Twenty-four lines is roughly a full evening of texting — a real working
+ * window rather than the last couple of exchanges — and the conversation itself
+ * is stored in full either way; this only bounds what is sent to the model.
+ *
+ * The bound is deliberately tight because every reply pays for it. Groq's free
+ * tier allows 200,000 tokens a day for the whole project, so pasting fifty
+ * messages plus her persona prompt into each request is what exhausts the day's
+ * budget after a handful of exchanges.
  */
-const HISTORY_LIMIT = 50;
+const HISTORY_LIMIT = 24;
+
+/** How much of any single older line is sent back to the model. */
+const HISTORY_MESSAGE_CHARS = 400;
+
+/** Long pastes are trimmed rather than dropped, so the gist still lands. */
+function clip(text: string): string {
+  return text.length > HISTORY_MESSAGE_CHARS
+    ? `${text.slice(0, HISTORY_MESSAGE_CHARS)}…`
+    : text;
+}
 
 /** How many older lines a single reply may pull back out of the archive. */
 const FLASHBACK_LIMIT = 14;
@@ -1378,8 +1388,7 @@ export const sendMessage = action<{ ctx: AnyCtx; args: { text: string } }>({
       limit: FLASHBACK_LIMIT,
     });
 
-    const raw = await ctx.runAction(cloudflareChatAction, {
-
+    const raw = await ctx.runAction(internal.groq.chat, {
       messages: [
         {
           role: "system",
@@ -1393,10 +1402,10 @@ export const sendMessage = action<{ ctx: AnyCtx; args: { text: string } }>({
           role: message.role === "user" ? "user" : "assistant",
           // A photo the user shared carries no text, so stand it in with a
           // marker the model can respond to instead of an empty turn.
-
-          content:
-            message.content ||
-            (message.imageStorageId ? "[they sent a photo]" : "[...]"),
+          content: clip(
+            (message.content as string) ||
+              (message.imageStorageId ? "[they sent a photo]" : "[...]"),
+          ),
         })),
       ],
     });
@@ -1451,49 +1460,6 @@ export const sendMessage = action<{ ctx: AnyCtx; args: { text: string } }>({
   },
 });
 
-/** TEMPORARY verification hook — removed before this change is finished. */
-export const debugSay = internalAction({
-  args: { userId: v.id("users"), text: v.string() },
-  handler: async (ctx: AnyCtx, { userId, text }: AnyArgs) => {
-    const history = await ctx.runQuery(internal.felicia.recentMessages, {
-      userId,
-      limit: HISTORY_LIMIT,
-    });
-    const notes = await ctx.runQuery(internal.felicia.notesFor, { userId });
-    const memories = await ctx.runQuery(internal.felicia.topMemories, {
-      userId,
-    });
-    const chapters = await ctx.runQuery(internal.felicia.latestChapters, {
-      userId,
-      limit: CHAPTER_LIMIT,
-    });
-    const startedAt = await ctx.runQuery(internal.felicia.conversationStart, {
-      userId,
-    });
-
-    const raw = await ctx.runAction(cloudflareChatAction, {
-
-      messages: [
-        {
-          role: "system",
-          content: buildSystemPrompt(notes, memories, "playful", {
-            chapters,
-            startedAt,
-          }),
-        },
-        ...history.map((message: { role: unknown; content: unknown }) => ({
-          role: message.role === "user" ? "user" : "assistant",
-          content: (message.content as string) || "[...]",
-        })),
-        { role: "user", content: text },
-      ],
-    });
-
-    const { reply, scene } = extractScene(raw, text);
-    return { reply, scene, historyLength: history.length };
-  },
-});
-
 // ---------------------------------------------------------------------------
 // Photo backend arrangements
 // ---------------------------------------------------------------------------
@@ -1542,8 +1508,7 @@ export const generatePhoto = action<{ ctx: AnyCtx; args: { scene?: string } }>({
 
     for (const prompt of candidates) {
       try {
-        const attempt = await ctx.runAction(cloudflareGenerateImageAction, {
-
+        const attempt = await ctx.runAction(internal.images.generate, {
           prompt,
         });
         success = { prompt, storageId: attempt.storageId };
@@ -1623,16 +1588,20 @@ export const speakMessage = action<{ ctx: AnyCtx; args: { messageId: Id<"message
       return { url: await ctx.storage.getUrl(info.audioStorageId) };
     }
 
-    const audio = await ctx.runAction(cloudflareSpeakAction, {
-
+    // Her voice is rendered by Groq. When it can't be — no key, or the audio
+    // endpoint refusing — this reports no url and the client reads the line with
+    // the browser's own voice, which is better than a silent reply.
+    const audioStorageId = await ctx.runAction(internal.groq.speak, {
       text: info.content,
     });
+    if (!audioStorageId) return { url: null };
+
     await ctx.runMutation(internal.felicia.attachAudio, {
       messageId,
-      audioStorageId: audio.storageId,
+      audioStorageId,
     });
 
-    return { url: await ctx.storage.getUrl(audio.storageId) };
+    return { url: await ctx.storage.getUrl(audioStorageId) };
   },
 });
 
@@ -1666,8 +1635,7 @@ export const startCall = action<{ ctx: AnyCtx; args: {} }>({
       userId,
     });
 
-    const raw = await ctx.runAction(cloudflareChatAction, {
-
+    const raw = await ctx.runAction(internal.groq.chat, {
       messages: [
         {
           role: "system",
@@ -1757,8 +1725,7 @@ export const sendUserPhoto = action<{ ctx: AnyCtx; args: { data: Uint8Array; mim
       userId,
     });
 
-    const raw = await ctx.runAction(cloudflareChatAction, {
-
+    const raw = await ctx.runAction(internal.groq.chat, {
       messages: [
         {
           role: "system",
@@ -1886,8 +1853,7 @@ export const captureMemories = action<{ ctx: AnyCtx; args: {} }>({
       .filter((line: string) => !line.endsWith(": [...]"))
       .join("\n");
 
-    const raw = await ctx.runAction(cloudflareChatAction, {
-
+    const raw = await ctx.runAction(internal.groq.chat, {
       messages: [
         {
           role: "system",
@@ -2017,8 +1983,7 @@ export const writeChapter = internalAction({
       .join("\n")
       .slice(0, CHAPTER_TRANSCRIPT_CHARS);
 
-    const raw = await ctx.runAction(cloudflareChatAction, {
-
+    const raw = await ctx.runAction(internal.groq.chat, {
       messages: [
         {
           role: "system",

@@ -19,7 +19,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useAuth } from "@/hooks/use-auth";
-import { FELICIA, FELICIA_AVATAR_URL } from "@/lib/felicia";
+import { useFeliciaAvatar } from "@/hooks/use-felicia-avatar";
+import { FELICIA } from "@/lib/felicia";
 import { DEVELOP_MS, preloadImage } from "@/lib/photo";
 import { cn } from "@/lib/utils";
 import { beginVoiceNote, playAudioUrl, speakWithBrowser } from "@/lib/voice";
@@ -99,6 +100,7 @@ type PhotoRow = {
 export default function Dashboard() {
   const { signOut } = useAuth();
   const navigate = useNavigate();
+  const avatarUrl = useFeliciaAvatar();
 
   const messagePages = usePaginatedQuery(
     api.felicia.messagesPage,
@@ -423,22 +425,22 @@ export default function Dashboard() {
     <>
       {/* feed */}
       <div className="flex min-h-0 w-full flex-1 flex-col px-4 pt-4 sm:px-6">
-        <div className="glass sticky top-0 z-20 mx-auto flex w-full max-w-5xl items-center justify-between gap-3 rounded-3xl px-4 py-3">
+        <div className="glass sticky top-0 z-20 mx-auto flex w-full max-w-5xl items-center justify-between gap-3 rounded-2xl px-3 py-2.5">
           <div className="flex min-w-0 items-center gap-3">
-            <span className="aura relative shrink-0 rounded-full">
-              <span className="absolute -inset-0.5 rounded-full bg-gradient-to-br from-primary/80 via-primary/40 to-fuchsia-500/50 blur-[2px]" />
+            <span className="relative shrink-0">
+              <span className="absolute -inset-[3px] rounded-full bg-gradient-to-br from-primary/70 via-primary/25 to-transparent" />
               <img
-                src={FELICIA_AVATAR_URL}
+                src={avatarUrl}
                 alt={FELICIA.name}
-                className="relative size-11 rounded-full border border-border/40 object-cover"
+                className="relative size-10 rounded-full border border-border/40 object-cover"
               />
-              <span className="absolute right-0 bottom-0 size-3 rounded-full border-2 border-background bg-emerald-400" />
+              <span className="absolute right-0 bottom-0 size-2.5 rounded-full border-2 border-background bg-emerald-400" />
             </span>
             <div className="min-w-0">
-              <h1 className="truncate font-display text-lg font-semibold tracking-tight">
+              <h1 className="truncate font-display text-[17px] font-semibold tracking-tight">
                 {FELICIA.fullName}
               </h1>
-              <p className="truncate text-xs text-muted-foreground">
+              <p className="truncate text-[11px] text-muted-foreground">
                 {FELICIA.city} · here with you
               </p>
             </div>
@@ -592,7 +594,7 @@ export default function Dashboard() {
                       className="flex justify-start gap-3"
                     >
                       <img
-                        src={FELICIA_AVATAR_URL}
+                        src={avatarUrl}
                         alt=""
                         className="mt-1 size-7 shrink-0 rounded-full object-cover"
                       />
@@ -630,9 +632,9 @@ export default function Dashboard() {
                     )}
                   >
                     {!isUser && (
-                      <span className="mt-1 shrink-0 self-start rounded-full bg-gradient-to-br from-primary/70 to-fuchsia-500/50 p-[1.5px]">
+                      <span className="mt-1 shrink-0 self-start rounded-full bg-gradient-to-br from-primary/70 to-primary/20 p-[1.5px]">
                         <img
-                          src={FELICIA_AVATAR_URL}
+                          src={avatarUrl}
                           alt=""
                           className="size-7 rounded-full object-cover"
                         />
@@ -716,7 +718,7 @@ export default function Dashboard() {
               {thinking && (
                 <div className="flex justify-start gap-3">
                   <img
-                    src={FELICIA_AVATAR_URL}
+                    src={avatarUrl}
                     alt=""
                     className="size-7 shrink-0 rounded-full object-cover"
                   />
@@ -739,7 +741,7 @@ export default function Dashboard() {
               {developing && (
                 <div className="flex justify-start gap-3">
                   <img
-                    src={FELICIA_AVATAR_URL}
+                    src={avatarUrl}
                     alt=""
                     className="size-7 shrink-0 rounded-full object-cover"
                   />
@@ -765,15 +767,15 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* composer */}
-          <div className="glass mx-auto w-full max-w-5xl shrink-0 rounded-3xl px-4 py-3">
+          {/* composer — deliberately compact: one slim pill, nothing more. */}
+          <div className="glass mx-auto w-full max-w-2xl shrink-0 rounded-2xl px-2.5 py-2">
             <form
               onSubmit={(event) => {
                 event.preventDefault();
                 void handleSend(draft);
               }}
             >
-              <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
+              <div className="flex w-full flex-col gap-1.5">
                 <input
                   ref={fileRef}
                   type="file"
@@ -783,7 +785,7 @@ export default function Dashboard() {
                 />
 
                 {recording && (
-                  <div className="flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-3 py-2 text-xs text-primary">
+                  <div className="flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-3 py-1.5 text-[11px] text-primary">
                     <span className="flex size-2">
                       <span className="absolute inline-flex size-2 animate-ping rounded-full bg-primary opacity-75" />
                       <span className="relative inline-flex size-2 rounded-full bg-primary" />
@@ -797,17 +799,17 @@ export default function Dashboard() {
                   </div>
                 )}
 
-                <div className="surface flex items-end gap-1 rounded-full py-1.5 pl-2 pr-1.5 transition-shadow focus-within:shadow-[0_0_0_3px_oklch(0.55_0.15_300/18%)]">
+                <div className="surface flex items-end gap-0.5 rounded-full py-1 pl-1 pr-1 transition-shadow focus-within:shadow-[0_0_0_3px_oklch(0.55_0.15_300/18%)]">
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="shrink-0 rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                    className="size-8 shrink-0 rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary"
                     title="Send her a photo"
                     disabled={composing}
                     onClick={() => fileRef.current?.click()}
                   >
-                    <Paperclip className="size-4" />
+                    <Paperclip className="size-3.5" />
                   </Button>
 
                   <Textarea
@@ -822,14 +824,14 @@ export default function Dashboard() {
                     placeholder="Message Felicia…"
                     rows={1}
                     disabled={composing}
-                    className="max-h-32 min-h-11 flex-1 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
+                    className="max-h-28 min-h-8 flex-1 resize-none border-0 bg-transparent py-1.5 text-sm shadow-none focus-visible:ring-0"
                   />
 
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="shrink-0 rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                    className="size-8 shrink-0 rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary"
                     title="Ask for a selfie"
                     disabled={composing || developing || !photosReady}
                     onClick={() =>
@@ -838,7 +840,7 @@ export default function Dashboard() {
                       )
                     }
                   >
-                    <Camera className="size-4" />
+                    <Camera className="size-3.5" />
                   </Button>
 
                   <Button
@@ -846,7 +848,7 @@ export default function Dashboard() {
                     size="icon"
                     variant={recording ? "default" : "ghost"}
                     className={cn(
-                      "shrink-0 touch-none select-none rounded-full",
+                      "size-8 shrink-0 touch-none select-none rounded-full",
                       recording
                         ? "lift-primary text-primary-foreground"
                         : "text-muted-foreground hover:bg-primary/10 hover:text-primary",
@@ -863,16 +865,16 @@ export default function Dashboard() {
                     onLostPointerCapture={() => void stopRecording()}
                   >
                     {recording ? (
-                      <Mic className="size-4 animate-pulse" />
+                      <Mic className="size-3.5 animate-pulse" />
                     ) : (
-                      <Mic className="size-4" />
+                      <Mic className="size-3.5" />
                     )}
                   </Button>
 
                   <Button
                     type="submit"
                     size="icon"
-                    className="lift-primary size-11 shrink-0 rounded-full transition-transform hover:scale-105 disabled:opacity-40 disabled:hover:scale-100"
+                    className="lift-primary size-8 shrink-0 rounded-full transition-transform hover:scale-105 disabled:opacity-40 disabled:hover:scale-100"
                     disabled={composing || !draft.trim()}
                   >
                     {thinking ? (
@@ -883,8 +885,8 @@ export default function Dashboard() {
                   </Button>
                 </div>
 
-                <p className="text-center text-[11px] text-muted-foreground">
-                  Type or voice message · hold the mic to record · tap her photo in chat
+                <p className="text-center text-[10px] text-muted-foreground/70">
+                  Type or hold the mic to record
                 </p>
               </div>
             </form>
@@ -904,7 +906,7 @@ export default function Dashboard() {
 
           <div className="mt-1 flex items-start gap-4">
             <img
-              src={FELICIA_AVATAR_URL}
+              src={avatarUrl}
               alt={FELICIA.name}
               className="size-20 shrink-0 rounded-3xl border border-border/40 object-cover shadow-lg"
             />

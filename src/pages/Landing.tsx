@@ -205,7 +205,7 @@ export default function Landing() {
               <div className="glow-warm absolute -inset-4 rounded-[2.5rem] blur-3xl" />
               <div className="relative overflow-hidden rounded-[1.75rem] border border-border/60 bg-card shadow-2xl">
                 <img
-                  src={PORTRAIT.url}
+                  src={PORTRAIT.fullUrl}
                   alt={PORTRAIT.about}
                   className="aspect-4/5 w-full object-cover"
                 />
@@ -379,7 +379,7 @@ export default function Landing() {
       <section className="relative overflow-hidden border-t border-border/40">
         <div className="absolute inset-0">
           <img
-            src={BACKDROP.url}
+            src={BACKDROP.fullUrl}
             alt=""
             aria-hidden
             loading="lazy"

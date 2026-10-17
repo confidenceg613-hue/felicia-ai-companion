@@ -520,7 +520,7 @@ export const DEFAULT_SHARED_NOTES: Record<string, string> = {
 // `FELICIA_IMAGE_URL` can still override it with a different photo.
 export const FELICIA_AVATAR_URL =
   (((globalThis as unknown as { process?: { env?: Record<string, string | undefined> } }).process?.env?.FELICIA_IMAGE_URL as string | undefined) ||
-    galleryPhoto("portrait-soft-light").url);
+    galleryPhoto("portrait-soft-light").fullUrl);
 
 export const FELICIA = {
   name: "Felicia",

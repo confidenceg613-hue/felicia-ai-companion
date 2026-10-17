@@ -3,7 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
-import { FELICIA, FELICIA_AVATAR_URL } from "@/lib/felicia";
+import { useFeliciaAvatar } from "@/hooks/use-felicia-avatar";
+import { FELICIA } from "@/lib/felicia";
 import { DEVELOP_MS, preloadImage } from "@/lib/photo";
 import {
   hasSpeechRecognition,
@@ -75,6 +76,7 @@ export function FeliciaCall({
   const sendMessage = useAction(api.felicia.sendMessage);
   const generatePhoto = useAction(api.felicia.generatePhoto);
   const speakMessage = useAction(api.felicia.speakMessage);
+  const avatarUrl = useFeliciaAvatar();
 
   const [status, setStatus] = useState<CallStatus>("connecting");
   const [interim, setInterim] = useState("");
@@ -316,7 +318,7 @@ export function FeliciaCall({
     <div className="fixed inset-0 z-50 flex flex-col bg-background">
       <div aria-hidden className="absolute inset-0 overflow-hidden">
         <img
-          src={FELICIA_AVATAR_URL}
+          src={avatarUrl}
           alt=""
           className="size-full scale-110 object-cover opacity-25 blur-2xl"
         />
@@ -361,7 +363,7 @@ export function FeliciaCall({
             ) : (
               <span className="aura relative block rounded-full bg-gradient-to-br from-primary/80 via-primary/40 to-fuchsia-500/50 p-[2px] shadow-2xl">
                 <img
-                  src={FELICIA_AVATAR_URL}
+                  src={avatarUrl}
                   alt="Felicia"
                   className="size-44 rounded-full border border-background/40 object-cover"
                 />

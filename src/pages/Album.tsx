@@ -26,10 +26,11 @@ import {
 import { FELICIA_GALLERY, type GalleryPhoto } from "@/lib/gallery";
 import { DEVELOP_MS, preloadImage } from "@/lib/photo";
 import { sleep } from "@/lib/voice";
-import { useAction, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { motion } from "framer-motion";
 import {
   Camera,
+  Check,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -37,6 +38,7 @@ import {
   Loader2,
   Palette,
   Sparkles,
+  Star,
 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { useNavigate } from "react-router";
@@ -58,6 +60,14 @@ type QueueItem = {
   url?: string;
 };
 
+/** What the lightbox is currently showing, and what it can be used for. */
+type LightboxPhoto = {
+  url: string;
+  title: string;
+  /** Set when the picture is one of her permanent gallery photos. */
+  galleryId?: string;
+};
+
 interface QueuedPhotoWithId extends QueueItem {
   id?: string;
 }
@@ -66,8 +76,10 @@ export default function Album() {
   const navigate = useNavigate();
   const photos = useQuery(api.felicia.photos);
   const generatePhoto = useAction(api.felicia.generatePhoto);
+  const profile = useQuery(api.feliciaAppearance.profile);
+  const setProfilePhoto = useMutation(api.feliciaAppearance.setProfilePhoto);
 
-  const [lightbox, setLightbox] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<LightboxPhoto | null>(null);
   const [hiddenCount, setHiddenCount] = useState<number | null>(null);
   const [developing, setDeveloping] = useState(false);
 
@@ -244,10 +256,21 @@ export default function Album() {
 
   const pendingCount = queue.length;
   const lastPhoto = allPhotos[0];
+  /** Which gallery photo is her profile picture right now, if any. */
+  const avatarGalleryId = profile?.avatarGalleryId ?? null;
 
-  const lightboxCaption =
-    FELICIA_GALLERY.find((photo: GalleryPhoto) => photo.url === lightbox)
-      ?.title ?? `${FELICIA.name}'s photo`;
+  async function chooseAsProfile(photo: GalleryPhoto) {
+    try {
+      await setProfilePhoto({ galleryId: photo.id });
+      toast.success("That's her face now.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Couldn't set her profile picture.",
+      );
+    }
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -361,9 +384,9 @@ export default function Album() {
                   Her gallery
                 </h2>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Kept permanently in the app — these never leave. Ask her in
-                  the chat and she sends the one that fits what you were talking
-                  about.
+                  Kept permanently in the app — these never leave. Tap the star
+                  on any of them to make it her profile picture, or just ask her
+                  in the chat and she sends the one that fits.
                 </p>
               </div>
               <span className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-[10px] tracking-widest text-primary uppercase">
@@ -372,29 +395,76 @@ export default function Album() {
             </div>
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">
-              {FELICIA_GALLERY.map((photo: GalleryPhoto) => (
-                <motion.button
-                  key={photo.id}
-                  type="button"
-                  initial={{ opacity: 0, scale: 0.96 }}
-                  whileHover={{ y: -4 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ duration: 0.3 }}
-                  onClick={() => setLightbox(photo.url)}
-                  className="group relative overflow-hidden rounded-3xl surface text-left"
-                  title={photo.title}
-                >
-                  <img
-                    src={photo.url}
-                    alt={photo.title}
-                    loading="lazy"
-                    className="aspect-square w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                  />
-                  <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent px-3 pt-10 pb-3 text-[11px] font-medium text-white/90 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-                    {photo.title}
-                  </span>
-                </motion.button>
-              ))}
+              {FELICIA_GALLERY.map((photo: GalleryPhoto) => {
+                const isAvatar = avatarGalleryId === photo.id;
+                return (
+                  <motion.div
+                    key={photo.id}
+                    initial={{ opacity: 0, scale: 0.96 }}
+                    whileHover={{ y: -4 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.3 }}
+                    className={cn(
+                      "group relative overflow-hidden rounded-3xl surface",
+                      isAvatar && "ring-2 ring-primary/70 ring-offset-2 ring-offset-background",
+                    )}
+                  >
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setLightbox({
+                          url: photo.fullUrl,
+                          title: photo.title,
+                          galleryId: photo.id,
+                        })
+                      }
+                      className="block w-full text-left"
+                      title={photo.title}
+                    >
+                      <img
+                        src={photo.url}
+                        alt={photo.title}
+                        loading="lazy"
+                        decoding="async"
+                        className="aspect-[4/5] w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      />
+                    </button>
+
+                    {/* Always visible: there is no hover on a phone, and this is
+                        the only way to choose her face. */}
+                    <button
+                      type="button"
+                      onClick={() => void chooseAsProfile(photo)}
+                      title={
+                        isAvatar
+                          ? "This is her profile picture"
+                          : "Use as her profile picture"
+                      }
+                      aria-label={
+                        isAvatar
+                          ? `Her profile picture is ${photo.title}`
+                          : `Use ${photo.title} as her profile picture`
+                      }
+                      className={cn(
+                        "absolute top-2 right-2 flex size-8 items-center justify-center rounded-full border backdrop-blur-md transition-colors",
+                        isAvatar
+                          ? "border-primary/50 bg-primary text-primary-foreground"
+                          : "border-white/25 bg-black/40 text-white/85 hover:bg-black/60 hover:text-white",
+                      )}
+                    >
+                      {isAvatar ? (
+                        <Check className="size-3.5" />
+                      ) : (
+                        <Star className="size-3.5" />
+                      )}
+                    </button>
+
+                    <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent px-3 pt-10 pb-3 text-[11px] font-medium text-white/90 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+                      {photo.title}
+                    </span>
+                  </motion.div>
+                );
+              })}
             </div>
           </section>
 
@@ -448,7 +518,7 @@ export default function Album() {
           ) : (
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
               {developing && (
-                <div className="flex aspect-square flex-col items-center justify-center rounded-2xl border border-primary/30 bg-primary/10 p-4 text-center text-xs text-primary">
+                <div className="flex aspect-[4/5] flex-col items-center justify-center rounded-2xl border border-primary/30 bg-primary/10 p-4 text-center text-xs text-primary">
                   <Camera className="size-5 animate-pulse" />
                   <p className="mt-2">developing…</p>
                   <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-primary/20">
@@ -473,15 +543,22 @@ export default function Album() {
                   whileHover={{ y: -4 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ duration: 0.3 }}
-                  onClick={() => photo.url && setLightbox(photo.url)}
+                  onClick={() =>
+                    photo.url &&
+                    setLightbox({
+                      url: photo.url,
+                      title: photo.scene ?? `${FELICIA.name}'s photo`,
+                    })
+                  }
                   className="group relative overflow-hidden rounded-3xl surface text-left"
                   title={photo.scene ?? undefined}
                 >
                   <img
                     src={photo.url ?? ""}
                     alt={photo.scene ?? ""}
+                    decoding="async"
                     loading="lazy"
-                    className="aspect-square w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    className="aspect-[4/5] w-full object-cover transition-transform duration-500 group-hover:scale-105"
                   />
                   <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/85 via-black/40 to-transparent px-3 pt-8 pb-2.5 text-[10px] tracking-wide text-white/85">
                     {timeLabel(photo.createdAt)}
@@ -504,17 +581,44 @@ export default function Album() {
         open={lightbox !== null}
         onOpenChange={(open) => !open && setLightbox(null)}
       >
-        <DialogContent className="max-w-3xl border-border/60 bg-card/95 p-3 backdrop-blur-xl">
+        <DialogContent className="max-w-3xl overflow-hidden border-border/60 bg-card/95 p-3 backdrop-blur-xl">
           <DialogHeader className="sr-only">
-            <DialogTitle>{lightboxCaption}</DialogTitle>
+            <DialogTitle>{lightbox?.title ?? `${FELICIA.name}'s photo`}</DialogTitle>
             <DialogDescription>A photo of Felicia</DialogDescription>
           </DialogHeader>
           {lightbox && (
             <img
-              src={lightbox}
-              alt="Felicia"
-              className="max-h-[78vh] w-full rounded-2xl object-contain"
+              src={lightbox.url}
+              alt={lightbox.title}
+              className="max-h-[72vh] w-full rounded-2xl object-contain"
             />
+          )}
+          {lightbox && (
+            <div className="flex flex-wrap items-center justify-between gap-2 px-1 pt-1 pb-1">
+              <p className="text-xs text-muted-foreground">{lightbox.title}</p>
+              {lightbox.galleryId &&
+                (avatarGalleryId === lightbox.galleryId ? (
+                  <span className="flex items-center gap-1.5 rounded-full bg-primary/15 px-3 py-1.5 text-[11px] text-primary">
+                    <Check className="size-3.5" />
+                    her profile picture
+                  </span>
+                ) : (
+                  <Button
+                    size="sm"
+                    className="gap-1.5 rounded-full text-xs"
+                    onClick={() => {
+                      const id = lightbox.galleryId;
+                      const photo = FELICIA_GALLERY.find(
+                        (candidate: GalleryPhoto) => candidate.id === id,
+                      );
+                      if (photo) void chooseAsProfile(photo);
+                    }}
+                  >
+                    <Star className="size-3.5" />
+                    Use as her profile picture
+                  </Button>
+                ))}
+            </div>
           )}
         </DialogContent>
       </Dialog>
@@ -884,19 +988,22 @@ export default function Album() {
                             <Clock className="size-3" />
                             Move to front
                           </Button>
-                        )}
-
-                        {isDone && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="shrink-0 touch-none"
-                            disabled={!item.url}
-                            onClick={() => {
-                              if (item.url) setLightbox(item.url);
-                            }}
-                            title="View this photo"
-                          >
+                        )}                          {isDone && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="shrink-0 touch-none"
+                              disabled={!item.url}
+                              onClick={() => {
+                                if (item.url) {
+                                  setLightbox({
+                                    url: item.url,
+                                    title: item.scene,
+                                  });
+                                }
+                              }}
+                              title="View this photo"
+                            >
                             <Images className="size-4" />
                           </Button>
                         )}

@@ -1,7 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/hooks/use-auth";
-import { FELICIA, FELICIA_AVATAR_URL } from "@/lib/felicia";
+import { useFeliciaAvatar } from "@/hooks/use-felicia-avatar";
+import { FELICIA } from "@/lib/felicia";
 import { THEME_OPTIONS, useTheme, type Theme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { Check, LogOut, Monitor, Moon, Sun } from "lucide-react";
@@ -17,6 +18,7 @@ export default function Settings() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const { theme, setTheme, isDark } = useTheme();
+  const avatarUrl = useFeliciaAvatar();
 
   const label =
     (typeof user?.name === "string" && user.name) ||
@@ -103,7 +105,7 @@ export default function Settings() {
             <div className="mt-4 flex items-center gap-4">
               <div className="relative shrink-0">
                 <img
-                  src={FELICIA_AVATAR_URL}
+                  src={avatarUrl}
                   alt=""
                   className="size-12 rounded-full border border-border/60 object-cover"
                 />

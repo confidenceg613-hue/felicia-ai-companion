@@ -1,12 +1,15 @@
-import { FELICIA, FELICIA_AVATAR_URL } from "@/lib/felicia";
+import { useFeliciaAvatar } from "@/hooks/use-felicia-avatar";
+import { FELICIA } from "@/lib/felicia";
 import { cn } from "@/lib/utils";
 
 export default function Face({ className }: { className?: string }) {
+  const avatarUrl = useFeliciaAvatar();
+
   return (
     <figure className={cn("overflow-hidden rounded-2xl border border-border/60 bg-card", className)}>
       <div className="overflow-hidden">
         <img
-          src={FELICIA_AVATAR_URL}
+          src={avatarUrl}
           alt="Felicia"
           loading="lazy"
           className="aspect-square w-full object-cover transition-transform duration-700 hover:scale-105"
