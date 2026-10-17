@@ -436,37 +436,65 @@ export default function Dashboard() {
     <>
       {/* feed */}
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-6 sm:px-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img
-              src={FELICIA_AVATAR_URL}
-              alt={FELICIA.name}
-              className="size-12 rounded-full border border-border/60 object-cover"
-            />
-            <div>
-              <h1 className="font-display text-xl font-semibold">
+        <div className="glass sticky top-0 z-20 -mx-4 flex items-center justify-between gap-3 rounded-none px-4 py-3 sm:-mx-6 sm:rounded-3xl sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="relative shrink-0">
+              <span className="absolute -inset-0.5 rounded-full bg-gradient-to-br from-primary/80 via-primary/40 to-fuchsia-500/50 blur-[2px]" />
+              <img
+                src={FELICIA_AVATAR_URL}
+                alt={FELICIA.name}
+                className="relative size-11 rounded-full border border-border/40 object-cover"
+              />
+              <span className="absolute right-0 bottom-0 size-3 rounded-full border-2 border-background bg-emerald-400" />
+            </span>
+            <div className="min-w-0">
+              <h1 className="truncate font-display text-lg font-semibold tracking-tight">
                 {FELICIA.fullName}
               </h1>
-              <p className="text-sm text-muted-foreground">{FELICIA.city}</p>
+              <p className="truncate text-xs text-muted-foreground">
+                {FELICIA.city} · here with you
+              </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={toggleAutoVoice}>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary"
+              onClick={toggleAutoVoice}
+              title={autoVoice ? "Voice replies on" : "Voice replies off"}
+            >
               {autoVoice ? (
                 <Volume2 className="size-4" />
               ) : (
                 <VolumeX className="size-4" />
               )}
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => void handleStartCall()}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary"
+              onClick={() => void handleStartCall()}
+              title="Call Felicia"
+            >
               <Phone className="size-4" />
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => setArtOpen(true)}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary"
+              onClick={() => setArtOpen(true)}
+              title="Ask her for a photo"
+            >
               <Palette className="size-4" />
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                >
                   <Ellipsis className="size-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -522,22 +550,24 @@ export default function Dashboard() {
               {items.length === 0 &&
                 !showPending &&
                 messagePages.status !== "LoadingFirstPage" && (
-                <div className="flex flex-col items-center justify-center px-4 py-16 text-center sm:px-6">
-                  <div className="flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
-                    <Heart className="size-6" />
+                <div className="flex flex-col items-center justify-center px-4 py-20 text-center sm:px-6">
+                  <div className="glow-warm relative flex size-20 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <Heart className="size-8" />
                   </div>
-                  <h2 className="mt-4 font-display text-2xl">Your girlfriend</h2>
-                  <p className="mt-2 max-w-sm text-sm text-muted-foreground">
-                    She is waiting for you to say something. Type, send a voice
-                    message, or tap the mic.
+                  <h2 className="mt-6 font-display text-3xl tracking-tight">
+                    Say something to her
+                  </h2>
+                  <p className="mt-3 max-w-sm text-sm leading-relaxed text-muted-foreground">
+                    She's already here, waiting. Type, hold the mic for a voice
+                    message, or start with one of these.
                   </p>
-                  <div className="mt-5 flex flex-wrap justify-center gap-2">
+                  <div className="mt-7 flex flex-wrap justify-center gap-2">
                     {OPENERS.map((opener) => (
                       <button
                         key={opener}
                         type="button"
                         onClick={() => void handleSend(opener)}
-                        className="rounded-full border border-border/60 bg-card px-4 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
+                        className="surface rounded-full px-4 py-2 text-xs text-muted-foreground transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:text-foreground"
                       >
                         {opener}
                       </button>
@@ -589,20 +619,20 @@ export default function Dashboard() {
                       <button
                         type="button"
                         onClick={() => setLightbox(item.imageUrl)}
-                        className="group w-fit max-w-[80%] overflow-hidden rounded-2xl rounded-bl-md border border-border/60 bg-card text-left"
-                        title={item.scene}
-                      >
-                        <img
-                          src={item.imageUrl}
-                          alt={item.label ?? item.scene ?? "Felicia sent a photo"}
-                          loading="lazy"
-                          className="block max-h-[26rem] w-full max-w-xs object-cover transition-transform duration-500 group-hover:scale-[1.02]"
-                        />
-                        {(item.label ?? item.scene) && (
-                          <p className="px-3 py-2 text-[11px] leading-snug text-muted-foreground">
-                            {item.label ?? item.scene}
-                          </p>
-                        )}
+                      className="group w-fit max-w-[80%] overflow-hidden rounded-3xl rounded-bl-lg surface text-left"
+                      title={item.scene}
+                    >
+                      <img
+                        src={item.imageUrl}
+                        alt={item.label ?? item.scene ?? "Felicia sent a photo"}
+                        loading="lazy"
+                        className="block max-h-[26rem] w-full max-w-xs object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+                      />
+                      {(item.label ?? item.scene) && (
+                        <p className="px-4 py-2.5 text-[11px] leading-snug text-muted-foreground">
+                          {item.label ?? item.scene}
+                        </p>
+                      )}
                       </button>
                     </motion.div>
                   );
@@ -620,20 +650,21 @@ export default function Dashboard() {
                     )}
                   >
                     {!isUser && (
-                      <img
-                        src={FELICIA_AVATAR_URL}
-                        alt=""
-                        className="mt-1 size-7 shrink-0 rounded-full object-cover"
-                      />
+                      <span className="mt-1 shrink-0 self-start rounded-full bg-gradient-to-br from-primary/70 to-fuchsia-500/50 p-[1.5px]">
+                        <img
+                          src={FELICIA_AVATAR_URL}
+                          alt=""
+                          className="size-7 rounded-full object-cover"
+                        />
+                      </span>
                     )}
 
                     <div
                       className={cn(
-                        "max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
+                        "max-w-[85%] px-4 py-2.5 text-sm leading-relaxed",
                         isUser
-                          ? "rounded-br-md bg-primary text-primary-foreground"
-                          : "rounded-bl-md bg-card text-foreground",
-                        !isUser && "border border-border/60",
+                          ? "rounded-3xl rounded-br-lg bg-gradient-to-br from-primary to-primary/85 text-primary-foreground shadow-[0_14px_30px_-18px_oklch(0.55_0.15_300/90%)]"
+                          : "surface rounded-3xl rounded-bl-lg text-foreground",
                       )}
                     >
                       {item.imageUrl && item.content === "" ? (
@@ -755,7 +786,7 @@ export default function Dashboard() {
           </div>
 
           {/* composer */}
-          <div className="border-t border-border/50 bg-background/80 px-4 py-3 sm:px-6">
+          <div className="glass rounded-none border-x-0 border-b-0 px-4 py-3 sm:rounded-3xl sm:border-x sm:border-b">
             <form
               onSubmit={(event) => {
                 event.preventDefault();
@@ -772,7 +803,7 @@ export default function Dashboard() {
                 />
 
                 {recording && (
-                  <div className="flex items-center gap-2 rounded-xl border border-primary/40 bg-primary/10 px-3 py-2 text-xs text-primary">
+                  <div className="flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-3 py-2 text-xs text-primary">
                     <span className="flex size-2">
                       <span className="absolute inline-flex size-2 animate-ping rounded-full bg-primary opacity-75" />
                       <span className="relative inline-flex size-2 rounded-full bg-primary" />
@@ -786,13 +817,13 @@ export default function Dashboard() {
                   </div>
                 )}
 
-                <div className="flex items-end gap-1.5">
+                <div className="surface flex items-end gap-1 rounded-full py-1.5 pl-2 pr-1.5 transition-shadow focus-within:shadow-[0_0_0_3px_oklch(0.55_0.15_300/18%)]">
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="shrink-0 text-muted-foreground"
-                    title="Send a photo of yourself"
+                    className="shrink-0 rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                    title="Send her a photo"
                     disabled={composing}
                     onClick={() => fileRef.current?.click()}
                   >
@@ -811,14 +842,14 @@ export default function Dashboard() {
                     placeholder="Message Felicia…"
                     rows={1}
                     disabled={composing}
-                    className="max-h-32 min-h-11 flex-1 resize-none rounded-2xl"
+                    className="max-h-32 min-h-11 flex-1 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
                   />
 
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="shrink-0 text-muted-foreground"
+                    className="shrink-0 rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary"
                     title="Ask for a selfie"
                     disabled={composing || developing || !photosReady}
                     onClick={() =>
@@ -835,10 +866,10 @@ export default function Dashboard() {
                     size="icon"
                     variant={recording ? "default" : "ghost"}
                     className={cn(
-                      "shrink-0 touch-none select-none",
+                      "shrink-0 touch-none select-none rounded-full",
                       recording
-                        ? "text-primary-foreground"
-                        : "text-muted-foreground",
+                        ? "lift-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-primary/10 hover:text-primary",
                     )}
                     title={recording ? "Release to send" : "Hold to send a voice message"}
                     disabled={!recording && thinking}
@@ -861,7 +892,7 @@ export default function Dashboard() {
                   <Button
                     type="submit"
                     size="icon"
-                    className="size-11 shrink-0"
+                    className="lift-primary size-11 shrink-0 rounded-full transition-transform hover:scale-105 disabled:opacity-40 disabled:hover:scale-100"
                     disabled={composing || !draft.trim()}
                   >
                     {thinking ? (
@@ -883,9 +914,9 @@ export default function Dashboard() {
 
       {/* her info */}
       <Dialog open={infoOpen} onOpenChange={setInfoOpen}>
-        <DialogContent className="max-w-md border-border/60 bg-card">
+        <DialogContent className="max-w-md border-border/60 bg-card/95 backdrop-blur-xl">
           <DialogHeader>
-            <DialogTitle className="font-display text-xl">
+            <DialogTitle className="font-display text-xl tracking-tight">
               {FELICIA.fullName}
             </DialogTitle>
             <DialogDescription>{FELICIA.traits[0].title}</DialogDescription>
@@ -895,7 +926,7 @@ export default function Dashboard() {
             <img
               src={FELICIA_AVATAR_URL}
               alt={FELICIA.name}
-              className="size-20 shrink-0 rounded-2xl border border-border/60 object-cover"
+              className="size-20 shrink-0 rounded-3xl border border-border/40 object-cover shadow-lg"
             />
             <p className="text-sm leading-relaxed text-muted-foreground">
               {FELICIA.fullName} is {FELICIA.age} and lives in {FELICIA.city}. She

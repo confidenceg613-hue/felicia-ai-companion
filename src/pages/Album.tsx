@@ -251,20 +251,20 @@ export default function Album() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <header className="border-b border-border/50 px-4 py-4 sm:px-6">
+      <header className="glass sticky top-0 z-20 rounded-none border-x-0 border-t-0 px-4 py-4 sm:rounded-b-3xl sm:border-x">
         <div className="mx-auto flex w-full max-w-5xl flex-wrap items-end justify-between gap-3">
           <div>
             <nav className="flex items-center gap-1 text-xs text-muted-foreground">
               <button
                 type="button"
                 onClick={() => navigate(-1)}
-                className="inline-flex items-center gap-1 rounded-md px-2 py-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <ChevronLeft className="size-3.5" />
                 back
               </button>
             </nav>
-            <h1 className="mt-1 font-display text-2xl font-semibold tracking-tight">
+            <h1 className="mt-1 font-display text-3xl tracking-tight">
               Her album
             </h1>
             <p className="text-sm text-muted-foreground">
@@ -273,12 +273,12 @@ export default function Album() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             {lastPhoto && (
               <Button
                 variant="ghost"
                 size="icon"
-                className="shrink-0 touch-none"
+                className="shrink-0 touch-none rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary"
                 onClick={() => openScenePicker(lastPhoto.scene)}
                 title="Generate the same scene again"
               >
@@ -289,7 +289,7 @@ export default function Album() {
             <Button
               variant="ghost"
               size="icon"
-              className="shrink-0 touch-none"
+              className="shrink-0 touch-none rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary"
               onClick={() => setAppearOpen(true)}
               title="Choose how she photo looks"
             >
@@ -298,7 +298,11 @@ export default function Album() {
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="shrink-0 touch-none">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="shrink-0 touch-none rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                >
                   <Clock className="size-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -353,30 +357,31 @@ export default function Album() {
           <section className="mb-8" aria-label="Her permanent gallery">
             <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
               <div>
-                <h2 className="font-display text-lg font-semibold tracking-tight">
+                <h2 className="font-display text-2xl tracking-tight">
                   Her gallery
                 </h2>
-                <p className="text-xs text-muted-foreground">
+                <p className="mt-0.5 text-xs text-muted-foreground">
                   Kept permanently in the app — these never leave. Ask her in
                   the chat and she sends the one that fits what you were talking
                   about.
                 </p>
               </div>
-              <span className="rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-[10px] tracking-widest text-primary uppercase">
+              <span className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-[10px] tracking-widest text-primary uppercase">
                 {FELICIA_GALLERY.length} permanent
               </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">
               {FELICIA_GALLERY.map((photo: GalleryPhoto) => (
                 <motion.button
                   key={photo.id}
                   type="button"
                   initial={{ opacity: 0, scale: 0.96 }}
+                  whileHover={{ y: -4 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ duration: 0.3 }}
                   onClick={() => setLightbox(photo.url)}
-                  className="group relative overflow-hidden rounded-2xl border border-border/60 bg-card text-left"
+                  className="group relative overflow-hidden rounded-3xl surface text-left"
                   title={photo.title}
                 >
                   <img
@@ -385,16 +390,19 @@ export default function Album() {
                     loading="lazy"
                     className="aspect-square w-full object-cover transition-transform duration-500 group-hover:scale-105"
                   />
+                  <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent px-3 pt-10 pb-3 text-[11px] font-medium text-white/90 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+                    {photo.title}
+                  </span>
                 </motion.button>
               ))}
             </div>
           </section>
 
           <div className="mb-3 flex items-end justify-between gap-2">
-            <h2 className="font-display text-lg font-semibold tracking-tight">
+            <h2 className="font-display text-2xl tracking-tight">
               From her sessions
             </h2>
-            <span className="text-xs text-muted-foreground">
+            <span className="rounded-full border border-border/60 bg-card/60 px-3 py-1 text-xs text-muted-foreground">
               {allPhotos.length} {allPhotos.length === 1 ? "photo" : "photos"}
             </span>
           </div>
@@ -404,17 +412,21 @@ export default function Album() {
               <Loader2 className="size-5 animate-spin text-muted-foreground" />
             </div>
           ) : visible.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 px-6 py-20 text-center">
-              <Images className="size-6 text-muted-foreground" />
-              <h2 className="mt-4 font-display text-xl">No new photos yet</h2>
-              <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+            <div className="surface flex flex-col items-center justify-center rounded-3xl border-dashed px-6 py-20 text-center">
+              <div className="glow-warm flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <Images className="size-6" />
+              </div>
+              <h2 className="mt-4 font-display text-2xl tracking-tight">
+                No new photos yet
+              </h2>
+              <p className="mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
                 Her permanent gallery is above. Ask her to send you something
                 new — or tap the palette to choose how she looks before she
                 does.
               </p>
-              <div className="mt-5 flex flex-wrap items-center gap-2">
+              <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
                 <Button
-                  className="gap-2"
+                  className="lift-primary gap-2 rounded-full"
                   disabled={developing || !ready}
                   onClick={requestCurrent}
                 >
@@ -424,7 +436,7 @@ export default function Album() {
 
                 <Button
                   variant="outline"
-                  className="gap-2"
+                  className="gap-2 rounded-full"
                   disabled={developing || !ready}
                   onClick={() => setPopupOpen(true)}
                 >
@@ -458,10 +470,11 @@ export default function Album() {
                   key={photo._id}
                   type="button"
                   initial={{ opacity: 0, scale: 0.96 }}
+                  whileHover={{ y: -4 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ duration: 0.3 }}
                   onClick={() => photo.url && setLightbox(photo.url)}
-                  className="group relative overflow-hidden rounded-2xl border border-border/60 bg-card text-left"
+                  className="group relative overflow-hidden rounded-3xl surface text-left"
                   title={photo.scene ?? undefined}
                 >
                   <img
@@ -470,7 +483,7 @@ export default function Album() {
                     loading="lazy"
                     className="aspect-square w-full object-cover transition-transform duration-500 group-hover:scale-105"
                   />
-                  <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/85 via-black/40 to-transparent px-2.5 pt-8 pb-2 text-[10px] text-white/85">
+                  <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/85 via-black/40 to-transparent px-3 pt-8 pb-2.5 text-[10px] tracking-wide text-white/85">
                     {timeLabel(photo.createdAt)}
                   </span>
                 </motion.button>
@@ -491,7 +504,7 @@ export default function Album() {
         open={lightbox !== null}
         onOpenChange={(open) => !open && setLightbox(null)}
       >
-        <DialogContent className="max-w-3xl border-border/60 bg-card p-3">
+        <DialogContent className="max-w-3xl border-border/60 bg-card/95 p-3 backdrop-blur-xl">
           <DialogHeader className="sr-only">
             <DialogTitle>{lightboxCaption}</DialogTitle>
             <DialogDescription>A photo of Felicia</DialogDescription>
@@ -500,7 +513,7 @@ export default function Album() {
             <img
               src={lightbox}
               alt="Felicia"
-              className="max-h-[78vh] w-full rounded-xl object-contain"
+              className="max-h-[78vh] w-full rounded-2xl object-contain"
             />
           )}
         </DialogContent>

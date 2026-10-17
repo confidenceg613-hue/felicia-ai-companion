@@ -145,7 +145,7 @@ export default function Landing() {
               She is not a chatbot. She is Felicia.
             </Badge>
 
-            <h1 className="mt-6 font-display text-5xl leading-[0.95] font-semibold tracking-tight sm:text-6xl lg:text-7xl">
+            <h1 className="mt-6 font-display text-5xl leading-[0.95] font-semibold tracking-tight text-glow sm:text-6xl lg:text-7xl">
               Meet Felicia.
             </h1>
 
@@ -158,7 +158,7 @@ export default function Landing() {
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Button
                 size="lg"
-                className="gap-2 text-base shadow-xl shadow-primary/20"
+                className="lift-primary gap-2 rounded-full text-base"
                 onClick={() => enter("/dashboard")}
               >
                 Start talking to Felicia
@@ -167,7 +167,7 @@ export default function Landing() {
               <Button
                 size="lg"
                 variant="outline"
-                className="gap-2 text-base"
+                className="gap-2 rounded-full text-base"
                 onClick={() =>
                   document
                     .getElementById("moments")
@@ -202,7 +202,7 @@ export default function Landing() {
             className="relative"
           >
             <div className="relative mx-auto w-full max-w-md">
-              <div className="absolute -inset-4 rounded-[2rem] bg-primary/15 blur-3xl" />
+              <div className="glow-warm absolute -inset-4 rounded-[2.5rem] blur-3xl" />
               <div className="relative overflow-hidden rounded-[1.75rem] border border-border/60 bg-card shadow-2xl">
                 <img
                   src={PORTRAIT.url}
@@ -258,7 +258,7 @@ export default function Landing() {
           <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {MOMENTS.map((moment, index) => (
               <Reveal key={moment.src} delay={index * 0.08}>
-                <figure className="group overflow-hidden rounded-2xl border border-border/60 bg-card">
+                <figure className="group surface overflow-hidden rounded-3xl transition-transform duration-500 hover:-translate-y-1">
                   <div className="overflow-hidden">
                     <img
                       src={moment.src}

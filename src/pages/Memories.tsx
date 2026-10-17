@@ -285,10 +285,10 @@ export default function Memories() {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {/* ------------------------------------------------------------ header */}
-      <header className="border-b border-border/50 px-4 py-4 sm:px-6">
+      <header className="glass sticky top-0 z-20 rounded-none border-x-0 border-t-0 px-4 py-4 sm:rounded-b-3xl sm:border-x">
         <div className="mx-auto flex w-full max-w-5xl flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="font-display text-2xl font-semibold tracking-tight">
+            <h1 className="font-display text-3xl tracking-tight">
               Mind map
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -387,7 +387,7 @@ export default function Memories() {
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6">
         <div className="mx-auto w-full max-w-5xl">
           {chapters && chapters.length > 0 && (
-            <section className="mb-6 rounded-2xl border border-border/60 bg-card p-5">
+            <section className="surface mb-6 rounded-3xl p-6">
               <div className="flex flex-wrap items-end justify-between gap-2">
                 <div>
                   <h2 className="font-display text-lg font-semibold tracking-tight">
@@ -455,7 +455,7 @@ export default function Memories() {
               </Button>
             </div>
           ) : view === "graph" ? (
-            <div className="overflow-hidden rounded-2xl border border-border/60 bg-card p-2">
+            <div className="surface overflow-hidden rounded-3xl p-2">
               <svg
                 viewBox="0 0 800 520"
                 className="h-auto w-full"
@@ -554,7 +554,7 @@ export default function Memories() {
               </div>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-2xl border border-border/60 bg-card">
+            <div className="surface overflow-hidden rounded-3xl">
               <Table>
                 <TableHeader>
                   <TableRow>

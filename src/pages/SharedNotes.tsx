@@ -53,10 +53,10 @@ export default function SharedNotes() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <header className="border-b border-border/50 px-4 py-4 sm:px-6">
+      <header className="glass sticky top-0 z-20 rounded-none border-x-0 border-t-0 px-4 py-4 sm:rounded-b-3xl sm:border-x">
         <div className="mx-auto flex w-full max-w-3xl flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="font-display text-2xl font-semibold tracking-tight">
+            <h1 className="font-display text-3xl tracking-tight">
               Shared Notes
             </h1>
             <p className="mt-1 max-w-xl text-sm text-muted-foreground">
@@ -133,12 +133,12 @@ export default function SharedNotes() {
                     duration: 0.3,
                     delay: Math.min(index * 0.04, 0.3),
                   }}
-                  className="rounded-2xl border border-border/60 bg-card p-5"
+                  className="surface rounded-3xl p-6"
                 >
                   <div className="flex items-baseline justify-between gap-3">
                     <label
                       htmlFor={`note-${section.key}`}
-                      className="font-display text-lg"
+                      className="font-display text-xl tracking-tight"
                     >
                       {section.title}
                     </label>

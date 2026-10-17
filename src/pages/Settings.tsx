@@ -49,9 +49,9 @@ export default function Settings() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <header className="border-b border-border/50 px-4 py-4 sm:px-6">
+      <header className="glass sticky top-0 z-20 rounded-none border-x-0 border-t-0 px-4 py-4 sm:rounded-b-3xl sm:border-x">
         <div className="mx-auto w-full max-w-3xl">
-          <h1 className="font-display text-2xl font-semibold tracking-tight">
+          <h1 className="font-display text-3xl tracking-tight">
             Settings
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -63,7 +63,7 @@ export default function Settings() {
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6">
         <div className="mx-auto w-full max-w-3xl space-y-6">
           {/* ------------------------------------------------------- appearance */}
-          <section className="rounded-2xl border border-border/60 bg-card p-5">
+          <section className="surface rounded-3xl p-6">
             <h2 className="font-display text-lg">Appearance</h2>
             <p className="mt-1 text-xs text-muted-foreground">
               Match your device and Felicia follows your system's light or dark
@@ -116,7 +116,7 @@ export default function Settings() {
           </section>
 
           {/* ---------------------------------------------------------- account */}
-          <section className="rounded-2xl border border-border/60 bg-card p-5">
+          <section className="surface rounded-3xl p-6">
             <h2 className="font-display text-lg">Account</h2>
 
             <div className="mt-4 flex items-center gap-4">

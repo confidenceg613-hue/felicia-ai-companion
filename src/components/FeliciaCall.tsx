@@ -321,18 +321,22 @@ export function FeliciaCall({
           className="size-full scale-110 object-cover opacity-25 blur-2xl"
         />
         <div className="absolute inset-0 bg-gradient-to-b from-background/70 via-background/85 to-background" />
+        <div className="glow-warm absolute inset-0 opacity-90" />
       </div>
 
       <div className="relative flex flex-1 flex-col items-center justify-between px-6 py-8">
         <header className="flex w-full max-w-md items-center justify-between">
           <Badge
             variant="outline"
-            className="gap-2 border-primary/40 bg-primary/10 text-primary"
+            className="gap-2 rounded-full border-primary/40 bg-primary/10 px-3 py-1 text-primary"
           >
-            <span className="flex size-1.5 rounded-full bg-primary" />
+            <span className="relative flex size-1.5">
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-75" />
+              <span className="relative inline-flex size-1.5 rounded-full bg-primary" />
+            </span>
             On a call
           </Badge>
-          <span className="font-mono text-sm text-muted-foreground">
+          <span className="rounded-full border border-border/60 bg-card/60 px-3 py-1 font-mono text-sm text-muted-foreground backdrop-blur-md">
             {formatDuration(elapsed)}
           </span>
         </header>
@@ -355,18 +359,20 @@ export function FeliciaCall({
                 className="relative h-64 w-52 rounded-3xl border border-border/60 object-cover shadow-2xl"
               />
             ) : (
-              <img
-                src={FELICIA_AVATAR_URL}
-                alt="Felicia"
-                className="relative size-44 rounded-full border border-border/60 object-cover shadow-2xl"
-              />
+              <span className="relative block rounded-full bg-gradient-to-br from-primary/80 via-primary/40 to-fuchsia-500/50 p-[2px] shadow-2xl">
+                <img
+                  src={FELICIA_AVATAR_URL}
+                  alt="Felicia"
+                  className="size-44 rounded-full border border-background/40 object-cover"
+                />
+              </span>
             )}
           </motion.div>
 
-          <h2 className="mt-6 font-display text-3xl font-semibold tracking-tight">
+          <h2 className="mt-6 font-display text-4xl tracking-tight text-glow">
             {FELICIA.fullName}
           </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-2 rounded-full border border-border/60 bg-card/60 px-3 py-1 text-xs text-muted-foreground backdrop-blur-md">
             {STATUS_LABEL[status]}
           </p>
 
@@ -385,7 +391,7 @@ export function FeliciaCall({
 
         <div className="w-full max-w-md">
           {note && (
-            <p className="mb-3 rounded-xl border border-border/60 bg-card/80 px-3.5 py-2.5 text-xs leading-relaxed text-muted-foreground">
+            <p className="mb-3 rounded-2xl border border-border/60 bg-card/80 px-3.5 py-2.5 text-xs leading-relaxed text-muted-foreground backdrop-blur-md">
               {note}
             </p>
           )}
@@ -396,11 +402,12 @@ export function FeliciaCall({
               onChange={(event) => setTyped(event.target.value)}
               placeholder={canType ? "Type to her…" : "Listening…"}
               disabled={!canType}
+              className="surface rounded-full border-0 bg-card/70 shadow-none backdrop-blur-md focus-visible:ring-2 focus-visible:ring-ring/50"
             />
             <Button
               type="submit"
               size="icon"
-              className="size-10 shrink-0"
+              className="lift-primary size-10 shrink-0 rounded-full transition-transform hover:scale-105 disabled:opacity-40 disabled:hover:scale-100"
               disabled={!canType || !typed.trim()}
             >
               {status === "thinking" ? (
@@ -411,12 +418,12 @@ export function FeliciaCall({
             </Button>
           </form>
 
-          <div className="mt-5 flex items-center justify-center gap-4">
+          <div className="mt-5 flex items-center justify-center gap-3">
             <Button
               type="button"
               variant={muted ? "secondary" : "outline"}
               size="icon"
-              className="size-12 rounded-full"
+              className="surface size-12 rounded-full border-border/60 bg-card/70 backdrop-blur-md hover:bg-card"
               onClick={() => setMuted((value) => !value)}
               disabled={!micSupported}
               aria-label={muted ? "Unmute" : "Mute"}
@@ -433,7 +440,7 @@ export function FeliciaCall({
               type="button"
               variant="destructive"
               size="lg"
-              className="gap-2 rounded-full px-6"
+              className="gap-2 rounded-full px-7 shadow-[0_14px_30px_-14px_oklch(0.55_0.2_28/90%)] transition-transform hover:scale-105"
               onClick={handleHangUp}
             >
               <PhoneOff className="size-4" />
