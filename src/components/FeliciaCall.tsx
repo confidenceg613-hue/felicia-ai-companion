@@ -359,7 +359,7 @@ export function FeliciaCall({
                 className="relative h-64 w-52 rounded-3xl border border-border/60 object-cover shadow-2xl"
               />
             ) : (
-              <span className="relative block rounded-full bg-gradient-to-br from-primary/80 via-primary/40 to-fuchsia-500/50 p-[2px] shadow-2xl">
+              <span className="aura relative block rounded-full bg-gradient-to-br from-primary/80 via-primary/40 to-fuchsia-500/50 p-[2px] shadow-2xl">
                 <img
                   src={FELICIA_AVATAR_URL}
                   alt="Felicia"

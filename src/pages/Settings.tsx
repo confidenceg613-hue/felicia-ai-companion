@@ -1,15 +1,11 @@
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { api } from "@/convex/_generated/api";
 import { useAuth } from "@/hooks/use-auth";
 import { FELICIA, FELICIA_AVATAR_URL } from "@/lib/felicia";
 import { THEME_OPTIONS, useTheme, type Theme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
-import { useMutation } from "convex/react";
-import { Check, Loader2, LogOut, Monitor, Moon, Sun, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { Check, LogOut, Monitor, Moon, Sun } from "lucide-react";
 import { useNavigate } from "react-router";
-import { toast } from "sonner";
 
 const THEME_ICON = {
   light: Sun,
@@ -21,26 +17,11 @@ export default function Settings() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const { theme, setTheme, isDark } = useTheme();
-  const clearConversation = useMutation(api.felicia.clearConversation);
-
-  const [clearing, setClearing] = useState(false);
 
   const label =
     (typeof user?.name === "string" && user.name) ||
     (typeof user?.email === "string" ? user.email : "") ||
     "Your account";
-
-  async function handleClear() {
-    setClearing(true);
-    try {
-      await clearConversation();
-      toast.success("Conversation cleared.");
-    } catch {
-      toast.error("Could not clear the conversation.");
-    } finally {
-      setClearing(false);
-    }
-  }
 
   async function handleSignOut() {
     await signOut();
@@ -165,29 +146,16 @@ export default function Settings() {
           </section>
 
           {/* ------------------------------------------------------------- data */}
-          <section className="rounded-2xl border border-destructive/30 bg-card p-5">
+          <section className="surface rounded-3xl p-6">
             <h2 className="font-display text-lg">Your data</h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Signing out keeps everything: your whole conversation stays on your
-              account and is waiting the next time you sign in with the same
-              email. Only the button below removes it — every message she has ever
-              sent you, gone for good. Her memories and your album stay as they
-              are.
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              Everything the two of you have ever said is kept for good. Signing
+              out keeps it, closing the tab keeps it, and signing back in with
+              the same email brings the whole conversation back exactly where it
+              was. Nothing in this app deletes a message you have sent or a
+              message she has sent you — there is no delete button anywhere, and
+              that is on purpose.
             </p>
-
-            <Button
-              variant="outline"
-              className="mt-4 gap-2 border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
-              onClick={() => void handleClear()}
-              disabled={clearing}
-            >
-              {clearing ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Trash2 className="size-4" />
-              )}
-              Clear conversation
-            </Button>
           </section>
 
           <p className="pb-4 text-center text-xs text-muted-foreground/70">

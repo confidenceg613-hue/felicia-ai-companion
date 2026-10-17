@@ -133,12 +133,11 @@ createRoot(document.getElementById("root")!).render(
                 path="/dashboard"
                 element={
                   <RequireAuth>
-                    <AppShell>
-                      <Dashboard />
-                    </AppShell>
+                    <AppShell />
                   </RequireAuth>
                 }
               >
+                <Route index element={<Dashboard />} />
                 <Route path="memories" element={<Memories />} />
                 <Route path="album" element={<Album />} />
                 <Route path="notes" element={<SharedNotes />} />

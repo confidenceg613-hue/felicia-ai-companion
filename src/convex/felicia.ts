@@ -1442,6 +1442,48 @@ export const sendMessage = action<{ ctx: AnyCtx; args: { text: string } }>({
   },
 });
 
+/** TEMPORARY verification hook — removed before this change is finished. */
+export const debugSay = internalAction({
+  args: { userId: v.id("users"), text: v.string() },
+  handler: async (ctx: AnyCtx, { userId, text }: AnyArgs) => {
+    const history = await ctx.runQuery(internal.felicia.recentMessages, {
+      userId,
+      limit: HISTORY_LIMIT,
+    });
+    const notes = await ctx.runQuery(internal.felicia.notesFor, { userId });
+    const memories = await ctx.runQuery(internal.felicia.topMemories, {
+      userId,
+    });
+    const chapters = await ctx.runQuery(internal.felicia.latestChapters, {
+      userId,
+      limit: CHAPTER_LIMIT,
+    });
+    const startedAt = await ctx.runQuery(internal.felicia.conversationStart, {
+      userId,
+    });
+
+    const raw = await ctx.runAction(cloudflare.chat, {
+      messages: [
+        {
+          role: "system",
+          content: buildSystemPrompt(notes, memories, "playful", {
+            chapters,
+            startedAt,
+          }),
+        },
+        ...history.map((message: { role: unknown; content: unknown }) => ({
+          role: message.role === "user" ? "user" : "assistant",
+          content: (message.content as string) || "[...]",
+        })),
+        { role: "user", content: text },
+      ],
+    });
+
+    const { reply, scene } = extractScene(raw, text);
+    return { reply, scene, historyLength: history.length };
+  },
+});
+
 // ---------------------------------------------------------------------------
 // Photo backend arrangements
 // ---------------------------------------------------------------------------

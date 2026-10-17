@@ -231,6 +231,42 @@
     text-shadow: 0 0 26px color-mix(in oklab, var(--primary) 45%, transparent);
   }
 
+  /* A living glow around her, so she reads as present rather than pasted in.
+     Applied to the wrapper that holds her portrait: the halo breathes slowly,
+     and `isolate` keeps it behind the photo without escaping the wrapper. */
+  .aura {
+    position: relative;
+    isolation: isolate;
+  }
+  .aura::before {
+    content: "";
+    position: absolute;
+    inset: -8px;
+    z-index: -1;
+    border-radius: inherit;
+    background: conic-gradient(
+      from 180deg,
+      oklch(0.7 0.16 300 / 55%),
+      oklch(0.64 0.16 20 / 40%),
+      oklch(0.6 0.15 255 / 45%),
+      oklch(0.7 0.16 300 / 55%)
+    );
+    filter: blur(12px);
+    opacity: 0.5;
+    animation: aura-breathe 6s ease-in-out infinite;
+  }
+  @keyframes aura-breathe {
+    0%,
+    100% {
+      opacity: 0.3;
+      transform: scale(0.97);
+    }
+    50% {
+      opacity: 0.7;
+      transform: scale(1.04);
+    }
+  }
+
   /* Chip rows and horizontal scrollers should not show a scrollbar. */
   .no-scrollbar {
     scrollbar-width: none;

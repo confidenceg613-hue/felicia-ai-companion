@@ -201,7 +201,7 @@ export default function Landing() {
             transition={{ duration: 0.8, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
             className="relative"
           >
-            <div className="relative mx-auto w-full max-w-md">
+            <div className="aura relative mx-auto w-full max-w-md rounded-[2.5rem]">
               <div className="glow-warm absolute -inset-4 rounded-[2.5rem] blur-3xl" />
               <div className="relative overflow-hidden rounded-[1.75rem] border border-border/60 bg-card shadow-2xl">
                 <img

@@ -33,12 +33,10 @@ import {
   Info,
   Loader2,
   Mic,
-  Palette,
   Paperclip,
   Phone,
   Send,
   Sparkles,
-  Trash2,
   Volume2,
   VolumeX,
   Brain,
@@ -109,7 +107,6 @@ export default function Dashboard() {
   );
   const photos = useQuery(api.felicia.photos);
   const connection = useQuery(api.felicia.connectorStatus);
-  const clearConversation = useMutation(api.felicia.clearConversation);
   const sendMessage = useAction(api.felicia.sendMessage);
   const generatePhoto = useAction(api.felicia.generatePhoto);
   const sendUserPhoto = useAction(api.felicia.sendUserPhoto);
@@ -130,7 +127,6 @@ export default function Dashboard() {
   const [photoScheduledAt, setPhotoScheduledAt] = useState<number | null>(null);
   const photoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [artOpen, setArtOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
   const [recording, setRecording] = useState(false);
   const [interim, setInterim] = useState("");
@@ -418,15 +414,6 @@ export default function Dashboard() {
     return () => voiceRef.current?.cancel();
   }, []);
 
-  async function handleClear() {
-    try {
-      await clearConversation();
-      toast.success("Conversation cleared.");
-    } catch {
-      toast.error("Could not clear the conversation.");
-    }
-  }
-
   async function handleSignOut() {
     await signOut();
     navigate("/");
@@ -435,10 +422,10 @@ export default function Dashboard() {
   return (
     <>
       {/* feed */}
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-6 sm:px-6">
-        <div className="glass sticky top-0 z-20 -mx-4 flex items-center justify-between gap-3 rounded-none px-4 py-3 sm:-mx-6 sm:rounded-3xl sm:px-6">
+      <div className="flex min-h-0 w-full flex-1 flex-col px-4 pt-4 sm:px-6">
+        <div className="glass sticky top-0 z-20 mx-auto flex w-full max-w-5xl items-center justify-between gap-3 rounded-3xl px-4 py-3">
           <div className="flex min-w-0 items-center gap-3">
-            <span className="relative shrink-0">
+            <span className="aura relative shrink-0 rounded-full">
               <span className="absolute -inset-0.5 rounded-full bg-gradient-to-br from-primary/80 via-primary/40 to-fuchsia-500/50 blur-[2px]" />
               <img
                 src={FELICIA_AVATAR_URL}
@@ -483,10 +470,10 @@ export default function Dashboard() {
               variant="ghost"
               size="icon"
               className="rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary"
-              onClick={() => setArtOpen(true)}
-              title="Ask her for a photo"
+              onClick={() => navigate("/dashboard/album")}
+              title="Her gallery"
             >
-              <Palette className="size-4" />
+              <Images className="size-4" />
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -517,13 +504,6 @@ export default function Dashboard() {
                   Memories
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  disabled={thinking || list.length === 0}
-                  onSelect={() => void handleClear()}
-                >
-                  <Trash2 className="size-4" />
-                  Clear conversation
-                </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => void handleSignOut()}>
                   Sign out
                 </DropdownMenuItem>
@@ -532,7 +512,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="flex flex-1 flex-col gap-4 min-h-0 overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col gap-3 pb-3 pt-3">
           {missingKeys.length > 0 && connection && (
             <div className="border-b border-primary/30 bg-primary/10 px-4 py-3 text-xs">
               <p className="font-medium text-primary">Not connected on this deployment</p>
@@ -542,10 +522,10 @@ export default function Dashboard() {
             </div>
           )}
 
-          <div
-            ref={scrollRef}
-            className="flex-1 overflow-y-auto px-4 sm:px-6"
-          >
+            <div
+              ref={scrollRef}
+              className="min-h-0 flex-1 overflow-y-auto px-1 sm:px-2"
+            >
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
               {items.length === 0 &&
                 !showPending &&
@@ -786,7 +766,7 @@ export default function Dashboard() {
           </div>
 
           {/* composer */}
-          <div className="glass rounded-none border-x-0 border-b-0 px-4 py-3 sm:rounded-3xl sm:border-x sm:border-b">
+          <div className="glass mx-auto w-full max-w-5xl shrink-0 rounded-3xl px-4 py-3">
             <form
               onSubmit={(event) => {
                 event.preventDefault();
@@ -995,52 +975,6 @@ export default function Dashboard() {
         />
       )}
 
-      {/* art dialog */}
-      <Dialog open={artOpen} onOpenChange={setArtOpen}>
-        <DialogContent className="max-w-lg border-border/60 bg-card">
-          <DialogHeader>
-            <DialogTitle className="font-display text-xl">
-              Ask her for a photo
-            </DialogTitle>
-            <DialogDescription>
-              She'll take a new one here. Ask her in the chat instead and she
-              sends the picture from her album that fits what you were talking
-              about.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="mt-2 flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              className="gap-2"
-              disabled={composing || developing || !photosReady}
-              onClick={() => {
-                setArtOpen(false);
-                void requestPhoto(
-                  "somewhere she has just arrived, warm evening light, candid",
-                );
-              }}
-            >
-              <Sparkles className="size-3.5" />
-              Surprise me
-            </Button>
-            {FELICIA.scenes.map((scene) => (
-              <button
-                key={scene.label}
-                type="button"
-                disabled={composing || developing || !photosReady}
-                onClick={() => {
-                  setArtOpen(false);
-                  void requestPhoto(scene.scene);
-                }}
-                className="rounded-full border border-border/60 bg-background/40 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground disabled:opacity-50"
-              >
-                {scene.label}
-              </button>
-            ))}
-          </div>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }
