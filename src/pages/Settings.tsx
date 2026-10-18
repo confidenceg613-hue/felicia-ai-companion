@@ -6,6 +6,7 @@ import { FELICIA } from "@/lib/felicia";
 import { THEME_OPTIONS, useTheme, type Theme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { Check, LogOut, Monitor, Moon, Sun } from "lucide-react";
+import { motion } from "framer-motion";
 import { useNavigate } from "react-router";
 
 const THEME_ICON = {
@@ -46,7 +47,12 @@ export default function Settings() {
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6">
         <div className="mx-auto w-full max-w-3xl space-y-6">
           {/* ------------------------------------------------------- appearance */}
-          <section className="surface rounded-3xl p-6">
+          <motion.section
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+            className="surface rounded-3xl p-6"
+          >
             <h2 className="font-display text-lg">Appearance</h2>
             <p className="mt-1 text-xs text-muted-foreground">
               Match your device and Felicia follows your system's light or dark
@@ -77,7 +83,18 @@ export default function Settings() {
                         )}
                       />
                       {active && (
-                        <Check className="size-4 text-primary" />
+                        <motion.span
+                          initial={{ scale: 0, rotate: -25 }}
+                          animate={{ scale: 1, rotate: 0 }}
+                          transition={{
+                            type: "spring",
+                            stiffness: 520,
+                            damping: 18,
+                          }}
+                          className="flex"
+                        >
+                          <Check className="size-4 text-primary" />
+                        </motion.span>
                       )}
                     </div>
                     <p className="mt-3 text-sm font-medium">{option.label}</p>
@@ -96,10 +113,19 @@ export default function Settings() {
               </span>{" "}
               theme.
             </p>
-          </section>
+          </motion.section>
 
           {/* ---------------------------------------------------------- account */}
-          <section className="surface rounded-3xl p-6">
+          <motion.section
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{
+              duration: 0.45,
+              delay: 0.08,
+              ease: [0.22, 1, 0.36, 1],
+            }}
+            className="surface rounded-3xl p-6"
+          >
             <h2 className="font-display text-lg">Account</h2>
 
             <div className="mt-4 flex items-center gap-4">
@@ -145,10 +171,19 @@ export default function Settings() {
                 Sign out
               </Button>
             </div>
-          </section>
+          </motion.section>
 
           {/* ------------------------------------------------------------- data */}
-          <section className="surface rounded-3xl p-6">
+          <motion.section
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{
+              duration: 0.45,
+              delay: 0.16,
+              ease: [0.22, 1, 0.36, 1],
+            }}
+            className="surface rounded-3xl p-6"
+          >
             <h2 className="font-display text-lg">Your data</h2>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
               Everything the two of you have ever said is kept for good. Signing
@@ -158,7 +193,7 @@ export default function Settings() {
               message she has sent you — there is no delete button anywhere, and
               that is on purpose.
             </p>
-          </section>
+          </motion.section>
 
           <p className="pb-4 text-center text-xs text-muted-foreground/70">
             {FELICIA.name} · a companion character, written warmly. Photos

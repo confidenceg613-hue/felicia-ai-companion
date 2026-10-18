@@ -1,7 +1,12 @@
-import { motion, useTime } from "framer-motion";
+import { motion, useTime, useTransform, type MotionValue } from "framer-motion";
 
 const RINGS = 3;
 
+/**
+ * Slow rings of light drifting behind a foreground — ambient motion for the
+ * hero. Driven by a single shared time value with `useTransform`, so every
+ * frame is computed off the React render loop instead of re-rendering.
+ */
 export default function AmbientOrbits() {
   const t = useTime();
 
@@ -18,30 +23,29 @@ export default function AmbientOrbits() {
   );
 }
 
-function Orbit({ index, t }: { index: number; t: number }) {
+function Orbit({ index, t }: { index: number; t: MotionValue<number> }) {
   const phase = index * 2.1;
-  const x =
-    50 +
-    Math.sin((t / 1000) * 0.25 + phase) * (55 + index * 22);
-  const y =
-    55 +
-    Math.cos((t / 1000) * 0.18 + phase * 1.3) * (28 + index * 10);
+  const x = useTransform(
+    t,
+    (v) => 50 + Math.sin((v / 1000) * 0.25 + phase) * (55 + index * 22),
+  );
+  const y = useTransform(
+    t,
+    (v) => 55 + Math.cos((v / 1000) * 0.18 + phase * 1.3) * (28 + index * 10),
+  );
+  const rotate = useTransform(t, (v) => (v / 1000) * (-8 + index * 3));
 
   return (
     <motion.div
-      initial={false}
-      animate={{
+      style={{
         x,
         y,
-        rotate: (t / 1000) * (-8 + index * 3),
-      }}
-      transition={{ duration: 0.016, repeat: Infinity, ease: "linear" }}
-      className="absolute left-1/2 top-1/2 origin-center"
-      style={{
-        width: `${70 + index * 28}px`,
-        height: `${70 + index * 28}px`,
+        rotate,
+        width: 70 + index * 28,
+        height: 70 + index * 28,
         mixBlendMode: "screen",
       }}
+      className="absolute left-1/2 top-1/2 origin-center"
     >
       {/* ring */}
       <div
@@ -55,29 +59,41 @@ function Orbit({ index, t }: { index: number; t: number }) {
       />
       {/* a couple of bright motes traveling the ring */}
       {[-1, 1].map((sign) => (
-        <motion.div
-          key={sign}
-          animate={{ rotate: (t / 1000) * 60 * sign + index * 80 }}
-          transition={{ duration: 0.016, repeat: Infinity, ease: "linear" }}
-          className="absolute left-1/2 top-1/2 origin-center"
-          style={{
-            width: "5px",
-            height: "5px",
-            marginTop: `-2.5px`,
-            marginLeft: `-2.5px`,
-          }}
-        >
-          <div
-            className="absolute rounded-full"
-            style={{
-              inset: "0",
-              background:
-                "radial-gradient(circle, color-mix(in oklab, var(--primary) 90%, transparent / 20%) 0%, transparent 70%)",
-              boxShadow: `0 0 10px color-mix(in oklab, var(--primary) 45%, transparent)`,
-            }}
-          />
-        </motion.div>
+        <Mote key={sign} t={t} sign={sign} index={index} />
       ))}
+    </motion.div>
+  );
+}
+
+function Mote({
+  t,
+  sign,
+  index,
+}: {
+  t: MotionValue<number>;
+  sign: number;
+  index: number;
+}) {
+  const rotate = useTransform(t, (v) => (v / 1000) * 60 * sign + index * 80);
+
+  return (
+    <motion.div
+      style={{ rotate }}
+      className="absolute left-1/2 top-1/2 origin-center"
+      initial={false}
+    >
+      <div
+        className="absolute rounded-full"
+        style={{
+          width: "5px",
+          height: "5px",
+          marginTop: `-2.5px`,
+          marginLeft: `-2.5px`,
+          background:
+            "radial-gradient(circle, color-mix(in oklab, var(--primary) 90%, transparent / 20%) 0%, transparent 70%)",
+          boxShadow: `0 0 10px color-mix(in oklab, var(--primary) 45%, transparent)`,
+        }}
+      />
     </motion.div>
   );
 }

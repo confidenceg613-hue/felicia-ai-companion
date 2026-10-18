@@ -129,6 +129,7 @@ export default function SharedNotes() {
                   key={section.key}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
+                  whileHover={{ y: -3, transition: { duration: 0.18, delay: 0 } }}
                   transition={{
                     duration: 0.3,
                     delay: Math.min(index * 0.04, 0.3),

@@ -482,14 +482,33 @@ export default function Memories() {
                   })}
                 </g>
 
-                {graph.nodes.map((node, index) => (
+                {graph.nodes.map((node, index) => {
+                  const floatDuration = 4.2 + (index % 6) * 0.6;
+                  const floatDelay = (index % 7) * 0.45;
+                  return (
                   <motion.g
                     key={node.memory._id}
                     initial={{ opacity: 0, scale: 0.6 }}
-                    animate={{ opacity: 1, scale: 1 }}
+                    animate={{
+                      opacity: 1,
+                      scale: 1,
+                      y: [0, -4, 0],
+                    }}
                     transition={{
-                      duration: 0.4,
-                      delay: Math.min(index * 0.03, 0.6),
+                      opacity: {
+                        duration: 0.4,
+                        delay: Math.min(index * 0.03, 0.6),
+                      },
+                      scale: {
+                        duration: 0.4,
+                        delay: Math.min(index * 0.03, 0.6),
+                      },
+                      y: {
+                        duration: floatDuration,
+                        delay: floatDelay,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                      },
                     }}
                     style={{ transformOrigin: `${node.x}px ${node.y}px` }}
                     className="cursor-pointer"
@@ -532,7 +551,8 @@ export default function Memories() {
                       {categoryOf(node.memory.category).label}
                     </text>
                   </motion.g>
-                ))}
+                  );
+                })}
               </svg>
 
               <div className="flex flex-wrap items-center gap-3 border-t border-border/50 px-3 py-3">

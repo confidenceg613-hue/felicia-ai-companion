@@ -1,5 +1,6 @@
 import { Brain, Images, MessageSquare, NotebookPen, Settings as SettingsIcon } from "lucide-react";
-import { NavLink, Outlet } from "react-router";
+import { motion } from "framer-motion";
+import { NavLink, Outlet, useLocation } from "react-router";
 
 /**
  * The signed-in shell: one screen at a time, and a bottom bar to move between
@@ -17,11 +18,23 @@ const TABS = [
 ];
 
 export default function AppShell() {
+  const location = useLocation();
+
   return (
     <div className="flex min-h-svh flex-col">
-      {/* The page fills the space above the bar and owns its own scrolling. */}
+      {/* The page fills the space above the bar and owns its own scrolling.
+          Keyed on the path so every tab opens with a soft rise instead of a
+          hard cut — one shared spring, identical on every screen. */}
       <main className="flex min-h-0 flex-1 flex-col">
-        <Outlet />
+        <motion.div
+          key={location.pathname}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          <Outlet />
+        </motion.div>
       </main>
 
       <nav
@@ -36,15 +49,40 @@ export default function AppShell() {
                 end={end}
                 className={({ isActive }) =>
                   [
-                    "flex flex-col items-center gap-1 rounded-full px-3 py-2 text-[10px] tracking-wide transition-all sm:flex-row sm:gap-2 sm:px-4 sm:text-xs",
+                    "relative flex flex-col items-center gap-1 rounded-full px-3 py-2 text-[10px] tracking-wide transition-colors sm:flex-row sm:gap-2 sm:px-4 sm:text-xs",
                     isActive
-                      ? "bg-primary/15 text-primary"
-                      : "text-muted-foreground hover:bg-primary/10 hover:text-foreground",
+                      ? "text-primary"
+                      : "text-muted-foreground hover:text-foreground",
                   ].join(" ")
                 }
               >
-                <Icon className="size-4" />
-                {label}
+                {({ isActive }) => (
+                  <>
+                    {/* The pill glides between tabs — one shared element, so
+                        the active state travels instead of blinking on and off. */}
+                    {isActive && (
+                      <motion.span
+                        layoutId="tab-pill"
+                        aria-hidden
+                        className="absolute inset-0 rounded-full bg-primary/15"
+                        transition={{
+                          type: "spring",
+                          stiffness: 420,
+                          damping: 34,
+                        }}
+                      />
+                    )}
+                    <motion.span
+                      className="relative flex items-center gap-1.5"
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.94 }}
+                      transition={{ type: "spring", stiffness: 500, damping: 28 }}
+                    >
+                      <Icon className="size-4" />
+                      {label}
+                    </motion.span>
+                  </>
+                )}
               </NavLink>
             </li>
           ))}

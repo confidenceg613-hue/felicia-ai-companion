@@ -76,6 +76,10 @@ function timeLabel(ms: number) {
   });
 }
 
+/** How many of the newest messages get a staggered entrance when the chat
+ *  opens — the older ones are already-read history and simply are there. */
+const ENTRANCE_WINDOW = 24;
+
 type TimelineItem = {
   id: string;
   kind: "message" | "photo";
@@ -130,6 +134,18 @@ export default function Dashboard() {
   const photoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [infoOpen, setInfoOpen] = useState(false);
+  /**
+   * The chat should feel like it *arrives* when you open it: the newest
+   * messages cascade in, older history is simply there. This flips off shortly
+   * after first paint, so messages that land later (a live reply) never wait.
+   */
+  const firstPaintRef = useRef(true);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      firstPaintRef.current = false;
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, []);
   const [recording, setRecording] = useState(false);
   const [interim, setInterim] = useState("");
   const [autoVoice, setAutoVoice] = useState(readAutoVoicePref);
@@ -434,7 +450,12 @@ export default function Dashboard() {
                 alt={FELICIA.name}
                 className="relative size-10 rounded-full border border-border/40 object-cover"
               />
-              <span className="absolute right-0 bottom-0 size-2.5 rounded-full border-2 border-background bg-emerald-400" />
+              {/* Online: the little ring keeps breathing so the header reads as
+                  live rather than a static screenshot. */}
+              <span className="absolute right-0 bottom-0 flex size-2.5">
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-70" />
+                <span className="relative inline-flex size-2.5 rounded-full border-2 border-background bg-emerald-400" />
+              </span>
             </span>
             <div className="min-w-0">
               <h1 className="truncate font-display text-[17px] font-semibold tracking-tight">
@@ -532,10 +553,33 @@ export default function Dashboard() {
               {items.length === 0 &&
                 !showPending &&
                 messagePages.status !== "LoadingFirstPage" && (
-                <div className="flex flex-col items-center justify-center px-4 py-20 text-center sm:px-6">
-                  <div className="glow-warm relative flex size-20 items-center justify-center rounded-full bg-primary/10 text-primary">
-                    <Heart className="size-8" />
-                  </div>
+                <motion.div
+                  initial={{ opacity: 0, y: 14 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+                  className="flex flex-col items-center justify-center px-4 py-20 text-center sm:px-6"
+                >
+                  <motion.div
+                    animate={{ scale: [1, 1.06, 1] }}
+                    transition={{
+                      duration: 1.6,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                    }}
+                    className="glow-warm relative flex size-20 items-center justify-center rounded-full bg-primary/10 text-primary"
+                  >
+                    <motion.span
+                      animate={{ scale: [1, 1.18, 1] }}
+                      transition={{
+                        duration: 1.6,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                      }}
+                      className="flex"
+                    >
+                      <Heart className="size-8" />
+                    </motion.span>
+                  </motion.div>
                   <h2 className="mt-6 font-display text-3xl tracking-tight">
                     Say something to her
                   </h2>
@@ -544,18 +588,28 @@ export default function Dashboard() {
                     message, or start with one of these.
                   </p>
                   <div className="mt-7 flex flex-wrap justify-center gap-2">
-                    {OPENERS.map((opener) => (
-                      <button
+                    {OPENERS.map((opener, index) => (
+                      <motion.button
                         key={opener}
                         type="button"
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{
+                          delay: 0.15 + index * 0.07,
+                          type: "spring",
+                          stiffness: 420,
+                          damping: 28,
+                        }}
                         onClick={() => void handleSend(opener)}
-                        className="surface rounded-full px-4 py-2 text-xs text-muted-foreground transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:text-foreground"
+                        className="surface rounded-full px-4 py-2 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
+                        whileHover={{ y: -2 }}
+                        whileTap={{ scale: 0.96 }}
                       >
                         {opener}
-                      </button>
+                      </motion.button>
                     ))}
                   </div>
-                </div>
+                </motion.div>
               )}
 
               {messagePages.status === "CanLoadMore" && (
@@ -581,16 +635,30 @@ export default function Dashboard() {
                 </div>
               )}
 
-              {items.map((item) => {
+              {items.map((item, index) => {
                 const isUser = item.role === "user";
+                const position = index - (items.length - ENTRANCE_WINDOW);
+                const staged = firstPaintRef.current && position >= 0;
+                const entranceDelay = staged
+                  ? Math.min(position, ENTRANCE_WINDOW - 1) * 0.035
+                  : 0;
 
                 if (item.kind === "photo" && item.imageUrl) {
                   return (
                     <motion.div
                       key={item.id}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.3 }}
+                      initial={
+                        staged
+                          ? { opacity: 0, y: 14, scale: 0.96 }
+                          : false
+                      }
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      transition={{
+                        type: "spring",
+                        stiffness: 320,
+                        damping: 26,
+                        delay: entranceDelay,
+                      }}
                       className="flex justify-start gap-3"
                     >
                       <img
@@ -623,9 +691,18 @@ export default function Dashboard() {
                 return (
                   <motion.div
                     key={item.id}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.25 }}
+                    initial={
+                      staged
+                        ? { opacity: 0, y: 10, scale: 0.98 }
+                        : false
+                    }
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    transition={{
+                      type: "spring",
+                      stiffness: 420,
+                      damping: 32,
+                      delay: entranceDelay,
+                    }}
                     className={cn(
                       "flex gap-3",
                       isUser ? "justify-end" : "justify-start",
@@ -708,44 +785,100 @@ export default function Dashboard() {
               })}
 
               {showPending && (
-                <div className="flex justify-end">
+                <motion.div
+                  initial={{ opacity: 0, y: 10, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ type: "spring", stiffness: 480, damping: 30 }}
+                  className="flex justify-end"
+                >
                   <div className="max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-sm text-primary-foreground">
                     <p className="whitespace-pre-wrap">{pending}</p>
                   </div>
-                </div>
+                </motion.div>
               )}
 
               {thinking && (
-                <div className="flex justify-start gap-3">
-                  <img
-                    src={avatarUrl}
-                    alt=""
-                    className="size-7 shrink-0 rounded-full object-cover"
-                  />
+                <motion.div
+                  initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ type: "spring", stiffness: 500, damping: 32 }}
+                  className="flex justify-start gap-3"
+                >
+                  <motion.span
+                    animate={{ rotate: [0, -10, 10, 0] }}
+                    transition={{
+                      duration: 2.4,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                    }}
+                    className="mt-1 shrink-0"
+                  >
+                    <img
+                      src={avatarUrl}
+                      alt=""
+                      className="size-7 rounded-full object-cover"
+                    />
+                  </motion.span>
                   <div className="flex items-center gap-2 rounded-2xl rounded-bl-md border border-border/60 bg-card px-4 py-3">
-                    <Sparkles className="size-4 animate-pulse text-primary" />
+                    <motion.span
+                      animate={{ rotate: [0, 15, -15, 0], scale: [1, 1.15, 1] }}
+                      transition={{
+                        duration: 2,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                      }}
+                      className="flex"
+                    >
+                      <Sparkles className="size-4 text-primary" />
+                    </motion.span>
                     <span className="text-xs text-muted-foreground">she is typing</span>
                     <span className="ml-auto flex gap-0.5">
                       {[0, 150, 300].map((delay) => (
-                        <span
+                        <motion.span
                           key={delay}
-                          className="size-1.5 animate-bounce rounded-full bg-muted-foreground"
-                          style={{ animationDelay: `${delay}ms` }}
+                          className="size-1.5 rounded-full bg-muted-foreground"
+                          animate={{ y: [0, -3, 0], opacity: [0.4, 1, 0.4] }}
+                          transition={{
+                            duration: 0.9,
+                            repeat: Infinity,
+                            delay: delay / 1000,
+                            ease: "easeInOut",
+                          }}
                         />
                       ))}
                     </span>
                   </div>
-                </div>
+                </motion.div>
               )}
 
               {developing && (
-                <div className="flex justify-start gap-3">
-                  <img
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ type: "spring", stiffness: 460, damping: 30 }}
+                  className="flex justify-start gap-3"
+                >
+                  <motion.img
                     src={avatarUrl}
                     alt=""
-                    className="size-7 shrink-0 rounded-full object-cover"
+                    animate={{ scale: [1, 1.06, 1] }}
+                    transition={{
+                      duration: 1.4,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                    }}
+                    className="mt-1 size-7 shrink-0 rounded-full object-cover"
                   />
-                  <div className="w-72 rounded-2xl border border-primary/30 bg-primary/10 px-4 py-3 text-xs text-primary">
+                  <motion.div
+                    animate={{ borderColor: ["oklch(0.55 0.15 300 / 30%)", "oklch(0.55 0.15 300 / 70%)", "oklch(0.55 0.15 300 / 30%)"] }}
+                    transition={{
+                      duration: 1.8,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                    }}
+                    className="w-72 rounded-2xl bg-primary/10 px-4 py-3 text-xs text-primary"
+                    style={{ borderWidth: 1, borderStyle: "solid" }}
+                  >
                     <div className="flex items-center gap-2">
                       <Camera className="size-4 animate-pulse" />
                       Felicia is taking a photo…
@@ -761,8 +894,8 @@ export default function Dashboard() {
                         }}
                       />
                     </div>
-                  </div>
-                </div>
+                  </motion.div>
+                </motion.div>
               )}
             </div>
           </div>

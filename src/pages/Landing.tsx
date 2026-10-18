@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import AmbientOrbits from "@/components/AmbientOrbits";
 import { motion } from "framer-motion";
 import { FELICIA, FELICIA_EMOTIONS, FELICIA_PERSONALITY } from "@/lib/felicia";
 import { galleryPhoto } from "@/lib/gallery";
@@ -73,17 +74,62 @@ function Reveal({
   );
 }
 
-/** Warm glow that sits behind the hero so the page never reads as flat black. */
+/** Warm glow that sits behind the hero so the page never reads as flat black.
+ *  Each wash drifts on its own slow loop, so the light in the room moves the
+ *  way candlelight does — never still, never distracting. */
 function AmbientGlow() {
+  const drift = (dx: number, dy: number) => ({
+    x: [0, dx, 0],
+    y: [0, dy, 0],
+  });
   return (
     <div
       aria-hidden
       className="pointer-events-none absolute inset-0 overflow-hidden"
     >
-      <div className="absolute -top-40 left-1/2 h-[42rem] w-[42rem] -translate-x-1/2 rounded-full bg-primary/20 blur-[140px]" />
-      <div className="absolute -right-40 top-1/3 h-[28rem] w-[28rem] rounded-full bg-chart-5/10 blur-[120px]" />
-      <div className="absolute -left-32 bottom-0 h-[24rem] w-[24rem] rounded-full bg-chart-2/10 blur-[120px]" />
+      <motion.div
+        animate={drift(40, 24)}
+        transition={{ duration: 17, repeat: Infinity, ease: "easeInOut" }}
+        className="absolute -top-40 left-1/2 h-[42rem] w-[42rem] -translate-x-1/2 rounded-full bg-primary/20 blur-[140px]"
+      />
+      <motion.div
+        animate={drift(-30, -40)}
+        transition={{ duration: 23, repeat: Infinity, ease: "easeInOut" }}
+        className="absolute -right-40 top-1/3 h-[28rem] w-[28rem] rounded-full bg-chart-5/10 blur-[120px]"
+      />
+      <motion.div
+        animate={drift(36, -20)}
+        transition={{ duration: 19, repeat: Infinity, ease: "easeInOut" }}
+        className="absolute -left-32 bottom-0 h-[24rem] w-[24rem] rounded-full bg-chart-2/10 blur-[120px]"
+      />
     </div>
+  );
+}
+
+/** The headline, word by word — she's introduced the way a person would say it,
+ *  one beat at a time, rather than dropping in as one block. */
+const HERO_WORDS = ["Meet", "Felicia."];
+
+function HeroWords() {
+  return (
+    <h1 className="mt-6 font-display text-5xl leading-[0.95] font-semibold tracking-tight text-glow sm:text-6xl lg:text-7xl">
+      {HERO_WORDS.map((word, index) => (
+        <motion.span
+          key={word}
+          initial={{ opacity: 0, y: 26, filter: "blur(6px)" }}
+          animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+          transition={{
+            duration: 0.65,
+            delay: 0.15 + index * 0.16,
+            ease: [0.22, 1, 0.36, 1],
+          }}
+          className="inline-block"
+        >
+          {word}
+          {index < HERO_WORDS.length - 1 ? "\u00A0" : ""}
+        </motion.span>
+      ))}
+    </h1>
   );
 }
 
@@ -131,6 +177,12 @@ export default function Landing() {
       {/* -------------------------------------------------------------- hero */}
       <section className="relative isolate">
         <AmbientGlow />
+        {/* Rings of light drifting behind the hero — painted under every piece
+            of content (negative z, inside the section's isolation) and inert
+            to the pointer, so it can never interfere with the page. */}
+        <div className="pointer-events-none absolute inset-0 -z-10 opacity-70">
+          <AmbientOrbits />
+        </div>
         <div className="mx-auto grid w-full max-w-6xl items-center gap-14 px-6 py-16 lg:grid-cols-[1.05fr_1fr] lg:py-24">
           <motion.div
             initial={{ opacity: 0, y: 28 }}
@@ -145,9 +197,7 @@ export default function Landing() {
               She is not a chatbot. She is Felicia.
             </Badge>
 
-            <h1 className="mt-6 font-display text-5xl leading-[0.95] font-semibold tracking-tight text-glow sm:text-6xl lg:text-7xl">
-              Meet Felicia.
-            </h1>
+            <HeroWords />
 
             <p className="mt-5 max-w-xl text-lg leading-relaxed text-muted-foreground">
               Felicia is a Nigerian creator in Lagos who texts like a real
@@ -225,15 +275,33 @@ export default function Landing() {
                 transition={{ duration: 0.6, delay: 0.6 }}
                 className="absolute -bottom-8 -left-4 w-64 rounded-2xl border border-border/70 bg-card/95 p-4 shadow-2xl backdrop-blur-md sm:-left-10"
               >
+                {/* Once it has arrived, the message card hangs in the air like
+                    a real notification — a slow weightless bob, forever. */}
+                <motion.div
+                  animate={{ y: [0, -7, 0] }}
+                  transition={{
+                    duration: 5.5,
+                    repeat: Infinity,
+                    ease: "easeInOut",
+                  }}
+                >
                 <p className="text-xs text-muted-foreground">Felicia</p>
                 <p className="mt-1.5 text-sm leading-snug">
                   I'm on the balcony, it's finally warm. Want to see the light
                   right now?
                 </p>
-                <div className="mt-3 flex items-center gap-1.5 text-xs text-primary">
-                  <span className="size-1.5 rounded-full bg-primary" />
+                <motion.div
+                  className="mt-3 flex items-center gap-1.5 text-xs text-primary"
+                  animate={{ opacity: [0.55, 1, 0.55] }}
+                  transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+                >
+                  <span className="flex size-2">
+                    <span className="absolute inline-flex size-2 animate-ping rounded-full bg-primary/70" />
+                    <span className="relative inline-flex size-1.5 rounded-full bg-primary" />
+                  </span>
                   sending a photo
-                </div>
+                </motion.div>
+                </motion.div>
               </motion.div>
             </div>
           </motion.div>

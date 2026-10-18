@@ -17,6 +17,7 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import logo from "@/assets/logo.svg";
 import { ArrowRight, Loader2, Mail, UserX } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 import { Suspense, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 
@@ -116,9 +117,21 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       {/* Auth Content */}
       <div className="flex-1 flex items-center justify-center">
         <div className="glow-warm relative flex items-center justify-center h-full flex-col px-6">
+        <motion.div
+          initial={{ opacity: 0, y: 22, scale: 0.97 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+        >
         <Card className="min-w-[350px] rounded-3xl border-border/50 bg-card/80 p-0 shadow-2xl backdrop-blur-xl">
+          <AnimatePresence mode="wait" initial={false}>
           {step === "signIn" ? (
-            <>
+            <motion.div
+              key="email"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+            >
               <CardHeader className="text-center">
               <div className="flex justify-center">
                     <img
@@ -201,9 +214,15 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                   </div>
                 </CardContent>
               </form>
-            </>
+            </motion.div>
           ) : (
-            <>
+            <motion.div
+              key="otp"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+            >
               <CardHeader className="text-center mt-4">
                 <CardTitle>Check your email</CardTitle>
                 <CardDescription>
@@ -283,8 +302,9 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                   </Button>
                 </CardFooter>
               </form>
-            </>
+            </motion.div>
           )}
+          </AnimatePresence>
 
           <div className="py-4 px-6 text-xs text-center text-muted-foreground bg-muted border-t rounded-b-lg">
             Secured by{" "}
@@ -298,6 +318,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
             </a>
           </div>
         </Card>
+        </motion.div>
         </div>
       </div>
     </div>
