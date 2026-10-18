@@ -47,6 +47,9 @@ const schema = defineSchema(
       imageStorageId: v.optional(v.id("_storage")),
     })
       .index("by_user", ["userId"])
+      // "On this day" reads one calendar day out of past years — a bounded
+      // range over an explicit createdAt field, so it never scans history.
+      .index("by_user_and_created", ["userId", "createdAt"])
       // Felicia's whole archive is searchable so a message from a year ago can
       // be pulled back into the prompt when the topic comes up again.
       .searchIndex("search_content", {

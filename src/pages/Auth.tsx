@@ -15,9 +15,14 @@ import {
 } from "@/components/ui/input-otp";
 
 import { useAuth } from "@/hooks/use-auth";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
+import { GUEST_MERGE_KEY } from "@/lib/upgrade";
 import logo from "@/assets/logo.svg";
 import { ArrowRight, Loader2, Mail, UserX } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
+import { useMutation } from "convex/react";
+import { toast } from "sonner";
 import { Suspense, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 
@@ -43,16 +48,22 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     searchParams.get("returnTo"),
     redirectAfterAuth,
   );
+  // /auth?upgrade=1: we arrived here FROM a guest session to make it permanent,
+  // so the auto-redirect below must not bounce us back before the code arrives.
+  const upgradeMode = searchParams.get("upgrade") === "1";
+  const claimGuest = useMutation(api.accounts.claimGuestConversation);
   const [step, setStep] = useState<"signIn" | { email: string }>("signIn");
   const [otp, setOtp] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!authLoading && isAuthenticated) {
+    // In upgrade mode the guest is already authenticated — staying put is the
+    // whole point, until the OTP submit below carries the conversation over.
+    if (!authLoading && isAuthenticated && !upgradeMode) {
       navigate(redirect);
     }
-  }, [authLoading, isAuthenticated, navigate, redirect]);
+  }, [authLoading, isAuthenticated, navigate, redirect, upgradeMode]);
   const handleEmailSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsLoading(true);
@@ -81,7 +92,24 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       const formData = new FormData(event.currentTarget);
       await signIn("email-otp", formData);
 
-      console.log("signed in");
+      // Upgrade: the session is now the email account — pull the guest
+      // conversation across before landing on it. A carry-over failure never
+      // blocks the sign-in (nothing is deleted; it just stays under the guest
+      // id), but the user is told plainly rather than left guessing.
+      const fromUserId = sessionStorage.getItem(GUEST_MERGE_KEY);
+      if (upgradeMode && fromUserId) {
+        try {
+          await claimGuest({ fromUserId: fromUserId as Id<"users"> });
+          toast.success("Your conversation is now permanent.");
+        } catch (carryError) {
+          console.warn("Could not carry the guest conversation over:", carryError);
+          toast.error(
+            "Signed in — but the conversation couldn't be carried over this time.",
+          );
+        } finally {
+          sessionStorage.removeItem(GUEST_MERGE_KEY);
+        }
+      }
 
       navigate(redirect);
     } catch (error) {
@@ -143,11 +171,13 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                       onClick={() => navigate("/")}
                     />
                   </div>
-                <CardTitle className="font-display text-2xl tracking-tight">Get Started</CardTitle>
+                <CardTitle className="font-display text-2xl tracking-tight">
+                  {upgradeMode ? "Keep this conversation" : "Get Started"}
+                </CardTitle>
                 <CardDescription>
-                  Enter your email to log in or sign up. Everything you and
-                  Felicia say is kept on your account, so signing out and back in
-                  later picks the conversation up exactly where it stopped.
+                  {upgradeMode
+                    ? "Tie everything you and Felicia have said to your email — it survives sign-out, and it follows you to any device."
+                    : "Enter your email to log in or sign up. Everything you and Felicia say is kept on your account, so signing out and back in later picks the conversation up exactly where it stopped."}
                 </CardDescription>
               </CardHeader>
               <form onSubmit={handleEmailSubmit}>
@@ -182,6 +212,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                     <p className="mt-2 text-sm text-red-500">{error}</p>
                   )}
                   
+                  {!upgradeMode && (
                   <div className="mt-4">
                     <div className="relative">
                       <div className="absolute inset-0 flex items-center">
@@ -212,6 +243,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                       chat is still there.
                     </p>
                   </div>
+                  )}
                 </CardContent>
               </form>
             </motion.div>

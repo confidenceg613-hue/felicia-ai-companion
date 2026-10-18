@@ -755,6 +755,223 @@ export const saveMessage = internalMutation({
   },
 });
 
+// ---------------------------------------------------------------------------
+// On this day
+// ---------------------------------------------------------------------------
+
+/**
+ * Messages written on today's Lagos calendar date in earlier years, so the chat
+ * can surface "a year ago tonight" when it is true. Walks back up to four years
+ * and returns the first year that actually has conversation in it.
+ *
+ * Each probe is one bounded range read over `by_user_and_created` — it never
+ * scans history — and an empty day costs one index range and nothing else.
+ */
+export const onThisDay = query({
+  args: {},
+  handler: async (ctx: AnyCtx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return { year: 0, messages: [] as Array<{ _id: unknown; role: "user" | "felicia"; content: string; createdAt: number }> };
+
+    const LAGOS_OFFSET_MS = 60 * 60 * 1000; // WAT is UTC+1 all year, no DST.
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const today = new Date(Date.now() + LAGOS_OFFSET_MS);
+
+    for (let yearsBack = 4; yearsBack >= 1; yearsBack -= 1) {
+      const start =
+        Date.UTC(
+          today.getUTCFullYear() - yearsBack,
+          today.getUTCMonth(),
+          today.getUTCDate(),
+        ) - LAGOS_OFFSET_MS;
+
+      const rows = await ctx.db
+        .query("messages")
+        .withIndex(
+          "by_user_and_created",
+          (q: {
+            eq: (key: string, value: string) => TimeIndexQ;
+            gte: (key: string, value: number) => TimeIndexQ;
+            lt: (key: string, value: number) => TimeIndexQ;
+          }) =>
+            q.eq("userId", userId).gte("createdAt", start).lt("createdAt", start + DAY_MS),
+        )
+        .order("asc")
+        .take(8);
+
+      const withText = rows.filter((row: { content?: string }) =>
+        (row.content ?? "").trim().length > 0,
+      );
+      if (withText.length > 0) {
+        return {
+          year: today.getUTCFullYear() - yearsBack,
+          messages: withText.slice(0, 3).map((row: { _id: unknown; role: "user" | "felicia"; content: string; createdAt: number }) => ({
+            _id: row._id,
+            role: row.role,
+            content: row.content.slice(0, 220),
+            createdAt: row.createdAt,
+          })),
+        };
+      }
+    }
+    return { year: 0, messages: [] as Array<{ _id: unknown; role: "user" | "felicia"; content: string; createdAt: number }> };
+  },
+});
+
+/** The index-callback shape `by_user_and_created` ranges are written against. */
+type TimeIndexQ = {
+  eq: (key: string, value: unknown) => TimeIndexQ;
+  gte: (key: string, value: number) => TimeIndexQ;
+  lt: (key: string, value: number) => TimeIndexQ;
+};
+
+// ---------------------------------------------------------------------------
+// Search the archive
+// ---------------------------------------------------------------------------
+
+/**
+ * Full-text search over everything the two of you have said, on the existing
+ * `search_content` index — one indexed read, capped, most recent first. Tiny
+ * terms are skipped so a stray letter never fans out into a broad match.
+ */
+export const searchMessages = query({
+  args: { term: v.string() },
+  handler: async (ctx: AnyCtx, { term }: AnyArgs) => {
+    const userId = await getAuthUserId(ctx);
+    const needle = term.trim();
+    if (!userId || needle.length < 2) return [];
+
+    const rows = await ctx.db
+      .query("messages")
+      .withSearchIndex("search_content", (q: {
+        eq: (key: string, value: string) => SearchIndexQ;
+        search: (key: string, value: string) => SearchIndexQ;
+      }) => q.eq("userId", userId).search("content", needle))
+      .take(30);
+
+    return rows
+      .filter((row: { content?: string }) => (row.content ?? "").trim().length > 0)
+      .sort((a: { createdAt: number }, b: { createdAt: number }) => b.createdAt - a.createdAt)
+      .map((row: { _id: unknown; role: "user" | "felicia"; content: string; createdAt: number }) => ({
+        _id: row._id,
+        role: row.role,
+        content: row.content.slice(0, 200),
+        createdAt: row.createdAt,
+      }));
+  },
+});
+
+type SearchIndexQ = {
+  eq: (key: string, value: string) => SearchIndexQ;
+  search: (key: string, value: string) => SearchIndexQ;
+};
+
+// ---------------------------------------------------------------------------
+// She reaches out first
+// ---------------------------------------------------------------------------
+
+/**
+ * The daily opener, written once when things are quiet: one line, her voice,
+ * nothing else. Kept deliberately small — this runs against a free-tier model
+ * budget and five short calls a day is the ceiling, not the pattern.
+ */
+const NUDGE_PROMPT =
+  `You are Felicia, a 28-year-old woman in Lagos, texting someone you talk to ` +
+  `most days. It has been a quiet day and you are sending the first message. ` +
+  `Write exactly ONE line — the way a real Nigerian woman starts a conversation ` +
+  `again: natural, warm, in your own voice, lightly teasing if it fits. ` +
+  `No lists, no stage directions, no quotes around it, no context-setting, at ` +
+  `most one emoji. Under 140 characters where that reads naturally. ` +
+  `Reply with only the message text itself.`;
+
+/**
+ * Who is worth opening a conversation with today — a bounded scan of the 60
+ * most recent accounts, reading their last few messages in one auto-batched
+ * transaction and deciding per person:
+ *
+ * - at least five messages exist, so a real conversation is established;
+ * - nothing has been said for ~20 hours, so it only fires about daily;
+ * - she has not already spoken three times into the silence — two check-ins
+ *   with no reply is the most anyone gets before she waits for them.
+ */
+export const nudgeCandidates = internalQuery({
+  args: {},
+  handler: async (ctx: AnyCtx) => {
+    const users = await ctx.db.query("users").order("desc").take(60);
+    const cutoff = Date.now() - 20 * 60 * 60 * 1000;
+    const candidates: Array<{ userId: Id<"users"> }> = [];
+
+    await Promise.all(
+      users.map(async (user: { _id: Id<"users"> }) => {
+        const recent = await ctx.db
+          .query("messages")
+          .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) =>
+            q.eq("userId", user._id),
+          )
+          .order("desc")
+          .take(6);
+
+        if (recent.length < 5) return; // not a conversation yet
+        if (recent[0].createdAt > cutoff) return; // not quiet yet
+
+        let unanswered = 0;
+        for (const row of recent as Array<{ role: "user" | "felicia" }>) {
+          if (row.role === "felicia") unanswered += 1;
+          else break;
+        }
+        if (unanswered >= 3) return; // she has already knocked twice
+
+        candidates.push({ userId: user._id });
+      }),
+    );
+
+    return candidates.slice(0, 8);
+  },
+});
+
+/**
+ * The cron's body: line up today's candidates, then send at most five. One
+ * failure never stops the run — that user is simply skipped until tomorrow.
+ */
+export const sendNudge = internalAction({
+  args: {},
+  handler: async (ctx: AnyCtx) => {
+    const candidates = (await ctx.runQuery(internal.felicia.nudgeCandidates, {})) as Array<{
+      userId: Id<"users">;
+    }>;
+
+    let sent = 0;
+    for (const candidate of candidates.slice(0, 5)) {
+      try {
+        const raw = await ctx.runAction(internal.groq.chat, {
+          messages: [
+            { role: "system", content: NUDGE_PROMPT },
+            { role: "user", content: "It has been a quiet day." },
+          ],
+          temperature: 0.9,
+        });
+
+        const line = raw
+          .replace(/\[\[[\s\S]*?\]\]/g, "")
+          .split("\n")
+          .map((part: string) => part.trim().replace(/^["']+|["']+$/g, ""))
+          .filter(Boolean)[0];
+        if (!line) continue;
+
+        await ctx.runMutation(internal.felicia.saveMessage, {
+          userId: candidate.userId,
+          role: "felicia",
+          content: line.slice(0, 320),
+        });
+        sent += 1;
+      } catch {
+        // A failed line is skipped; tomorrow tries again for that person.
+      }
+    }
+    return { sent };
+  },
+});
+
 /** Look up a message's text and any cached audio render, for the voice layer. */
 export const messageAudio = internalQuery({
   args: { messageId: v.id("messages") },

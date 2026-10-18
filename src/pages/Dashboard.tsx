@@ -15,6 +15,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -42,7 +43,10 @@ import {
   VolumeX,
   Brain,
   Heart,
+  History,
   MessageSquare,
+  Search,
+  X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
@@ -146,6 +150,23 @@ export default function Dashboard() {
     }, 1500);
     return () => clearTimeout(timer);
   }, []);
+
+  // On this day + archive search. The search sits idle ("skip") until two real
+  // characters land, debounced, so typing doesn't fire a query per keystroke.
+  const memoryDay = useQuery(api.felicia.onThisDay);
+  const [dismissedMemory, setDismissedMemory] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [term, setTerm] = useState("");
+  const [debouncedTerm, setDebouncedTerm] = useState("");
+  const searchResults = useQuery(
+    api.felicia.searchMessages,
+    debouncedTerm.trim().length >= 2 ? { term: debouncedTerm.trim() } : "skip",
+  );
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedTerm(term), 250);
+    return () => clearTimeout(timer);
+  }, [term]);
   const [recording, setRecording] = useState(false);
   const [interim, setInterim] = useState("");
   const [autoVoice, setAutoVoice] = useState(readAutoVoicePref);
@@ -498,6 +519,15 @@ export default function Dashboard() {
             >
               <Images className="size-4" />
             </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary"
+              onClick={() => setSearchOpen((open) => !open)}
+              title="Search the conversation"
+            >
+              <Search className="size-4" />
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -535,6 +565,95 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* Search the whole archive — results show as they match; picking one
+            closes the panel (the timeline itself is not a jump target). */}
+        {searchOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+            className="glass mx-auto mt-2 w-full max-w-5xl shrink-0 rounded-2xl p-2.5"
+          >
+            <div className="flex items-center gap-2">
+              <Search className="size-4 shrink-0 text-muted-foreground" />
+              <Input
+                autoFocus
+                value={term}
+                onChange={(event) => setTerm(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") setSearchOpen(false);
+                }}
+                placeholder="Search everything the two of you have said…"
+                className="h-8 flex-1 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7 shrink-0"
+                title="Close search"
+                onClick={() => {
+                  setSearchOpen(false);
+                  setTerm("");
+                }}
+              >
+                <X className="size-4" />
+              </Button>
+            </div>
+
+            <div className="mt-1 max-h-56 overflow-y-auto">
+              {debouncedTerm.trim().length < 2 ? (
+                <p className="px-1 py-1.5 text-[11px] text-muted-foreground/70">
+                  Type at least two characters — every message you have both
+                  sent is searchable.
+                </p>
+              ) : searchResults === undefined ? (
+                <p className="px-1 py-1.5 text-[11px] text-muted-foreground/70">
+                  Searching…
+                </p>
+              ) : searchResults.length === 0 ? (
+                <p className="px-1 py-1.5 text-[11px] text-muted-foreground/70">
+                  Nothing matches “{debouncedTerm.trim()}”.
+                </p>
+              ) : (
+                searchResults.map((result: {
+                  _id: unknown;
+                  role: string;
+                  content: string;
+                  createdAt: number;
+                }) => (
+                  <button
+                    key={String(result._id)}
+                    type="button"
+                    onClick={() => {
+                      setSearchOpen(false);
+                      setTerm("");
+                    }}
+                    className="block w-full rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-primary/10"
+                  >
+                    <p className="truncate text-[11px]">
+                      <span className="text-primary">
+                        {result.role === "user" ? "You" : "Felicia"}
+                      </span>
+                      <span className="text-muted-foreground/70">
+                        {" "}·{" "}
+                        {new Date(result.createdAt).toLocaleString([], {
+                          month: "short",
+                          day: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </p>
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                      {result.content}
+                    </p>
+                  </button>
+                ))
+              )}
+            </div>
+          </motion.div>
+        )}
+
         <div className="flex min-h-0 flex-1 flex-col gap-3 pb-3 pt-3">
           {missingKeys.length > 0 && connection && (
             <div className="border-b border-primary/30 bg-primary/10 px-4 py-3 text-xs">
@@ -550,6 +669,57 @@ export default function Dashboard() {
               className="min-h-0 flex-1 overflow-y-auto px-1 sm:px-2"
             >
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+              {/* On this day — a real moment from an earlier year, surfaced only
+                  when one exists. Dismissible, and it never invents one. */}
+              {memoryDay &&
+                memoryDay.year > 0 &&
+                !dismissedMemory && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{
+                      duration: 0.45,
+                      delay: 0.2,
+                      ease: [0.22, 1, 0.36, 1],
+                    }}
+                    className="surface rounded-3xl px-4 py-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="flex items-center gap-1.5 text-[10px] tracking-widest text-primary uppercase">
+                          <History className="size-3" />
+                          On this day · {memoryDay.year}
+                        </p>
+                        <div className="mt-1.5 space-y-1">
+                          {memoryDay.messages.map((message: {
+                            _id: unknown;
+                            role: string;
+                            content: string;
+                          }) => (
+                            <p
+                              key={String(message._id)}
+                              className="truncate text-xs text-muted-foreground"
+                            >
+                              <span className="text-foreground/80">
+                                {message.role === "user" ? "You" : "Felicia"}:
+                              </span>{" "}
+                              {message.content}
+                            </p>
+                          ))}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        title="Hide this memory"
+                        onClick={() => setDismissedMemory(true)}
+                        className="shrink-0 rounded-full p-1 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-foreground"
+                      >
+                        <X className="size-3.5" />
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+
               {items.length === 0 &&
                 !showPending &&
                 messagePages.status !== "LoadingFirstPage" && (

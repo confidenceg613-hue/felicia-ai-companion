@@ -5,7 +5,8 @@ import { useFeliciaAvatar } from "@/hooks/use-felicia-avatar";
 import { FELICIA } from "@/lib/felicia";
 import { THEME_OPTIONS, useTheme, type Theme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
-import { Check, LogOut, Monitor, Moon, Sun } from "lucide-react";
+import { GUEST_MERGE_KEY } from "@/lib/upgrade";
+import { Check, LogOut, Mail, Monitor, Moon, Sun } from "lucide-react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router";
 
@@ -172,6 +173,44 @@ export default function Settings() {
               </Button>
             </div>
           </motion.section>
+
+          {/* -------------------------------------------------------- guest */}
+          {user?.isAnonymous && (
+            <motion.section
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{
+                duration: 0.45,
+                delay: 0.24,
+                ease: [0.22, 1, 0.36, 1],
+              }}
+              className="surface rounded-3xl p-6"
+            >
+              <div className="flex items-start gap-3">
+                <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <Mail className="size-4" />
+                </span>
+                <div className="min-w-0">
+                  <h2 className="font-display text-lg">Make this permanent</h2>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    You're browsing as a guest, which is tied to this device —
+                    sign out and this conversation stays behind. Tie it to an
+                    email and it follows you to any device, forever.
+                  </p>
+                </div>
+              </div>
+
+              <Button
+                className="mt-4 gap-2"
+                onClick={() => {
+                  sessionStorage.setItem(GUEST_MERGE_KEY, String(user._id));
+                  void navigate("/auth?upgrade=1");
+                }}
+              >
+                Make my account permanent
+              </Button>
+            </motion.section>
+          )}
 
           {/* ------------------------------------------------------------- data */}
           <motion.section

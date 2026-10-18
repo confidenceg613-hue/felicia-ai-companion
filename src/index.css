@@ -275,3 +275,23 @@
     display: none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Reduced motion
+
+   For people who have asked their system to calm things down: the living
+   decorations stop moving, while Framer's own animations are handled by
+   MotionConfig in main.tsx. Kept outside @layer so it wins over the utility
+   classes it switches off. Everything stays visible and functional.
+   --------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .aura::before,
+  .animate-ping,
+  .animate-pulse,
+  .animate-bounce {
+    animation: none;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+}
