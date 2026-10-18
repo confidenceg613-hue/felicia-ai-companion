@@ -676,10 +676,8 @@ export default function Dashboard() {
                 !dismissedMemory && (
                   <motion.div
                     initial={{ opacity: 0, y: -8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{
-                      duration: 0.45,
-                      delay: 0.2,
+                    animate={{ opacity: 1, y: 0 }}                    transition={{ duration: 0.32,
+                      delay: 0.12,
                       ease: [0.22, 1, 0.36, 1],
                     }}
                     className="surface rounded-3xl px-4 py-3"
@@ -726,22 +724,22 @@ export default function Dashboard() {
                 <motion.div
                   initial={{ opacity: 0, y: 14 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+                  transition={{ duration: 0.36, ease: [0.22, 1, 0.36, 1] }}
                   className="flex flex-col items-center justify-center px-4 py-20 text-center sm:px-6"
                 >
                   <motion.div
                     animate={{ scale: [1, 1.06, 1] }}
-                    transition={{
-                      duration: 1.6,
-                      repeat: Infinity,
-                      ease: "easeInOut",
-                    }}
+                  transition={{
+                    duration: 1.2,
+                    repeat: Infinity,
+                    ease: "easeInOut",
+                  }}
                     className="glow-warm relative flex size-20 items-center justify-center rounded-full bg-primary/10 text-primary"
                   >
                     <motion.span
                       animate={{ scale: [1, 1.18, 1] }}
                       transition={{
-                        duration: 1.6,
+                        duration: 1.2,
                         repeat: Infinity,
                         ease: "easeInOut",
                       }}
@@ -825,7 +823,7 @@ export default function Dashboard() {
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       transition={{
                         type: "spring",
-                        stiffness: 320,
+                        stiffness: 420,
                         damping: 26,
                         delay: entranceDelay,
                       }}
@@ -866,13 +864,12 @@ export default function Dashboard() {
                         ? { opacity: 0, y: 10, scale: 0.98 }
                         : false
                     }
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    transition={{
-                      type: "spring",
-                      stiffness: 420,
-                      damping: 32,
-                      delay: entranceDelay,
-                    }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}                      transition={{
+                        type: "spring",
+                        stiffness: 520,
+                        damping: 30,
+                        delay: entranceDelay,
+                      }}
                     className={cn(
                       "flex gap-3",
                       isUser ? "justify-end" : "justify-start",
@@ -958,7 +955,7 @@ export default function Dashboard() {
                 <motion.div
                   initial={{ opacity: 0, y: 10, scale: 0.96 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
-                  transition={{ type: "spring", stiffness: 480, damping: 30 }}
+                  transition={{ type: "spring", stiffness: 580, damping: 28 }}
                   className="flex justify-end pb-2"
                 >
                   <div className="max-w-[85%] rounded-2xl rounded-bl-md bg-primary px-4 py-2.5 text-sm text-primary-foreground">
@@ -971,7 +968,7 @@ export default function Dashboard() {
                 <motion.div
                   initial={{ opacity: 0, y: 8, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 32 }}
+                  transition={{ type: "spring", stiffness: 600, damping: 28 }}
                   className="flex justify-start gap-3 pb-2"
                 >
                   <motion.span
@@ -1025,15 +1022,13 @@ export default function Dashboard() {
                 <motion.div
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ type: "spring", stiffness: 460, damping: 30 }}
+                  transition={{ type: "spring", stiffness: 560, damping: 28 }}
                   className="flex justify-start gap-3 pb-2"
                 >
                   <motion.img
                     src={avatarUrl}
                     alt=""
-                    animate={{ scale: [1, 1.06, 1] }}
-                    transition={{
-                      duration: 1.4,
+                    animate={{ scale: [1, 1.06, 1] }}                    transition={{ duration: 1.0,
                       repeat: Infinity,
                       ease: "easeInOut",
                     }}
@@ -1058,10 +1053,10 @@ export default function Dashboard() {
                         className="h-full rounded-full bg-primary"
                         initial={{ width: "0%" }}
                         animate={{ width: "100%" }}
-                        transition={{
-                          duration: DEVELOP_MS / 1000,
-                          ease: "linear",
-                        }}
+                      transition={{
+                        duration: (DEVELOP_MS - 1200) / 1000,
+                        ease: "linear",
+                      }}
                       />
                     </div>
                   </motion.div>
