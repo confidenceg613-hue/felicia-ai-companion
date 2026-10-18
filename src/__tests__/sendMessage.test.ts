@@ -1,369 +1,299 @@
-// This harness is a development helper, not part of the shipped app. It only
-// runs under `bun test` and is excluded from the app's `tsc`/`vite` builds.
-// Run it with: bun test src/__tests__/sendMessage.test.ts
+// Development harness for `sendMessage` — the whole read, decide and store path
+// of one message, with Groq and the database mocked out. Excluded from the
+// app's tsc/vite builds. Run it with:
+//   bun test src/__tests__/sendMessage.test.ts
+//
+// Note on invocation: Convex's registered `invokeAction` builds its own real
+// action context, which cannot exist outside a backend, so these call the
+// action's stored handler directly with a mock context instead — the same
+// function the deployment runs, minus the runtime around it.
 
 // @ts-expect-error — `bun:test` is a Bun builtin and is not declared for tsc.
-import { expect, test, describe, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
+
+import { getFunctionName } from "convex/server";
 
 import { sendMessage } from "../convex/felicia.js";
+import { FELICIA_GALLERY } from "../lib/gallery.js";
 
-const sendMessageApi = sendMessage as unknown as {
-  invokeAction: (requestId: string, argsStr: string) => Promise<unknown>;
+/**
+ * The name behind a Convex function reference, e.g. `felicia:notesFor`.
+ *
+ * Inside a backend these are opaque proxies; `getFunctionName` is the API the
+ * runtime itself uses to read one, which is what lets the mocks below answer
+ * the right call.
+ */
+function refName(reference: unknown): string {
+  try {
+    return getFunctionName(reference as never);
+  } catch {
+    return "";
+  }
+}
+
+/** The action's real handler, called with a mock context. */
+const handler = (
+  sendMessage as unknown as {
+    _handler: (
+      ctx: unknown,
+      args: { text: string },
+    ) => Promise<unknown>;
+  }
+)._handler;
+
+type Result = {
+  reply: string;
+  photoScene: string | null;
+  photoUrl: string | null;
+  photoLabel: string | null;
+  replyMessageId: string;
+  photoReadyAfterMs: number;
 };
 
-interface MockQueryApi {
-  withIndex: (
-    _index: string,
-    eq: (key: string, value: string) => unknown,
-  ) => {
-    order: (dir: "asc" | "desc") => {
-      take: (n: number) => unknown[];
-    };
-  };
-}
+const KITCHEN = [
+  "braided-chef-red-kitchen",
+  "red-romper-kitchen",
+  "red-romper-cooking",
+  "kitchen-red-top",
+  "kitchen-counter-sitting",
+];
 
-interface MockDb {
-  insert: (table: string, row: Record<string, unknown>) => { _id: string };
-  patch: (id: string, patch: Record<string, unknown>) => void;
-  query: (table: string) => MockQueryApi;
-  delete: (id: string) => void;
-}
+const RED = [
+  "braided-chef-red-kitchen",
+  "red-romper-kitchen",
+  "red-romper-cooking",
+  "kitchen-red-top",
+  "red-romper-on-the-bed",
+  "red-dress-sofa",
+];
 
-interface MockCtx {
-  auth: { getUserIdentity: () => Promise<{ subject: string } | null> };
-  db: MockDb;
-  storage: { getUrl: (id: string) => Promise<string | null> };
-  runQuery: <Name extends string>(
-    name: Name,
-    args: Record<string, unknown>,
-  ) => unknown;
-  runMutation: <Name extends string>(
-    name: Name,
-    args: Record<string, unknown>,
-  ) => unknown;
-  runAction: <Name extends string>(
-    name: Name,
-    args: Record<string, unknown>,
-  ) => Promise<unknown>;
-  scheduler: { runAfter: (delayMs: number, name: string, args: Record<string, unknown>) => unknown };
-}
-
-interface MockViews {
-  notesFor(userId: string): Promise<{ appearance: string; mood: string }>;
-  topMemories(userId: string): Promise<unknown[]>;
-  conversationStart(userId: string): Promise<number>;
-  recentMessages(userId: string, limit: number): Promise<unknown[]>;
-  recallMessages(userId: string, options: Record<string, unknown>): Promise<unknown[]>;
-  sentPhotos(userId: string): Promise<unknown[]>;
-}
+/** What the model answers, keyed by what was asked. */
+const REPLIES: Array<{ match: RegExp; reply: string }> = [
+  {
+    match: /kitchen/i,
+    reply:
+      "I'm in the kitchen right now, come and see.\n" +
+      "[[scene: Felicia in her kitchen in the red top, one hand on the granite counter, warm overhead light]]",
+  },
+  {
+    match: /red/i,
+    reply:
+      "Something red? Give me a second.\n" +
+      "[[scene: Felicia leaning on the counter in the red romper, laughing, daylight across the room]]",
+  },
+  {
+    match: /camel|desert/i,
+    reply:
+      "I have never been near a camel in my life, but here.\n" +
+      "[[scene: Felicia on a camel at a desert fairground at dawn, long shadows across the dunes]]",
+  },
+  {
+    match: /./,
+    reply: "Tell me about it. Was it the kind of day that ends with tea?",
+  },
+];
 
 interface StoredMessage {
   _id: string;
   role: string;
   content: string;
-  createdAt: number;
 }
 
-interface CollabBag {
-  ctx: MockCtx;
+interface StoredPhoto {
+  _id: string;
+  url?: string | null;
+  galleryId?: string | null;
+  label?: string | null;
+  scene?: string | null;
+}
+
+interface Bag {
   messages: StoredMessage[];
-  photos: Array<Record<string, unknown>>;
-}
-
-function makePlainCtx(): MockCtx {
-  return {
-    auth: { getUserIdentity: () => Promise.resolve({ subject: "user-one|session" }) },
+  photos: StoredPhoto[];
+  ctx: {
+    auth: { getUserIdentity: () => Promise<{ subject: string } | null> };
     db: {
-      insert: (() => {
-        const store: Array<{ table: string; row: Record<string, unknown>; _id: string }> = [];
-        return function (table: string, row: Record<string, unknown>) {
-          const _id = `${table}:${store.length + 1}`;
-          store.push({ table, row: { ...row, _id }, _id });
-          return { _id };
-        };
-      })(),
-      patch: (() => {
-        const store: Array<{ _id: string; row: Record<string, unknown> }> = [];
-        return function (id: string, patch: Record<string, unknown>) {
-          const entry = store.find((r) => r._id === id);
-          if (entry) Object.assign(entry.row, patch);
-        };
-      })(),
-      query: (_: string) => ({ withIndex: () => ({ order: () => ({ take: () => [] }) }) }),
-      delete: (() => {
-        const store: Array<{ _id: string }> = [];
-        return function (id: string) {
-          const idx = store.findIndex((r) => r._id === id);
-          if (idx >= 0) store.splice(idx, 1);
-        };
-      })(),
-    },
-    storage: { getUrl: async () => null },
-    scheduler: { runAfter: () => null },
-    runQuery: async () => null,
-    runMutation: async () => null,
-    runAction: async () => null,
+      insert: (table: string, row: Record<string, unknown>) => { _id: string };
+      patch: (id: string, patch: Record<string, unknown>) => void;
+      query: (table: string) => unknown;
+    };
+    storage: { getUrl: (id: string) => Promise<string | null> };
+    scheduler: { runAfter: () => null };
+    runQuery: (name: string, args: Record<string, unknown>) => Promise<unknown>;
+    runMutation: (name: string, args: Record<string, unknown>) => Promise<unknown>;
+    runAction: (name: string, args: Record<string, unknown>) => Promise<unknown>;
   };
 }
 
-function makeMockViews(bag: CollabBag): MockViews {
-  return {
-    async notesFor() {
-      return { appearance: "soft natural light, no makeup, hair loose", mood: "playful" };
-    },
-    async topMemories() {
-      return [];
-    },
-    async conversationStart() {
-      return 1700000000000;
-    },
-    async recentMessages(_, limit) {
-      return bag.messages
-        .slice()
-        .reverse()
-        .slice(0, limit)
-        .map((m) => ({
-          _id: m._id,
-          role: m.role,
-          content: m.content,
-          createdAt: Date.parse("2026-01-01"),
-          imageStorageId: null,
-        }));
-    },
-    async recallMessages() {
-      return [];
-    },
-    async sentPhotos() {
-      return bag.photos.slice(-24);
-    },
-  };
-}
-
-function withCollabs(): CollabBag {
-  const ctx = makePlainCtx();
+function makeBag(): Bag {
   const messages: StoredMessage[] = [];
-  const photos: Array<Record<string, unknown>> = [];
-  const views = makeMockViews({ ctx, messages, photos });
+  const photos: StoredPhoto[] = [];
+  let counter = 0;
 
-  const insert: MockDb["insert"] = (table, row) => {
-    const _id = `${table}:${messages.length + photos.length + 1}`;
-    if (table === "messages") {
-      messages.push({ ...row, _id } as StoredMessage);
-    } else if (table === "photos") {
-      photos.push({ ...row, _id });
-    }
-    return { _id };
+  const bag: Bag = {
+    messages,
+    photos,
+    ctx: {
+      auth: { getUserIdentity: async () => ({ subject: "user-one|session" }) },
+      db: {
+        insert(table, row) {
+          counter += 1;
+          const _id = `${table}:${counter}`;
+          if (table === "messages") {
+            messages.push(row as unknown as StoredMessage);
+            messages[messages.length - 1]._id = _id;
+          }
+          if (table === "photos") {
+            photos.push(row as unknown as StoredPhoto);
+            photos[photos.length - 1]._id = _id;
+          }
+          return { _id };
+        },
+        patch() {
+          // Nothing in this path patches a stored row.
+        },
+        query() {
+          return {
+            withIndex: () => ({
+              order: () => ({
+                take: (n: number) => messages.slice(-n),
+              }),
+            }),
+          };
+        },
+      },
+      storage: { getUrl: async () => null },
+      scheduler: { runAfter: () => null },
+      async runQuery(name, args) {
+        const called = refName(name);
+        if (called.endsWith("notesFor")) {
+          return { appearance: "soft natural light, no makeup, hair loose" };
+        }
+        if (
+          called.endsWith("topMemories") ||
+          called.endsWith("latestChapters")
+        ) {
+          return [];
+        }
+        if (called.endsWith("conversationStart")) return 1700000000000;
+        if (called.endsWith("recallMessages")) return [];
+        if (called.endsWith("sentPhotos")) return [];
+        if (called.endsWith("recentMessages")) {
+          // Her history: the message was stored before the model is asked, so
+          // the latest line is always the one being replied to.
+          const limit = Number((args as { limit?: number }).limit ?? 24);
+          return messages.slice(-limit).map((message) => ({
+            ...message,
+            createdAt: 1700000000000,
+            imageStorageId: null,
+          }));
+        }
+        throw new Error(`unmocked runQuery: ${called}`);
+      },
+      async runMutation(name, args) {
+        const called = refName(name);
+        if (called.endsWith("saveMessage")) {
+          const a = args as { userId: string; role: string; content: string };
+          const inserted = bag.ctx.db.insert("messages", {
+            userId: a.userId,
+            role: a.role,
+            content: a.content,
+            createdAt: 1700000000000,
+          });
+          return inserted._id;
+        }
+        if (called.endsWith("savePhoto")) {
+          bag.ctx.db.insert("photos", args as Record<string, unknown>);
+          return null;
+        }
+        throw new Error(`unmocked runMutation: ${called}`);
+      },
+      async runAction(name, args) {
+        const called = refName(name);
+        if (!called.endsWith("groq:chat")) {
+          throw new Error(`unmocked runAction: ${called}`);
+        }
+        const messages_ =
+          (args as { messages?: Array<{ role: string; content: string }> })
+            .messages ?? [];
+        const asked =
+          [...messages_].reverse().find((m) => m.role === "user")?.content ?? "";
+        const canned =
+          REPLIES.find((candidate) => candidate.match.test(asked)) ??
+          REPLIES[REPLIES.length - 1];
+        return canned.reply;
+      },
+    },
   };
 
-  const patch: MockDb["patch"] = (id, patch) => {
-    for (const list of [messages, photos]) {
-      for (const entry of list) {
-        if (entry._id === id) Object.assign(entry, patch);
-      }
-    }
-  };
-
-  const del: MockDb["delete"] = (id) => {
-    for (const list of [messages, photos]) {
-      const idx = list.findIndex((entry) => entry._id === id);
-      if (idx >= 0) list.splice(idx, 1);
-    }
-  };
-
-  ctx.db = {
-    insert,
-    patch,
-    query: (_table: string) => ({
-      withIndex: () => ({
-        order: (dir: "asc" | "desc") => ({
-          take: (n: number) => {
-            const ordered = dir === "asc" ? [...messages] : [...messages].reverse();
-            return ordered.slice(-n) as unknown[];
-          },
-        }),
-      }),
-    }),
-    delete: del,
-  } as MockDb;
-
-  function recentMessages(ctx: MockCtx, name: string, args: Record<string, unknown>, userId: string, limit: number) {
-    if (name === "internal.felicia.notesFor") {
-      return views.notesFor(userId);
-    }
-    if (name === "internal.felicia.topMemories") {
-      return views.topMemories(userId);
-    }
-    if (name === "internal.felicia.conversationStart") {
-      return views.conversationStart(userId);
-    }
-    if (name === "internal.felicia.recentMessages") {
-      return views.recentMessages(userId, args.limit ?? 50);
-    }
-    if (name === "internal.felicia.recallMessages") {
-      return views.recallMessages(userId, args);
-    }
-    if (name === "internal.felicia.sentPhotos") {
-      return views.sentPhotos(userId);
-    }
-    throw new Error(`unmocked runQuery: ${name}`);
-  }
-
-  ctx.runQuery = async (name: string, args: Record<string, unknown>) => {
-    if (name === "internal.felicia.notesFor") {
-      return views.notesFor("user-one");
-    }
-    if (name === "internal.felicia.topMemories") {
-      return views.topMemories("user-one");
-    }
-    if (name === "internal.felicia.latestChapters") {
-      return views.latestChapters("user-one");
-    }
-    if (name === "internal.felicia.conversationStart") {
-      return views.conversationStart("user-one");
-    }
-    if (name === "internal.felicia.recentMessages") {
-      return recentMessages(ctx, name, args, "user-one", args.limit ?? 50);
-    }
-    if (name === "internal.felicia.recallMessages") {
-      return views.recallMessages("user-one", args);
-    }
-    if (name === "internal.felicia.sentPhotos") {
-      return views.sentPhotos("user-one");
-    }
-    throw new Error(`unmocked runQuery: ${name}`);
-  };
-
-  ctx.runMutation = async (name: string, args: Record<string, unknown>) => {
-    if (name === "internal.felicia.saveMessage") {
-      const a = args as { userId: string; role: string; content: string };
-      const inserted = ctx.db.insert("messages", {
-        userId: a.userId,
-        role: a.role,
-        content: a.content,
-        createdAt: Date.parse("2026-01-01"),
-      });
-      return (inserted as { _id: string })._id as unknown as { _id: string };
-    }
-    if (name === "internal.felicia.savePhoto") {
-      const a = args as {
-        userId: string;
-        url?: string | null;
-        galleryId?: string | null;
-        label?: string | null;
-        scene: string;
-        prompt: string;
-      };
-      ctx.db.insert("photos", {
-        userId: a.userId,
-        url: a.url ?? null,
-        galleryId: a.galleryId ?? null,
-        label: a.label ?? null,
-        scene: a.scene ?? "",
-        prompt: a.prompt ?? "",
-        createdAt: Date.parse("2026-01-01"),
-      });
-      return null;
-    }
-    throw new Error(`unmocked runMutation: ${name}`);
-  };
-
-  ctx.runAction = async (name: string, args: Record<string, unknown>) => {
-    if (name === "cloudflare.chat") {
-      const messages_ = ((args as { messages?: Array<{ role: string; content: string }> })
-        .messages) ?? [];
-      const lastUser = [...messages_]
-        .reverse()
-        .find((m) => m.role === "user");
-      const reply =
-        lastUser?.content.includes("cook") || lastUser?.content.includes("kitchen")
-          ? "I was just about to get into the kitchen — want me to send you a pic of what I'm making?"
-          : "I'm here. Tell me more.";
-      return `[[scene: a bright kitchen with sunlight across the counter, wok in hand, steam rising from the pan]]\n\n${reply}`;
-    }
-    throw new Error(`unmocked runAction: ${name}`);
-  };
-
-  return { ctx, messages, photos };
-}
-
-async function storedMessages(bag: CollabBag) {
-  return bag.ctx.db.query("messages")
-    .withIndex()
-    .order("asc")
-    .take(10)
-    .filter((m): m is StoredMessage => Boolean(m));
-}
-
-async function storedPhotos(bag: CollabBag) {
-  return bag.ctx.db.query("photos")
-    .withIndex()
-    .order("asc")
-    .take(10)
-    .filter((m): m is { url?: string | null; galleryId?: string | null } => Boolean(m));
+  return bag;
 }
 
 describe("sendMessage", () => {
-  let bag: CollabBag;
-
+  let bag: Bag;
   beforeEach(() => {
-    bag = withCollabs();
+    bag = makeBag();
   });
 
-  test("persists both sides of the exchange and returns a usable reply", async () => {
-    const send = sendMessageApi.invokeAction;
-    const raw = await send(
-      "req:test",
-      JSON.stringify({ text: "I'm in the kitchen cooking jollof right now" }),
-    );
-    const result = raw as {
-      reply: string;
-      photoScene: string | null;
-      photoUrl: string | null;
-      photoLabel: string | null;
-      replyMessageId: string;
-      photoReadyAfterMs: number;
-    };
+  function invoke(text: string) {
+    return handler(bag.ctx, { text });
+  }
 
-    expect(result.reply).toContain("kitchen");
-    expect(result.photoUrl).toBeNull();
-    expect(result.photoReadyAfterMs).toBeGreaterThan(0);
-    expect(result.replyMessageId).toMatch(/^messages:/);
+  test("stores the exchange and sends a photo from her gallery when one fits", async () => {
+    const result = (await invoke("send me a pic of you in the kitchen")) as Result;
 
-    const inOrder = (await storedMessages(bag)).sort((a, b) => a._id.localeCompare(b._id));
-    expect(inOrder.map((m) => m.role)).toEqual(["user", "felicia"]);
-    expect(inOrder[0].content).toBe("I'm in the kitchen cooking jollof right now");
-    expect(inOrder[1].content).toContain("kitchen");
-  });
+    // Both sides of the conversation are kept.
+    expect(bag.messages.map((message) => message.role)).toEqual([
+      "user",
+      "felicia",
+    ]);
+    expect(bag.messages[0].content).toBe("send me a pic of you in the kitchen");
 
-  test("sends an existing gallery photo when one fits the conversation", async () => {
-    const send = sendMessageApi.invokeAction;
-    const raw = await send(
-      "req:test",
-      JSON.stringify({ text: "show me something from the kitchen" }),
-    );
-    const result = raw as {
-      reply: string;
-      photoScene: string | null;
-      photoUrl: string | null;
-      photoLabel: string | null;
-      replyMessageId: string;
-      photoReadyAfterMs: number;
-    };
-
+    // She had one already, so it goes straight away: no scene to generate, no
+    // waiting.
     expect(result.photoScene).toBeNull();
-    expect(result.photoUrl).toMatch(/^https?:\/\//);
     expect(result.photoReadyAfterMs).toBe(0);
+    expect(KITCHEN).toContain(bag.photos[0]?.galleryId ?? "");
+    expect(result.photoUrl).toBe(
+      FELICIA_GALLERY.find((photo) => photo.id === bag.photos[0].galleryId)
+        ?.url ?? null,
+    );
+    expect(result.photoLabel).toBe(
+      FELICIA_GALLERY.find((photo) => photo.id === bag.photos[0].galleryId)
+        ?.title ?? null,
+    );
 
-    const savedPhotos = await storedPhotos(bag);
-    expect(savedPhotos).toHaveLength(1);
-    expect(savedPhotos[0].url).toBe(result.photoUrl);
-    expect(savedPhotos[0].galleryId).toBeTruthy();
+    // And it is filed in her album for this account.
+    expect(bag.photos).toHaveLength(1);
+  });
+
+  test("asking for red sends a picture of her in red", async () => {
+    const result = (await invoke("send me a pic of you wearing red")) as Result;
+    expect(RED).toContain(bag.photos[0]?.galleryId ?? "");
+    expect(result.photoUrl).not.toBeNull();
+  });
+
+  test("takes a new photo when nothing in her gallery fits", async () => {
+    const result = (await invoke(
+      "send me a pic of you riding a camel in the desert",
+    )) as Result;
+
+    expect(result.photoUrl).toBeNull();
+    expect(result.photoScene).toContain("camel");
+    expect(result.photoReadyAfterMs).toBeGreaterThan(0);
+    expect(bag.photos).toHaveLength(0);
+  });
+
+  test("sends no photo at all when none was asked for", async () => {
+    const result = (await invoke("I had a rough day at work today")) as Result;
+
+    expect(result.photoUrl).toBeNull();
+    expect(result.photoScene).toBeNull();
+    expect(result.photoReadyAfterMs).toBe(0);
+    expect(bag.photos).toHaveLength(0);
   });
 
   test("rejects an empty message", async () => {
-    const send = sendMessageApi.invokeAction;
-    await expect(
-      send("req:test", JSON.stringify({ text: "   " })),
-    ).rejects.toThrow(/write something/i);
+    await expect(invoke("   ")).rejects.toThrow(/write something/i);
   });
 });

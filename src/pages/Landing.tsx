@@ -17,7 +17,7 @@ const BACKDROP = galleryPhoto("red-dress-sofa");
 
 const MOMENTS = [
   {
-    src: galleryPhoto("playful-modern-kitchen").url,
+    src: galleryPhoto("red-romper-kitchen").url,
     place: "Her kitchen in Yaba, 8:40am",
     caption: "Coffee before conversation. Non-negotiable.",
   },
@@ -27,7 +27,7 @@ const MOMENTS = [
     caption: "Lamp on, braids down, still awake.",
   },
   {
-    src: galleryPhoto("red-dress-bedroom").url,
+    src: galleryPhoto("red-romper-on-the-bed").url,
     place: "Getting ready to go out",
     caption: "She'll still answer you in the middle of it.",
   },
