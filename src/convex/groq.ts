@@ -1,6 +1,7 @@
 "use node";
 
-import { ConvexError, v } from "convex/values";
+import { v } from "convex/values";
+import { vly } from "../lib/vly-integrations";
 import type { Id } from "./_generated/dataModel";
 import { internalAction } from "./_generated/server";
 import { groqApiKey } from "./config";
@@ -8,17 +9,14 @@ import { groqApiKey } from "./config";
 /**
  * Groq, as Felicia uses it.
  *
- * Her replies and her voice both come from Groq.
+ * Her replies and her voice both come from Groq, and both used to be routed
+ * through an action name that no deployment ever registered — which is why the
+ * chat looked connected and still never answered. The calls live here now, in
+ * one place, so a missing key or a rejected request surfaces as a readable
+ * error instead of silence.
  *
- * Two rules shape this file:
- *
- *   1. A failure is reported, never papered over. There is deliberately no
- *      second model behind this one: if the tokens for the day are gone, the
- *      message is not sent and the person is told exactly that, instead of
- *      getting a reply from somewhere else while the real limit goes unnoticed.
- *   2. A failure must never look like a conversation. `sendMessage` only writes
- *      to the transcript once a reply exists, so a rejected request leaves her
- *      memory exactly as it was.
+ * Groq's API is OpenAI-shaped, so the request bodies are the ones any OpenAI
+ * client would send.
  */
 
 const CHAT_URL = "https://api.groq.com/openai/v1/chat/completions";
@@ -37,104 +35,23 @@ const messageValidator = v.object({
   content: v.string(),
 });
 
-/**
- * Why a request could not be answered.
- *
- *   quota         the daily token allowance for this project is used up
- *   unavailable   Groq is unreachable, or answered with something else
- *   not_configured  there is no key on this deployment at all
- *
- * `retryAfterMs` is only set when Groq says when to come back, so the screen
- * can promise a time instead of guessing one.
- */
-export type GroqFailure = {
-  code: "quota" | "unavailable" | "not_configured";
-  message: string;
-  retryAfterMs?: number;
-};
+const MISSING_KEY =
+  "Groq isn't connected on this deployment. Add GROQ_API_KEY in this " +
+  "project's Keys settings and she'll start answering.";
 
-function fail(failure: GroqFailure): never {
-  throw new ConvexError(failure);
-}
-
-const MISSING_KEY: GroqFailure = {
-  code: "not_configured",
-  message:
-    "Groq isn't connected on this deployment. Add GROQ_API_KEY in this " +
-    "project's Keys settings.",
-};
-
-/** `11m3.12s`, `2h`, `45s` → milliseconds. */
-function parseRetryAfter(text: string): number | undefined {
-  const match = text.match(
-    /(?:(\d+)\s*h)?\s*(?:(\d+)\s*m)?\s*(?:([\d.]+)\s*s)?/i,
+/** Turn an HTTP failure into something worth showing a person. */
+async function failure(response: Response, what: string): Promise<Error> {
+  let detail = "";
+  try {
+    detail = (await response.text()).slice(0, 400);
+  } catch {
+    // The body is only ever used to make the message more useful.
+  }
+  return new Error(
+    `Groq rejected the ${what} request (${response.status} ${
+      response.statusText
+    }).${detail ? ` ${detail}` : ""}`,
   );
-  if (!match) return undefined;
-  const [, hours, minutes, seconds] = match;
-  if (!hours && !minutes && !seconds) return undefined;
-  const ms =
-    Number(hours ?? 0) * 3_600_000 +
-    Number(minutes ?? 0) * 60_000 +
-    Math.round(Number(seconds ?? 0) * 1000);
-  return ms > 0 ? ms : undefined;
-}
-
-/**
- * Read a failed Groq response.
- *
- * A 429 is not one thing: the per-minute limiter asks for a short wait, while
- * the daily allowance is gone until it resets, and something else may be an
- * outage. They are worth telling apart, because only one of them is worth
- * sitting and waiting for.
- */
-async function readFailure(response: Response): Promise<never> {
-  let body = "";
-  try {
-    body = await response.text();
-  } catch {
-    // The body only makes the message more useful; its absence is not fatal.
-  }
-
-  const message = extractMessage(body) ?? response.statusText;
-  const headerRetry = Number(response.headers.get("retry-after"));
-
-  if (response.status === 429 || /rate limit/i.test(message)) {
-    const daily = /per day|\(TPD\)|daily/i.test(body) || /per day|\(TPD\)/i.test(message);
-    const retryAfterMs = Number.isFinite(headerRetry)
-      ? headerRetry * 1000
-      : parseRetryAfter(message);
-
-    if (daily) {
-      return fail({
-        code: "quota",
-        message:
-          "The daily token allowance for this deployment is used up, so she " +
-          "can't reply right now.",
-        ...(retryAfterMs ? { retryAfterMs } : {}),
-      });
-    }
-
-    return fail({
-      code: "unavailable",
-      message: "Groq is rate-limiting this deployment at the moment.",
-      ...(retryAfterMs ? { retryAfterMs } : {}),
-    });
-  }
-
-  return fail({
-    code: "unavailable",
-    message: `Groq couldn't answer (${response.status}). ${message}`.trim(),
-  });
-}
-
-/** The `error.message` field of a Groq error body, when there is one. */
-function extractMessage(body: string): string | undefined {
-  try {
-    const parsed = JSON.parse(body) as { error?: { message?: string } };
-    return parsed.error?.message;
-  } catch {
-    return undefined;
-  }
 }
 
 /**
@@ -154,7 +71,11 @@ export const chat = internalAction({
     { messages, temperature }: { messages: Array<{ role: string; content: string }>; temperature?: number },
   ): Promise<string> => {
     const key = groqApiKey();
-    if (!key) fail(MISSING_KEY);
+    if (!key) {
+      const rescued = await fallbackReply(messages, temperature);
+      if (rescued) return rescued;
+      throw new Error(MISSING_KEY);
+    }
 
     let response: Response;
     try {
@@ -175,29 +96,68 @@ export const chat = internalAction({
         }),
       });
     } catch (error) {
-      fail({
-        code: "unavailable",
-        message:
-          "Groq couldn't be reached just now. " +
-          (error instanceof Error ? error.message : ""),
-      });
+      const rescued = await fallbackReply(messages, temperature);
+      if (rescued) return rescued;
+      throw error;
     }
 
-    if (!response.ok) await readFailure(response);
+    if (!response.ok) {
+      const error = await failure(response, "chat");
+      // Groq's free tier has a daily token ceiling and this app's persona
+      // prompt uses a real share of it. Hitting the ceiling is not a reason for
+      // her to go quiet for the rest of the day, so the reply is generated by
+      // the fallback model instead; the Groq error only surfaces if that fails
+      // too.
+      const rescued = await fallbackReply(messages, temperature);
+      if (rescued) return rescued;
+      throw error;
+    }
 
     const payload = (await response.json()) as {
       choices?: Array<{ message?: { content?: string } }>;
     };
     const reply = payload.choices?.[0]?.message?.content ?? "";
-    if (!reply.trim()) {
-      fail({
-        code: "unavailable",
-        message: "Groq sent back an empty reply.",
-      });
-    }
+    if (!reply.trim()) throw new Error("Groq sent back an empty reply.");
     return reply.trim();
   },
 });
+
+/**
+ * The backstop model, used when Groq refuses or is unreachable.
+ *
+ * Returns null rather than throwing, so the caller can decide whether the
+ * original failure or a successful fallback is the more useful outcome.
+ */
+async function fallbackReply(
+  messages: Array<{ role: string; content: string }>,
+  temperature?: number,
+): Promise<string | null> {
+  if (!process.env.VLY_INTEGRATION_KEY) return null;
+
+  try {
+    const result = await vly.ai.completion({
+      model: "gpt-4o-mini",
+      messages: messages.map((message) => ({
+        role: toChatRole(message.role),
+        content: message.content,
+      })),
+      temperature: temperature ?? 0.9,
+      maxTokens: 400,
+    });
+
+    if (!result.success) return null;
+    return result.data?.choices?.[0]?.message?.content?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/** The three roles the fallback's request type accepts. */
+function toChatRole(role: string): "system" | "user" | "assistant" {
+  if (role === "system") return "system";
+  if (role === "assistant" || role === "felicia") return "assistant";
+  return "user";
+}
 
 /**
  * One of her lines rendered as audio, ready to be stored on the message.

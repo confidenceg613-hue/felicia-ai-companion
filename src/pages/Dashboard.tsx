@@ -27,7 +27,6 @@ import { beginVoiceNote, playAudioUrl, speakWithBrowser } from "@/lib/voice";
 import { useAction, useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { motion } from "framer-motion";
 import {
-  AlertTriangle,
   Camera,
   Clock,
   Ellipsis,
@@ -50,62 +49,6 @@ import { useNavigate } from "react-router";
 import { toast } from "sonner";
 
 const AUTO_VOICE_KEY = "felicia:auto-voice";
-
-/**
- * Why a message could not be sent, as the screen needs it.
- *
- * `retryAt` is only known when the backend was told when the limit lifts, so
- * the banner can disappear on its own instead of leaving the composer disabled
- * for the rest of the day.
- */
-type SendBlock = {
-  message: string;
-  retryAt: number | null;
-};
-
-/**
- * Read a failed send.
- *
- * `sendMessage` throws a `ConvexError` carrying `{ code, message, retryAfterMs }`
- * for the cases worth explaining — the daily tokens being used up, Groq being
- * down, no key on the deployment — so the screen can say which one it is
- * instead of showing a stack trace.
- */
-function readSendFailure(error: unknown): SendBlock {
-  const data = (error as { data?: unknown }).data;
-  if (data && typeof data === "object") {
-    const failure = data as {
-      code?: string;
-      message?: string;
-      retryAfterMs?: number;
-    };
-    if (failure.message) {
-      return {
-        message: failure.message,
-        retryAt:
-          typeof failure.retryAfterMs === "number"
-            ? Date.now() + failure.retryAfterMs
-            : null,
-      };
-    }
-  }
-
-  return {
-    message:
-      error instanceof Error ? error.message : "Something went wrong.",
-    retryAt: null,
-  };
-}
-
-/** "in about 11 minutes", or null once the wait is over. */
-function retryLabel(retryAt: number | null): string | null {
-  if (!retryAt) return null;
-  const minutes = Math.ceil((retryAt - Date.now()) / 60_000);
-  if (minutes <= 0) return null;
-  return minutes === 1
-    ? "She should be able to answer again in about a minute."
-    : `She should be able to answer again in about ${minutes} minutes.`;
-}
 
 function readAutoVoicePref(): boolean {
   try {
@@ -190,7 +133,6 @@ export default function Dashboard() {
   const [recording, setRecording] = useState(false);
   const [interim, setInterim] = useState("");
   const [autoVoice, setAutoVoice] = useState(readAutoVoicePref);
-  const [blocked, setBlocked] = useState<SendBlock | null>(null);
 
   const autoVoiceRef = useRef(autoVoice);
   const speakingRef = useRef<Id<"messages"> | null>(null);
@@ -205,19 +147,6 @@ export default function Dashboard() {
       photoTimerRef.current = null;
     }
   }, []);
-
-  // A known reset time clears the block by itself, so nothing is left disabled
-  // long after she can answer again.
-  useEffect(() => {
-    if (!blocked?.retryAt) return;
-    const remaining = blocked.retryAt - Date.now();
-    if (remaining <= 0) {
-      setBlocked(null);
-      return;
-    }
-    const timer = setTimeout(() => setBlocked(null), remaining);
-    return () => clearTimeout(timer);
-  }, [blocked]);
 
   useEffect(() => {
     if (photoScheduledAt === null) return;
@@ -392,7 +321,7 @@ export default function Dashboard() {
 
   async function handleSend(text: string) {
     const trimmed = text.trim();
-    if (!trimmed || composing || blocked) return;
+    if (!trimmed || composing) return;
 
     setDraft("");
     setPending(trimmed);
@@ -402,7 +331,6 @@ export default function Dashboard() {
       const result = await sendMessage({ text: trimmed });
       setPending(null);
       setThinking(false);
-      setBlocked(null);
       if (autoVoiceRef.current) {
         void playMessage(result.replyMessageId, result.reply);
       }
@@ -415,14 +343,11 @@ export default function Dashboard() {
         setPhotoScheduledAt(Date.now() + (result.photoReadyAfterMs || 8000));
       }
     } catch (error) {
-      // Nothing was stored — the backend only writes once her reply exists — so
-      // the message goes back in the box untouched and she is told plainly.
       setPending(null);
       setThinking(false);
-      setDraft(trimmed);
-      const failure = readSendFailure(error);
-      setBlocked(failure);
-      toast.error("Not sent — " + failure.message);
+      toast.error(
+        error instanceof Error ? error.message : "Felicia didn't get that.",
+      );
     }
   }
 
@@ -444,14 +369,13 @@ export default function Dashboard() {
     try {
       const data = await file.arrayBuffer();
       const result = await sendUserPhoto({ data, mimeType: file.type });
-      setBlocked(null);
       if (autoVoiceRef.current) {
         void playMessage(result.replyMessageId, result.reply);
       }
     } catch (error) {
-      const failure = readSendFailure(error);
-      setBlocked(failure);
-      toast.error("Not sent — " + failure.message);
+      toast.error(
+        error instanceof Error ? error.message : "That photo didn't send.",
+      );
     } finally {
       setThinking(false);
     }
@@ -843,44 +767,6 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* She could not answer: the message is kept, not sent. */}
-          {blocked && (
-            <motion.div
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mx-auto w-full max-w-2xl shrink-0 rounded-2xl border border-destructive/35 bg-destructive/10 px-3.5 py-3 text-xs"
-            >
-              <div className="flex items-start gap-2.5">
-                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium text-destructive">That didn't send</p>
-                  <p className="mt-0.5 leading-relaxed text-muted-foreground">
-                    {blocked.message} Your message is still in the box, and
-                    nothing was added to her memory.
-                  </p>
-                  {retryLabel(blocked.retryAt) && (
-                    <p className="mt-1 text-[11px] text-muted-foreground/80">
-                      {retryLabel(blocked.retryAt)}
-                    </p>
-                  )}
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="shrink-0 rounded-full text-[11px]"
-                  disabled={thinking}
-                  onClick={() => {
-                    setBlocked(null);
-                    if (draft.trim()) void handleSend(draft);
-                  }}
-                >
-                  Try again
-                </Button>
-              </div>
-            </motion.div>
-          )}
-
           {/* composer — deliberately compact: one slim pill, nothing more. */}
           <div className="glass mx-auto w-full max-w-2xl shrink-0 rounded-2xl px-2.5 py-2">
             <form
@@ -919,8 +805,8 @@ export default function Dashboard() {
                     variant="ghost"
                     size="icon"
                     className="size-8 shrink-0 rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary"
-                    title={blocked ? "She can't take a photo right now" : "Send her a photo"}
-                    disabled={composing || blocked !== null}
+                    title="Send her a photo"
+                    disabled={composing}
                     onClick={() => fileRef.current?.click()}
                   >
                     <Paperclip className="size-3.5" />
@@ -947,7 +833,7 @@ export default function Dashboard() {
                     size="icon"
                     className="size-8 shrink-0 rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary"
                     title="Ask for a selfie"
-                    disabled={composing || developing || !photosReady || blocked !== null}
+                    disabled={composing || developing || !photosReady}
                     onClick={() =>
                       void requestPhoto(
                         "a candid selfie, holding the camera at arm's length, soft window light, natural smile",
@@ -968,7 +854,7 @@ export default function Dashboard() {
                         : "text-muted-foreground hover:bg-primary/10 hover:text-primary",
                     )}
                     title={recording ? "Release to send" : "Hold to send a voice message"}
-                    disabled={(!recording && thinking) || (!recording && blocked !== null)}
+                    disabled={!recording && thinking}
                     onContextMenu={(event) => event.preventDefault()}
                     onPointerDown={(event) => {
                       event.currentTarget.setPointerCapture(event.pointerId);
@@ -989,7 +875,7 @@ export default function Dashboard() {
                     type="submit"
                     size="icon"
                     className="lift-primary size-8 shrink-0 rounded-full transition-transform hover:scale-105 disabled:opacity-40 disabled:hover:scale-100"
-                    disabled={composing || !draft.trim() || blocked !== null}
+                    disabled={composing || !draft.trim()}
                   >
                     {thinking ? (
                       <Loader2 className="size-4 animate-spin" />

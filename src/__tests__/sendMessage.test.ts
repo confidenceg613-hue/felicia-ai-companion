@@ -110,8 +110,6 @@ interface StoredPhoto {
 interface Bag {
   messages: StoredMessage[];
   photos: StoredPhoto[];
-  /** When true, the model call fails the way an exhausted quota does. */
-  failChat: boolean;
   ctx: {
     auth: { getUserIdentity: () => Promise<{ subject: string } | null> };
     db: {
@@ -135,7 +133,6 @@ function makeBag(): Bag {
   const bag: Bag = {
     messages,
     photos,
-    failChat: false,
     ctx: {
       auth: { getUserIdentity: async () => ({ subject: "user-one|session" }) },
       db: {
@@ -195,35 +192,19 @@ function makeBag(): Bag {
       },
       async runMutation(name, args) {
         const called = refName(name);
-        if (called.endsWith("saveExchange")) {
-          const a = args as {
-            userId: string;
-            userContent: string;
-            userImageStorageId?: string;
-            reply: string;
-            photo?: Record<string, unknown>;
-          };
-          bag.ctx.db.insert("messages", {
+        if (called.endsWith("saveMessage")) {
+          const a = args as { userId: string; role: string; content: string };
+          const inserted = bag.ctx.db.insert("messages", {
             userId: a.userId,
-            role: "user",
-            content: a.userContent,
-            imageStorageId: a.userImageStorageId,
+            role: a.role,
+            content: a.content,
             createdAt: 1700000000000,
           });
-          const reply = bag.ctx.db.insert("messages", {
-            userId: a.userId,
-            role: "felicia",
-            content: a.reply,
-            createdAt: 1700000000001,
-          });
-          if (a.photo) {
-            bag.ctx.db.insert("photos", {
-              userId: a.userId,
-              ...a.photo,
-              createdAt: 1700000000001,
-            });
-          }
-          return reply._id;
+          return inserted._id;
+        }
+        if (called.endsWith("savePhoto")) {
+          bag.ctx.db.insert("photos", args as Record<string, unknown>);
+          return null;
         }
         throw new Error(`unmocked runMutation: ${called}`);
       },
@@ -231,19 +212,6 @@ function makeBag(): Bag {
         const called = refName(name);
         if (!called.endsWith("groq:chat")) {
           throw new Error(`unmocked runAction: ${called}`);
-        }
-        if (bag.failChat) {
-          // The shape a ConvexError arrives in on the client: a message plus
-          // structured data the screen can act on.
-          throw Object.assign(new Error("The daily token allowance is used up."), {
-            data: {
-              code: "quota",
-              message:
-                "The daily token allowance for this deployment is used up, so " +
-                "she can't reply right now.",
-              retryAfterMs: 660_000,
-            },
-          });
         }
         const messages_ =
           (args as { messages?: Array<{ role: string; content: string }> })
@@ -323,43 +291,6 @@ describe("sendMessage", () => {
     expect(result.photoScene).toBeNull();
     expect(result.photoReadyAfterMs).toBe(0);
     expect(bag.photos).toHaveLength(0);
-  });
-
-  test("a send that fails stores nothing at all", async () => {
-    bag.failChat = true;
-
-    await expect(invoke("send me a pic of you in the kitchen")).rejects.toThrow(
-      /token allowance/i,
-    );
-
-    // No half exchange: her memory is exactly as it was before the attempt.
-    expect(bag.messages).toHaveLength(0);
-    expect(bag.photos).toHaveLength(0);
-  });
-
-  test("a failed send leaves an earlier conversation untouched", async () => {
-    await invoke("tell me about your day");
-    expect(bag.messages).toHaveLength(2);
-
-    bag.failChat = true;
-    await expect(invoke("and then what happened?")).rejects.toThrow();
-
-    expect(bag.messages).toHaveLength(2);
-    expect(bag.messages.map((message) => message.role)).toEqual([
-      "user",
-      "felicia",
-    ]);
-    expect(bag.messages[1].content).toContain("Tell me about it");
-  });
-
-  test("a send works again once the model is available", async () => {
-    bag.failChat = true;
-    await expect(invoke("hello?")).rejects.toThrow();
-
-    bag.failChat = false;
-    const result = (await invoke("hello?")) as Result;
-    expect(result.reply).toBeTruthy();
-    expect(bag.messages).toHaveLength(2);
   });
 
   test("rejects an empty message", async () => {

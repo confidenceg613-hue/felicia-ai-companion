@@ -753,68 +753,6 @@ export const saveMessage = internalMutation({
   },
 });
 
-/**
- * Store one completed exchange — their message, her reply, and the photo she
- * sent with it — in a single transaction.
- *
- * This is the whole reason it exists: a message that never got an answer must
- * not sit in her memory, and half an exchange is exactly what a failed request
- * would otherwise leave behind. Nothing is written until the reply exists, and
- * then all of it is written at once or none of it is.
- */
-export const saveExchange = internalMutation({
-  args: {
-    userId: v.id("users"),
-    userContent: v.string(),
-    userImageStorageId: v.optional(v.id("_storage")),
-    reply: v.string(),
-    photo: v.optional(
-      v.object({
-        url: v.optional(v.string()),
-        storageId: v.optional(v.id("_storage")),
-        galleryId: v.optional(v.string()),
-        label: v.optional(v.string()),
-        prompt: v.string(),
-        scene: v.string(),
-      }),
-    ),
-  },
-  returns: v.id("messages"),
-  handler: async (ctx: AnyCtx, args: AnyArgs) => {
-    const now = Date.now();
-
-    await ctx.db.insert("messages", {
-      userId: args.userId,
-      role: "user",
-      content: args.userContent,
-      imageStorageId: args.userImageStorageId,
-      createdAt: now,
-    });
-
-    const replyMessageId = await ctx.db.insert("messages", {
-      userId: args.userId,
-      role: "felicia",
-      content: args.reply,
-      createdAt: now + 1,
-    });
-
-    if (args.photo) {
-      await ctx.db.insert("photos", {
-        userId: args.userId,
-        storageId: args.photo.storageId,
-        url: args.photo.url,
-        galleryId: args.photo.galleryId,
-        label: args.photo.label,
-        prompt: args.photo.prompt,
-        scene: args.photo.scene,
-        createdAt: now + 1,
-      });
-    }
-
-    return replyMessageId;
-  },
-});
-
 /** Look up a message's text and any cached audio render, for the voice layer. */
 export const messageAudio = internalQuery({
   args: { messageId: v.id("messages") },
@@ -1762,6 +1700,19 @@ export const sendUserPhoto = action<{ ctx: AnyCtx; args: { data: Uint8Array; mim
     }
     if (bytes.byteLength === 0) throw new Error("That photo is empty.");
 
+    const storageId = await ctx.storage.store(
+      new Blob([bytes], {
+        type: /^image\/[a-z0-9.+-]+$/i.test(mimeType) ? mimeType : "image/jpeg",
+      }),
+    );
+
+    await ctx.runMutation(internal.felicia.saveMessage, {
+      userId,
+      role: "user",
+      content: "",
+      imageStorageId: storageId,
+    });
+
     const notes = await ctx.runQuery(internal.felicia.notesFor, { userId });
     const memories = await ctx.runQuery(internal.felicia.topMemories, {
       userId,
@@ -1798,19 +1749,10 @@ export const sendUserPhoto = action<{ ctx: AnyCtx; args: { data: Uint8Array; mim
       raw.replace(/\[\[[\s\S]*?\]\]/g, "").trim() ||
       "Just got it — give me a second.";
 
-    // The image is only stored once she has actually answered, so a failed
-    // request costs no storage and leaves no unanswered photo in the thread.
-    const storageId = await ctx.storage.store(
-      new Blob([bytes], {
-        type: /^image\/[a-z0-9.+-]+$/i.test(mimeType) ? mimeType : "image/jpeg",
-      }),
-    );
-
-    const replyMessageId = await ctx.runMutation(internal.felicia.saveExchange, {
+    const replyMessageId = await ctx.runMutation(internal.felicia.saveMessage, {
       userId,
-      userContent: "",
-      userImageStorageId: storageId,
-      reply,
+      role: "felicia",
+      content: reply,
     });
 
     return { reply, replyMessageId };
@@ -2041,31 +1983,23 @@ export const writeChapter = internalAction({
       .join("\n")
       .slice(0, CHAPTER_TRANSCRIPT_CHARS);
 
-    let raw: string;
-    try {
-      raw = (await ctx.runAction(internal.groq.chat, {
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are Felicia, writing a private journal entry in your own first-person voice. Reply with JSON only — no prose, no code fences.",
-          },
-          {
-            role: "user",
-            content:
-              "Below is an earlier stretch of the conversation between you (Felicia) and the person you are talking to. Write down what you will carry forward from it.\n\n" +
-              'Reply with a JSON object shaped {"title": "2-6 words naming this stretch", ' +
-              '"summary": "2-4 sentences, first person, naming the specific things they told you, how they seemed, anything left unresolved, and anything you felt. Concrete details and their own words matter more than a tidy account."}. Nothing else.\n\n' +
-              `Conversation:\n${transcript}`,
-          },
-        ],
-      })) as string;
-    } catch {
-      // Writing the chapter is housekeeping, and the tokens may be gone. The
-      // transcript is untouched, so the next message (or the next run) picks
-      // this stretch up again; a failed summary must not fail anything else.
-      return null;
-    }
+    const raw = await ctx.runAction(internal.groq.chat, {
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are Felicia, writing a private journal entry in your own first-person voice. Reply with JSON only — no prose, no code fences.",
+        },
+        {
+          role: "user",
+          content:
+            "Below is an earlier stretch of the conversation between you (Felicia) and the person you are talking to. Write down what you will carry forward from it.\n\n" +
+            'Reply with a JSON object shaped {"title": "2-6 words naming this stretch", ' +
+            '"summary": "2-4 sentences, first person, naming the specific things they told you, how they seemed, anything left unresolved, and anything you felt. Concrete details and their own words matter more than a tidy account."}. Nothing else.\n\n' +
+            `Conversation:\n${transcript}`,
+        },
+      ],
+    });
 
     const { title, summary } = parseChapter(raw);
 
