@@ -21,11 +21,14 @@ export default function AppShell() {
   const location = useLocation();
 
   return (
-    <div className="flex min-h-svh flex-col">
+    /* A fixed, viewport-tall frame: the bar is a real row at the bottom and
+       the page scrolls inside the space above it. Nothing can slide under the
+       bar, and the composer always sits exactly on top of it. */
+    <div className="flex h-dvh max-h-dvh flex-col overflow-hidden">
       {/* The page fills the space above the bar and owns its own scrolling.
           Keyed on the path so every tab opens with a soft rise instead of a
           hard cut — one shared spring, identical on every screen. */}
-      <main className="flex min-h-0 flex-1 flex-col">
+      <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <motion.div
           key={location.pathname}
           initial={{ opacity: 0, y: 10 }}
@@ -39,7 +42,7 @@ export default function AppShell() {
 
       <nav
         aria-label="Sections"
-        className="glass sticky bottom-0 z-30 shrink-0 rounded-none pt-2 pb-3 sm:pt-0 sm:pb-0 sm:mx-auto sm:mb-3 sm:w-fit sm:rounded-full sm:border-x sm:px-3"
+        className="glass z-30 shrink-0 rounded-none pt-2 pb-[calc(0.55rem+env(safe-area-inset-bottom))] sm:mx-auto sm:mb-3 sm:w-fit sm:rounded-full sm:border-x sm:px-3 sm:pt-0 sm:pb-0"
       >
         <ul className="flex items-center justify-between gap-1">
           {TABS.map(({ to, label, Icon, end }) => (
