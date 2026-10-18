@@ -461,7 +461,7 @@ export default function Dashboard() {
   return (
     <>
       {/* feed */}
-      <div className="flex min-h-0 w-full flex-1 flex-col px-4 pt-4 sm:px-6">
+      <div className="flex min-h-0 w-full flex-1 flex-col px-4 pt-4 sm:px-6 pb-4">
         <div className="glass sticky top-0 z-20 mx-auto flex w-full max-w-5xl items-center justify-between gap-3 rounded-2xl px-3 py-2.5">
           <div className="flex min-w-0 items-center gap-3">
             <span className="relative shrink-0">
@@ -654,7 +654,7 @@ export default function Dashboard() {
           </motion.div>
         )}
 
-        <div className="flex min-h-0 flex-1 flex-col gap-3 pb-3 pt-3">
+        <div className="flex min-h-0 flex-1 flex-col gap-3">
           {missingKeys.length > 0 && connection && (
             <div className="border-b border-primary/30 bg-primary/10 px-4 py-3 text-xs">
               <p className="font-medium text-primary">Not connected on this deployment</p>
@@ -666,7 +666,7 @@ export default function Dashboard() {
 
             <div
               ref={scrollRef}
-              className="min-h-0 flex-1 overflow-y-auto px-1 sm:px-2"
+              className="min-h-0 flex-1 overflow-y-auto px-1 sm:px-2 pb-2"
             >
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
               {/* On this day — a real moment from an earlier year, surfaced only
@@ -839,7 +839,7 @@ export default function Dashboard() {
                       <button
                         type="button"
                         onClick={() => setLightbox(item.imageUrl)}
-                      className="group w-fit max-w-[80%] overflow-hidden rounded-3xl rounded-bl-lg surface text-left"
+                      className="group w-fit max-w-[80%] overflow-hidden rounded-t-3xl rounded-bl-lg surface text-left"
                       title={item.scene}
                     >
                       <img
@@ -893,7 +893,7 @@ export default function Dashboard() {
                         "max-w-[85%] px-4 py-2.5 text-sm leading-relaxed",
                         isUser
                           ? "rounded-3xl rounded-br-lg bg-gradient-to-br from-primary to-primary/85 text-primary-foreground shadow-[0_14px_30px_-18px_oklch(0.55_0.15_300/90%)]"
-                          : "surface rounded-3xl rounded-bl-lg text-foreground",
+                          : "surface rounded-3xl rounded-tl-lg text-foreground",
                       )}
                     >
                       {item.imageUrl && item.content === "" ? (
@@ -959,9 +959,9 @@ export default function Dashboard() {
                   initial={{ opacity: 0, y: 10, scale: 0.96 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   transition={{ type: "spring", stiffness: 480, damping: 30 }}
-                  className="flex justify-end"
+                  className="flex justify-end pb-2"
                 >
-                  <div className="max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-sm text-primary-foreground">
+                  <div className="max-w-[85%] rounded-2xl rounded-bl-md bg-primary px-4 py-2.5 text-sm text-primary-foreground">
                     <p className="whitespace-pre-wrap">{pending}</p>
                   </div>
                 </motion.div>
@@ -972,7 +972,7 @@ export default function Dashboard() {
                   initial={{ opacity: 0, y: 8, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   transition={{ type: "spring", stiffness: 500, damping: 32 }}
-                  className="flex justify-start gap-3"
+                  className="flex justify-start gap-3 pb-2"
                 >
                   <motion.span
                     animate={{ rotate: [0, -10, 10, 0] }}
@@ -989,7 +989,7 @@ export default function Dashboard() {
                       className="size-7 rounded-full object-cover"
                     />
                   </motion.span>
-                  <div className="flex items-center gap-2 rounded-2xl rounded-bl-md border border-border/60 bg-card px-4 py-3">
+                  <div className="flex items-center gap-2 rounded-2xl rounded-tl-md border border-border/60 bg-card px-4 py-3">
                     <motion.span
                       animate={{ rotate: [0, 15, -15, 0], scale: [1, 1.15, 1] }}
                       transition={{
@@ -1026,7 +1026,7 @@ export default function Dashboard() {
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ type: "spring", stiffness: 460, damping: 30 }}
-                  className="flex justify-start gap-3"
+                  className="flex justify-start gap-3 pb-2"
                 >
                   <motion.img
                     src={avatarUrl}
@@ -1046,7 +1046,7 @@ export default function Dashboard() {
                       repeat: Infinity,
                       ease: "easeInOut",
                     }}
-                    className="w-72 rounded-2xl bg-primary/10 px-4 py-3 text-xs text-primary"
+                    className="w-72 rounded-t-2xl bg-primary/10 px-4 py-3 text-xs text-primary"
                     style={{ borderWidth: 1, borderStyle: "solid" }}
                   >
                     <div className="flex items-center gap-2">

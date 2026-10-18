@@ -39,7 +39,7 @@ export default function AppShell() {
 
       <nav
         aria-label="Sections"
-        className="glass sticky bottom-0 z-30 shrink-0 rounded-none border-x-0 border-b-0 px-2 py-1.5 sm:mx-auto sm:mb-3 sm:w-fit sm:rounded-full sm:border-x sm:px-3"
+        className="glass sticky bottom-0 z-30 shrink-0 rounded-none pt-2 pb-3 sm:pt-0 sm:pb-0 sm:mx-auto sm:mb-3 sm:w-fit sm:rounded-full sm:border-x sm:px-3"
       >
         <ul className="flex items-center justify-between gap-1">
           {TABS.map(({ to, label, Icon, end }) => (
