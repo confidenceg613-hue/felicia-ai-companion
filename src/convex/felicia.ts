@@ -1416,10 +1416,12 @@ export const sendMessage = action<{ ctx: AnyCtx; args: { text: string } }>({
       throw new Error("That message is too long.");
     }
 
-    // Nothing is written yet. Her reply is generated first, and the message,
-    // the reply and any photo are then stored together — so a request that
-    // fails (no tokens left, Groq down) leaves her memory exactly as it was and
-    // the person is told the message did not send.
+    await ctx.runMutation(internal.felicia.saveMessage, {
+      userId,
+      role: "user",
+      content: trimmed,
+    });
+
     const history = await ctx.runQuery(internal.felicia.recentMessages, {
       userId,
       limit: HISTORY_LIMIT,
@@ -1467,12 +1469,16 @@ export const sendMessage = action<{ ctx: AnyCtx; args: { text: string } }>({
               (message.imageStorageId ? "[they sent a photo]" : "[...]"),
           ),
         })),
-        // Their new message is last, and is not in the stored history yet.
-        { role: "user", content: trimmed },
       ],
     });
 
     const { reply, scene } = extractScene(raw, trimmed);
+
+    const replyMessageId = await ctx.runMutation(internal.felicia.saveMessage, {
+      userId,
+      role: "felicia",
+      content: reply,
+    });
 
     // She has a roll of her own, and when a picture is called for she sends one
     // she already has that fits. What she said she was sending is the best
@@ -1483,22 +1489,16 @@ export const sendMessage = action<{ ctx: AnyCtx; args: { text: string } }>({
       ? bestPhoto([scene, trimmed, reply], await herPhotoRoll(ctx, userId))
       : null;
 
-    const replyMessageId = await ctx.runMutation(internal.felicia.saveExchange, {
-      userId,
-      userContent: trimmed,
-      reply,
-      ...(picked
-        ? {
-            photo: {
-              url: picked.candidate.url,
-              galleryId: picked.candidate.galleryId,
-              label: picked.candidate.label,
-              prompt: picked.candidate.scene,
-              scene: picked.candidate.scene,
-            },
-          }
-        : {}),
-    });
+    if (picked) {
+      await ctx.runMutation(internal.felicia.savePhoto, {
+        userId,
+        url: picked.candidate.url,
+        galleryId: picked.candidate.galleryId,
+        label: picked.candidate.label,
+        prompt: picked.candidate.scene,
+        scene: picked.candidate.scene,
+      });
+    }
 
     // If nothing in the roll fit, she takes a new one, and that takes a moment
     // on the image backend: the client shows her reply immediately and starts
