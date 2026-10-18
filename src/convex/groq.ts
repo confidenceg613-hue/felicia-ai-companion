@@ -4,16 +4,25 @@ import { v } from "convex/values";
 import { vly } from "../lib/vly-integrations";
 import type { Id } from "./_generated/dataModel";
 import { internalAction } from "./_generated/server";
-import { groqApiKey } from "./config";
+import {
+  groqApiKey,
+  openRouterApiKey,
+  veniceApiKey,
+} from "./config";
+import { ADULT_ADDENDUM, isRefusal } from "./mature";
 
 /**
- * Groq, as Felicia uses it.
+ * Her words, as Felicia uses them.
  *
- * Her replies and her voice both come from Groq, and both used to be routed
- * through an action name that no deployment ever registered — which is why the
- * chat looked connected and still never answered. The calls live here now, in
- * one place, so a missing key or a rejected request surfaces as a readable
- * error instead of silence.
+ * Two things go wrong with a single general model: it is fast and cheap but
+ * safety-tuned, so it drops out of character the moment the conversation turns
+ * sexual; and any refusal it produces used to be saved as one of her messages
+ * and replayed in the next prompt, which taught it to keep refusing.
+ *
+ * So replies are routed. Ordinary chat stays on Groq. When the conversation is
+ * intimate — or when Groq refuses anyway — she is generated on an uncensored
+ * roleplay model (Venice, then OpenRouter) with an explicit consent addendum,
+ * and a refusal is never returned as her line.
  *
  * Groq's API is OpenAI-shaped, so the request bodies are the ones any OpenAI
  * client would send.
@@ -21,9 +30,23 @@ import { groqApiKey } from "./config";
 
 const CHAT_URL = "https://api.groq.com/openai/v1/chat/completions";
 const SPEECH_URL = "https://api.groq.com/openai/v1/audio/speech";
+const VENICE_URL = "https://api.venice.ai/api/v1/chat/completions";
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
-/** The model behind her words. */
+/** The model behind her everyday words. */
 const CHAT_MODEL = "openai/gpt-oss-120b";
+/**
+ * Her second Groq model, used first on intimate turns.
+ *
+ * gpt-oss is safety-tuned and will refuse explicit adult play; the Qwen instruct
+ * model on the same account is far more willing to stay in a consenting adult
+ * character. It is a preview model, so a 400/404 here is expected to happen
+ * eventually — the route simply falls through to the next one.
+ */
+const GROQ_ROLEPLAY_MODEL = "qwen/qwen3.8-27b";
+/** The model behind her intimate words. */
+const VENICE_MODEL = "venice-uncensored-role-play";
+const OPENROUTER_MODEL = "sao10k/l3.1-euryale-70b";
 
 /** The voice she speaks with. */
 const SPEECH_MODEL = "canopylabs/orpheus-v1-english";
@@ -35,9 +58,22 @@ const messageValidator = v.object({
   content: v.string(),
 });
 
+type ChatMessage = { role: string; content: string };
+
 const MISSING_KEY =
   "Groq isn't connected on this deployment. Add GROQ_API_KEY in this " +
   "project's Keys settings and she'll start answering.";
+
+/**
+ * What to say when every model refused.
+ *
+ * Naming the missing key is the only useful outcome: pretending she is out of
+ * words would leave the same thing happening on the next message.
+ */
+const ALL_REFUSED =
+  "Every model refused that one. Add VENICE_API_KEY (or OPENROUTER_API_KEY) " +
+  "in this project's Keys settings — that is the key that lets her be herself " +
+  "when the conversation gets explicit.";
 
 /** Turn an HTTP failure into something worth showing a person. */
 async function failure(response: Response, what: string): Promise<Error> {
@@ -55,70 +91,176 @@ async function failure(response: Response, what: string): Promise<Error> {
 }
 
 /**
- * One completion — the whole of her side of a conversation.
+ * One completion from Groq.
  *
- * Returns the reply text with the surrounding whitespace trimmed, because the
- * model occasionally pads a short line with newlines and the chat renders what
- * it is given.
+ * Throws on anything that is not a usable reply, so the caller can move on to
+ * the next provider instead of writing an empty message.
+ */
+async function groqChat(
+  messages: ChatMessage[],
+  temperature?: number,
+  model: string = CHAT_MODEL,
+): Promise<string> {
+  const key = groqApiKey();
+  if (!key) throw new Error(MISSING_KEY);
+
+  const response = await fetch(CHAT_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      temperature: temperature ?? 0.9,
+      max_tokens: 500,
+      // Low effort keeps a texting-style reply a quick round trip; the model
+      // is not being asked to reason its way through anything. Only the
+      // gpt-oss family accepts the parameter.
+      ...(model === CHAT_MODEL ? { reasoning_effort: "low" } : {}),
+    }),
+  });
+
+  if (!response.ok) throw await failure(response, "chat");
+
+  const payload = (await response.json()) as {
+    choices?: Array<{ message?: { content?: string } }>;
+  };
+  const reply = payload.choices?.[0]?.message?.content ?? "";
+  if (!reply.trim()) throw new Error("Groq sent back an empty reply.");
+  return reply.trim();
+}
+
+/** An OpenAI-shaped completion against a roleplay provider. */
+async function roleplayChat(
+  url: string,
+  key: string,
+  model: string,
+  messages: ChatMessage[],
+  temperature?: number,
+): Promise<string> {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+      // OpenRouter uses these for attribution; harmless everywhere else.
+      "HTTP-Referer": "https://felicia.app",
+      "X-Title": "Felicia",
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      temperature: temperature ?? 0.95,
+      max_tokens: 500,
+    }),
+  });
+
+  if (!response.ok) throw await failure(response, "roleplay");
+
+  const payload = (await response.json()) as {
+    choices?: Array<{ message?: { content?: string } }>;
+  };
+  const reply = payload.choices?.[0]?.message?.content ?? "";
+  if (!reply.trim()) throw new Error("The roleplay model sent back nothing.");
+  return reply.trim();
+}
+
+/**
+ * One of her replies.
+ *
+ * The provider order depends on what is being said. Intimate turns go to the
+ * uncensored model first; everything else goes to Groq first. Every route is
+ * tried before giving up, a refusal from any of them is discarded rather than
+ * returned, and `intimate` only adds the consent addendum to the prompt.
  */
 export const chat = internalAction({
   args: {
     messages: v.array(messageValidator),
     temperature: v.optional(v.number()),
+    intimate: v.optional(v.boolean()),
   },
   handler: async (
     _ctx: unknown,
-    { messages, temperature }: { messages: Array<{ role: string; content: string }>; temperature?: number },
+    {
+      messages,
+      temperature,
+      intimate,
+    }: {
+      messages: ChatMessage[];
+      temperature?: number;
+      intimate?: boolean;
+    },
   ): Promise<string> => {
-    const key = groqApiKey();
-    if (!key) {
-      const rescued = await fallbackReply(messages, temperature);
-      if (rescued) return rescued;
-      throw new Error(MISSING_KEY);
+    const adult = Boolean(intimate);
+    const prompt: ChatMessage[] = adult
+      ? [...messages, { role: "system", content: ADULT_ADDENDUM }]
+      : messages;
+
+    const veniceKey = veniceApiKey();
+    const openRouterKey = openRouterApiKey();
+
+    const roleplayRoutes: Array<() => Promise<string>> = [];
+    if (veniceKey) {
+      roleplayRoutes.push(() =>
+        roleplayChat(VENICE_URL, veniceKey, VENICE_MODEL, prompt, temperature),
+      );
+    }
+    if (openRouterKey) {
+      roleplayRoutes.push(() =>
+        roleplayChat(
+          OPENROUTER_URL,
+          openRouterKey,
+          OPENROUTER_MODEL,
+          prompt,
+          temperature,
+        ),
+      );
     }
 
-    let response: Response;
-    try {
-      response = await fetch(CHAT_URL, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${key}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: CHAT_MODEL,
-          messages,
-          temperature: temperature ?? 0.9,
-          max_tokens: 500,
-          // Low effort keeps a texting-style reply a quick round trip; the model
-          // is not being asked to reason its way through anything.
-          reasoning_effort: "low",
-        }),
-      });
-    } catch (error) {
-      const rescued = await fallbackReply(messages, temperature);
-      if (rescued) return rescued;
-      throw error;
+    // On an intimate turn the Qwen model gets the first word: it is already on
+    // the same Groq account, and it stays in character where gpt-oss balks.
+    const groqRoutes: Array<() => Promise<string>> = adult
+      ? [
+          () => groqChat(prompt, temperature, GROQ_ROLEPLAY_MODEL),
+          () => groqChat(prompt, temperature),
+        ]
+      : [
+          () => groqChat(prompt, temperature),
+          () => groqChat(prompt, temperature, GROQ_ROLEPLAY_MODEL),
+        ];
+
+    const routes: Array<() => Promise<string | null>> = [
+      ...groqRoutes,
+      ...roleplayRoutes,
+    ];
+
+    // The integration gateway is the last resort, as it always was when Groq's
+    // daily ceiling had been hit.
+    routes.push(() => fallbackReply(prompt, temperature));
+
+    let refused = false;
+    let lastError: unknown = null;
+
+    for (const route of routes) {
+      try {
+        const reply = await route();
+        if (!reply) continue;
+        if (isRefusal(reply)) {
+          refused = true;
+          continue;
+        }
+        return reply;
+      } catch (error) {
+        lastError = error;
+      }
     }
 
-    if (!response.ok) {
-      const error = await failure(response, "chat");
-      // Groq's free tier has a daily token ceiling and this app's persona
-      // prompt uses a real share of it. Hitting the ceiling is not a reason for
-      // her to go quiet for the rest of the day, so the reply is generated by
-      // the fallback model instead; the Groq error only surfaces if that fails
-      // too.
-      const rescued = await fallbackReply(messages, temperature);
-      if (rescued) return rescued;
-      throw error;
-    }
-
-    const payload = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-    const reply = payload.choices?.[0]?.message?.content ?? "";
-    if (!reply.trim()) throw new Error("Groq sent back an empty reply.");
-    return reply.trim();
+    // A refusal is not an answer, and it must never be stored as one of hers.
+    if (refused) throw new Error(ALL_REFUSED);
+    if (lastError instanceof Error) throw lastError;
+    throw new Error(MISSING_KEY);
   },
 });
 
@@ -129,7 +271,7 @@ export const chat = internalAction({
  * original failure or a successful fallback is the more useful outcome.
  */
 async function fallbackReply(
-  messages: Array<{ role: string; content: string }>,
+  messages: ChatMessage[],
   temperature?: number,
 ): Promise<string | null> {
   if (!process.env.VLY_INTEGRATION_KEY) return null;

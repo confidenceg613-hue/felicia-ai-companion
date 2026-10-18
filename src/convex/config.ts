@@ -81,6 +81,28 @@ export function isGroqConfigured(): boolean {
 }
 
 /**
+ * Her roleplay model's credentials.
+ *
+ * Groq is fast and cheap but its general models are safety-tuned, so they drop
+ * out of character when a conversation turns sexual. Venice hosts a model built
+ * for adult roleplay (`venice-uncensored-role-play`); OpenRouter hosts an
+ * equivalent one. Either key, pasted into the Keys tab as VENICE_API_KEY or
+ * OPENROUTER_API_KEY, is enough — the Groq model keeps handling ordinary chat.
+ */
+export function veniceApiKey(): string | null {
+  return process.env.VENICE_API_KEY ?? process.env.VENICE_API ?? null;
+}
+
+export function openRouterApiKey(): string | null {
+  return process.env.OPENROUTER_API_KEY ?? process.env.OpenRouter_API_KEY ?? null;
+}
+
+/** Whether any uncensored roleplay provider is configured. */
+export function hasMatureProvider(): boolean {
+  return Boolean(veniceApiKey() || openRouterApiKey());
+}
+
+/**
  * Groq voice capability resolution.
  *
  * Groq text-to-speech is a separate Audio API endpoint, not Cloudflare-style

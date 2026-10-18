@@ -12,6 +12,7 @@ import {
   isCloudflareConfigured,
   isGroqConfigured,
 } from "./config";
+import { isIntimate, isRefusal } from "./mature";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { paginationOptsValidator } from "convex/server";
@@ -1616,7 +1617,23 @@ export const sendMessage = action<{ ctx: AnyCtx; args: { text: string } }>({
       limit: FLASHBACK_LIMIT,
     });
 
+    // Her own past refusals are dropped before the prompt is built: replaying a
+    // policy line as something she said is exactly what teaches the model to
+    // keep producing them. The line stays in the transcript the user sees only
+    // if it was already stored; nothing new gets written that way.
+    const spoke = history.filter(
+      (message: { role: unknown; content: unknown }) =>
+        message.role === "user" ||
+        typeof message.content !== "string" ||
+        !isRefusal(message.content),
+    );
+
+    // Whether this turn is sexual decides which model writes her reply: the
+    // general one for everyday chat, the roleplay one when it counts.
+    const intimate = isIntimate(trimmed, history);
+
     const raw = await ctx.runAction(internal.groq.chat, {
+      intimate,
       messages: [
         {
           role: "system",
@@ -1626,7 +1643,7 @@ export const sendMessage = action<{ ctx: AnyCtx; args: { text: string } }>({
             startedAt,
           }),
         },
-        ...history.map((message: { role: unknown; content: unknown; imageStorageId?: unknown }) => ({
+        ...spoke.map((message: { role: unknown; content: unknown; imageStorageId?: unknown }) => ({
           role: message.role === "user" ? "user" : "assistant",
           // A photo the user shared carries no text, so stand it in with a
           // marker the model can respond to instead of an empty turn.
