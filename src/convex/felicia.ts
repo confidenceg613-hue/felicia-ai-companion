@@ -493,10 +493,16 @@ How that affects you right now: ${getMoodDescription(notes.mood.trim())}`
  * setting rather than as a new person.
  */
 function buildImagePrompt(scene: string, look: string = FELICIA_LOOK): string {
+  // The framing wording is not decoration: a model asked for a photo of a woman
+  // will default to a head-and-shoulders portrait unless it is told, twice, to
+  // step back. "head to toe" and "full length" are the phrases that do it.
   return (
-    `Photorealistic full-body shot of ${look}, ${scene}, head to toe in frame, ` +
-    "natural full-body framing, warm natural light, candid unposed, true-to-life " +
-    "deep brown skin and dark hair, high detail face, high resolution."
+    `Photorealistic full-length photograph of ${look}, ${scene}. ` +
+    "Full body shot from head to toe, standing far enough back that her whole " +
+    "figure including her feet is inside the frame, 2:3 vertical composition, " +
+    "wide framing, not a close-up and not a portrait crop. Warm natural light, " +
+    "candid and unposed, true-to-life deep brown skin and dark hair, detailed " +
+    "face, high resolution."
   );
 }
 
@@ -515,6 +521,16 @@ function isFilterError(error: unknown): boolean {
 
 const PHOTO_INTENT =
   /\b(photo|photos|picture|pictures|pics?|selfie|selfies|snap|snaps|polaroid)\b/i;
+
+/**
+ * A request for her whole figure rather than her face.
+ *
+ * Her roll is shot as portraits, so picking from it here is what kept answering
+ * "show me your full body" with a headshot. When this matches, she takes a new
+ * photo instead — in a tall frame, with the prompt asking for head to toe.
+ */
+const FULL_BODY =
+  /\b(full[\s-]?body|whole body|full[\s-]?length|head to toe|from head to toe|all of you|your legs|your feet|your body)\b/i;
 
 /** Strip the request wrapper so "send me a pic of you in a red dress" -> "in a red dress". */
 function sceneFromRequest(text: string): string | null {
@@ -1676,9 +1692,11 @@ export const sendMessage = action<{ ctx: AnyCtx; args: { text: string } }>({
     // description of what to look for, so the scene, their message and her
     // reply are all searched — the way you would scroll your own camera roll
     // while thinking about the last few messages.
-    const picked = scene
-      ? bestPhoto([scene, trimmed, reply], await herPhotoRoll(ctx, userId))
-      : null;
+    const wantsFullBody = FULL_BODY.test(trimmed) || FULL_BODY.test(scene ?? "");
+    const picked =
+      scene && !wantsFullBody
+        ? bestPhoto([scene, trimmed, reply], await herPhotoRoll(ctx, userId))
+        : null;
 
     if (picked) {
       await ctx.runMutation(internal.felicia.savePhoto, {
@@ -1771,10 +1789,11 @@ export const generatePhoto = action<{ ctx: AnyCtx; args: { scene?: string } }>({
           throw error;
         }
       }
-    }    if (!success) {
+    }
+    if (!success) {
       throw new Error(
-        "Couldn't generate that photo right now — neither Nano Banana on " +
-        "Cloudflare could deliver it. Try again in a moment.",
+        "Couldn't take that photo just now — every image backend she has " +
+        "refused or was unavailable. Try again in a moment.",
       );
     }
 

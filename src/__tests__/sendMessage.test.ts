@@ -76,6 +76,12 @@ const REPLIES: Array<{ match: RegExp; reply: string }> = [
       "[[scene: Felicia in her kitchen in the red top, one hand on the granite counter, warm overhead light]]",
   },
   {
+    match: /full body/i,
+    reply:
+      "Standing right here, look at all of me.\n" +
+      "[[scene: Felicia standing in her kitchen in the red top, photographed from head to toe]]",
+  },
+  {
     match: /red/i,
     reply:
       "Something red? Give me a second.\n" +
@@ -280,6 +286,19 @@ describe("sendMessage", () => {
 
     expect(result.photoUrl).toBeNull();
     expect(result.photoScene).toContain("camel");
+    expect(result.photoReadyAfterMs).toBeGreaterThan(0);
+    expect(bag.photos).toHaveLength(0);
+  });
+
+  test("a full-body request takes a new photo instead of sending a portrait", async () => {
+    const result = (await invoke(
+      "show me a photo of your full body babe",
+    )) as Result;
+
+    // Her roll is portraits, so picking from it here would answer a whole-body
+    // request with a headshot. She takes a new photo in the tall frame instead.
+    expect(result.photoUrl).toBeNull();
+    expect(result.photoScene).not.toBeNull();
     expect(result.photoReadyAfterMs).toBeGreaterThan(0);
     expect(bag.photos).toHaveLength(0);
   });

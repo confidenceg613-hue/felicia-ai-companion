@@ -847,11 +847,14 @@ export default function Dashboard() {
                       className="group w-fit max-w-[80%] overflow-hidden rounded-t-3xl rounded-bl-lg surface text-left"
                       title={item.scene}
                     >
+                      {/* contain, not cover: a full-length photo is tall, and
+                          cropping it to the bubble is what made her look cut
+                          off at the waist. */}
                       <img
                         src={item.imageUrl}
                         alt={item.label ?? item.scene ?? "Felicia sent a photo"}
                         loading="lazy"
-                        className="block max-h-[26rem] w-full max-w-xs object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+                        className="block max-h-[30rem] max-w-full object-contain transition-transform duration-500 group-hover:scale-[1.02]"
                       />
                       {(item.label ?? item.scene) && (
                         <p className="px-4 py-2.5 text-[11px] leading-snug text-muted-foreground">
@@ -910,7 +913,7 @@ export default function Dashboard() {
                             src={item.imageUrl}
                             alt="Shared photo"
                             loading="lazy"
-                            className="max-h-[26rem] w-full max-w-xs object-cover"
+                            className="max-h-[30rem] max-w-full object-contain"
                           />
                         </button>
                       ) : (

@@ -58,6 +58,18 @@ const OPENROUTER_MODEL = "sao10k/l3.1-euryale-70b";
 const SPEECH_MODEL = "canopylabs/orpheus-v1-english";
 const SPEECH_VOICE = "autumn";
 
+/**
+ * Her spoken voice on Venice.
+ *
+ * Kokoro is a tenth of the price of the expressive models and reads like a
+ * person on the other end of a phone line rather than a narrator. `af_heart`
+ * is its most natural feminine voice; `af_bella` is the fallback if the voice
+ * is retired.
+ */
+const VENICE_SPEECH_URL = "https://api.venice.ai/api/v1/audio/speech";
+const VENICE_SPEECH_MODEL = "tts-kokoro";
+const VENICE_VOICES = ["af_heart", "af_bella"];
+
 /** A message as the chat endpoint wants it. */
 const messageValidator = v.object({
   role: v.string(),
@@ -343,6 +355,85 @@ async function fallbackReply(
   }
 }
 
+/**
+ * One of her lines rendered by Venice.
+ *
+ * The endpoint answers with audio bytes, but some deployments wrap them in a
+ * JSON base64 field, so both shapes are handled. Returns null rather than
+ * throwing: a silent line is better than a message that cannot be read at all.
+ */
+async function veniceSpeak(
+  key: string,
+  text: string,
+  ctx: { storage: { store: (blob: Blob) => Promise<Id<"_storage">> } },
+): Promise<Id<"_storage"> | null> {
+  for (const voice of VENICE_VOICES) {
+    let response: Response;
+    try {
+      response = await fetch(VENICE_SPEECH_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${key}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: VENICE_SPEECH_MODEL,
+          input: text.slice(0, 800),
+          voice,
+          response_format: "mp3",
+          speed: 1.02,
+        }),
+      });
+    } catch {
+      return null;
+    }
+
+    if (!response.ok) {
+      // An empty balance or a rejected key will not change on the next voice.
+      if (response.status === 401 || response.status === 402) return null;
+      continue;
+    }
+
+    const contentType = response.headers.get("content-type") ?? "";
+    let bytes: Uint8Array;
+
+    if (contentType.includes("json")) {
+      const payload = (await response.json()) as
+        | string
+        | { audio?: string; audio_base64?: string; data?: string };
+      const base64 =
+        typeof payload === "string"
+          ? payload
+          : payload.audio ?? payload.audio_base64 ?? payload.data;
+      if (!base64) continue;
+      bytes = fromBase64(base64);
+    } else {
+      bytes = new Uint8Array(await response.arrayBuffer());
+    }
+
+    if (bytes.byteLength === 0) continue;
+
+    const buffer = bytes.buffer.slice(
+      bytes.byteOffset,
+      bytes.byteOffset + bytes.byteLength,
+    ) as ArrayBuffer;
+    return await ctx.storage.store(new Blob([buffer], { type: "audio/mpeg" }));
+  }
+
+  return null;
+}
+
+/** base64 to bytes, without assuming Buffer is available. */
+function fromBase64(base64: string): Uint8Array {
+  const payload = base64.includes(",") ? base64.slice(base64.indexOf(",") + 1) : base64;
+  const binary = atob(payload);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
+
 /** The three roles the fallback's request type accepts. */
 function toChatRole(role: string): "system" | "user" | "assistant" {
   if (role === "system") return "system";
@@ -365,8 +456,18 @@ export const speak = internalAction({
     ctx: { storage: { store: (blob: Blob) => Promise<Id<"_storage">> } },
     { text }: { text: string },
   ): Promise<Id<"_storage"> | null> => {
+    if (!text.trim()) return null;
+
+    // Venice first when it is configured: it renders her in the same voice the
+    // photos and the chat come from, and it does not ration a free tier.
+    const venice = veniceApiKey();
+    if (venice) {
+      const spoken = await veniceSpeak(venice, text, ctx).catch(() => null);
+      if (spoken) return spoken;
+    }
+
     const key = groqApiKey();
-    if (!key || !text.trim()) return null;
+    if (!key) return null;
 
     try {
       const response = await fetch(SPEECH_URL, {

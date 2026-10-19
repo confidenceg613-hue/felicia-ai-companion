@@ -426,7 +426,7 @@ export default function Album() {
                         alt={photo.title}
                         loading="lazy"
                         decoding="async"
-                        className="aspect-[4/5] w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        className="aspect-[2/3] w-full object-cover transition-transform duration-500 group-hover:scale-105"
                       />
                     </button>
 
@@ -518,7 +518,7 @@ export default function Album() {
           ) : (
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
               {developing && (
-                <div className="flex aspect-[4/5] flex-col items-center justify-center rounded-2xl border border-primary/30 bg-primary/10 p-4 text-center text-xs text-primary">
+                <div className="flex aspect-[2/3] flex-col items-center justify-center rounded-2xl border border-primary/30 bg-primary/10 p-4 text-center text-xs text-primary">
                   <Camera className="size-5 animate-pulse" />
                   <p className="mt-2">developing…</p>
                   <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-primary/20">
@@ -558,7 +558,7 @@ export default function Album() {
                     alt={photo.scene ?? ""}
                     decoding="async"
                     loading="lazy"
-                    className="aspect-[4/5] w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    className="aspect-[2/3] w-full object-cover transition-transform duration-500 group-hover:scale-105"
                   />
                   <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/85 via-black/40 to-transparent px-3 pt-8 pb-2.5 text-[10px] tracking-wide text-white/85">
                     {timeLabel(photo.createdAt)}
