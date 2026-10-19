@@ -60,13 +60,13 @@ export const DEFAULT_SCENE =
  * A short inline greeting so sending the first hello does not need a separate
  * backend round trip just to pick the words.
  */
-async function inlineGreeting(ctx: AnyCtx, userId: Id<"users">) {
-  const raw = await ctx.runAction(internal.groq.chat, {
+async function inlineGreeting(ctx: AnyCtx, userId: Id<"users">) {    const raw = await ctx.runAction(internal.groq.chat, {
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: "Say hello. Short and warm. Under 140 characters." },
     ],
     temperature: 1.0,
+    intimate: false,
   });
   let line = raw.trim().split("\n")[0];
   line = line.replace(/\[\[[\s\S]*?\]\]/g, "").trim();
@@ -1039,6 +1039,7 @@ export const sendNudge = internalAction({
             { role: "user", content: "It has been a quiet day." },
           ],
           temperature: 0.9,
+          intimate: false,
         });
 
         const line = raw
@@ -1710,7 +1711,7 @@ export const sendMessage = action<{ ctx: AnyCtx; args: { text: string } }>({
 
     // This deployment only talks to Venice for Felicia's words.
     const raw = await ctx.runAction(internal.groq.chat, {
-      intimate: false,
+      intimate: isIntimate(trimmed, spoke),
       messages: [
         {
           role: "system",
@@ -1983,6 +1984,7 @@ export const startCall = action<{ ctx: AnyCtx; args: {} }>({
         },
       ],
     });
+    // This deployment only talks to Venice for Felicia's words.
 
     const reply =
       raw.replace(/\[\[[\s\S]*?\]\]/g, "").trim() || "Hey, you called.";
@@ -2208,6 +2210,7 @@ export const captureMemories = action<{ ctx: AnyCtx; args: {} }>({
         },
       ],
     });
+    // This deployment only talks to Venice for Felicia's words.
 
     const extracted = parseMemoryList(raw);
     let added = 0;
@@ -2332,6 +2335,7 @@ export const writeChapter = internalAction({
         },
       ],
     });
+    // This deployment only talks to Venice for Felicia's words.
 
     const { title, summary } = parseChapter(raw);
 
