@@ -32,15 +32,31 @@ import { veniceApiKey } from "./config";
 const VENICE_IMAGE_URL = "https://api.venice.ai/api/v1/image/generate";
 const VENICE_WIDTH = 832;
 const VENICE_HEIGHT = 1216;
+/** The same 2:3 frame, in the form the Qwen family wants to be told. */
+const VENICE_ASPECT_RATIO = "2:3";
 
 /**
- * Her photographer: the uncensored model first, then the house one.
+ * Her photographer, in order of preference.
  *
- * lustify-v8 is a photoreal SDXL build with no content filter, so it will
- * photograph her in lingerie or less; venice-sd35 catches the run if the first
- * is ever retired.
+ * qwen-image-3-pro is asked for first: it is the model chosen for her, and it
+ * is the one that holds a description together — body, hair, outfit and room
+ * all come back the way the prompt asked. lustify-v8 and venice-sd35 sit
+ * behind it in case the first is ever retired or rate-limited.
+ *
+ * The two families frame themselves differently, which is not optional:
+ * Venice's Qwen models reject `width`/`height` with a 400 and want an
+ * `aspect_ratio`, while the SDXL-family models take pixels and divide by 8/16.
+ * Sending one family the other's sizing is the mistake that used to 400 a
+ * request that had nothing else wrong with it.
  */
-const VENICE_IMAGE_MODELS = ["lustify-v8", "venice-sd35"];
+const VENICE_IMAGE_MODELS: Array<{
+  id: string;
+  aspectRatio: boolean;
+}> = [
+  { id: "qwen-image-3-pro", aspectRatio: true },
+  { id: "lustify-v8", aspectRatio: false },
+  { id: "venice-sd35", aspectRatio: false },
+];
 
 /**
  * What is kept out of her photos.
@@ -105,25 +121,35 @@ async function viaVenice(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model,
+        model: model.id,
         prompt,
         negative_prompt: VENICE_NEGATIVE,
-        width: VENICE_WIDTH,
-        height: VENICE_HEIGHT,
-        steps: 30,
-        cfg_scale: 7,
-        // Hyperrealism, not "Photographic": the preset steers the model away
-        // from the retouched-glamour look that reads as generated.
-        style_preset: "Hyperrealism",
         safe_mode: false,
         hide_watermark: true,
-        format: "webp",
+        // Qwen asks for a ratio and its own resolution tier and answers png;
+        // the SDXL-family models take pixels, steps and a style preset.
+        ...(model.aspectRatio
+          ? {
+              aspect_ratio: VENICE_ASPECT_RATIO,
+              resolution: "1K",
+              format: "png",
+            }
+          : {
+              width: VENICE_WIDTH,
+              height: VENICE_HEIGHT,
+              steps: 30,
+              cfg_scale: 7,
+              // Hyperrealism, not "Photographic": the preset steers the model
+              // away from the retouched-glamour look that reads as generated.
+              style_preset: "Hyperrealism",
+              format: "webp",
+            }),
       }),
     });
 
     if (!response.ok) {
       const detail = (await response.text()).slice(0, 300);
-      failures.push(`${model} (${response.status}) ${detail}`);
+      failures.push(`${model.id} (${response.status}) ${detail}`);
 
       // An empty wallet or a rejected key is the same for every model, so it
       // is reported straight away rather than retried against a dead account.
@@ -145,7 +171,7 @@ async function viaVenice(
       failures.push(`${model}: finished with no image`);
       continue;
     }
-    return await storeBase64(stripDataUrl(base64), ctx, "image/webp");
+    return await storeBase64(stripDataUrl(base64), ctx, model.aspectRatio ? "image/png" : "image/webp");
   }
 
   throw new Error(`Venice couldn't take that photo. ${failures.join(" · ")}`);
