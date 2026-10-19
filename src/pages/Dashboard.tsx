@@ -226,7 +226,7 @@ export default function Dashboard() {
         connection.configured === false && "GROQ_API_KEY (chat)",
         connection.voiceConfigured === false &&
           "a voice key — GROQ_API_KEY, or CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID",
-        connection.imageConfigured === false && "AI_HORDE_API_KEY (photos)",
+        connection.imageConfigured === false && "VENICE_API_KEY (photos)",
       ].filter((value): value is string => Boolean(value))
     : [];
 

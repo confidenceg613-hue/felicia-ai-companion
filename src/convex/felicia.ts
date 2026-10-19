@@ -8,7 +8,7 @@ import {
 import { FELICIA_GALLERY } from "../lib/gallery";
 import { bestPhoto, type GalleryCandidate } from "../lib/galleryMatch";
 import {
-  isAiHordeConfigured,
+  hasMatureProvider,
   isCloudflareConfigured,
   isGroqConfigured,
 } from "./config";
@@ -17,10 +17,10 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { paginationOptsValidator } from "convex/server";
 
-// Her words come from Groq and her photos from Cloudflare Workers AI with the
-// AI Horde as a fallback. Both are real Convex actions (`groq.ts`, `images.ts`)
-// rather than the placeholder action names this file used to pass to
-// ctx.runAction, which is what made her chat look connected but never reply.
+// Her words come from Groq, and her photos from Venice and nowhere else. Both
+// are real Convex actions (`groq.ts`, `images.ts`) rather than the placeholder
+// action names this file used to pass to ctx.runAction, which is what made her
+// chat look connected but never reply.
 import {
   action,
   internalAction,
@@ -516,6 +516,7 @@ function buildImagePrompt(scene: string, look: string = FELICIA_LOOK): string {
 /**
  * Cloudflare's prompt classifier rejects harmless prompts at random rather than
  * on particular words, so a rejection is worth retrying rather than reporting.
+ * Venice answers a safety rejection the same way, with an error body instead.
  */
 function isFilterError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
@@ -598,8 +599,8 @@ function extractScene(
 /**
  * Which of Felicia's backends are present on this deployment.
  *
- * Chat needs Groq. Photo generation needs the AI Horde. Voice needs Groq's
- * Orpheus voice or Cloudflare Workers AI.
+ * Chat needs Groq. Photos need Venice. Voice needs Groq's Orpheus or
+ * Cloudflare Workers AI.
  *
  * Environment variables are per-deployment, so a key added while working in
  * the preview is not on the published deployment. Reporting each backend
@@ -614,13 +615,12 @@ export const connectorStatus = query({
     chatBackend: "groq",
     chatConfigured: isGroqConfigured(),
     voiceConfigured: isGroqConfigured() || isCloudflareConfigured(),
-    // Photos render in the browser through Puter, which needs no key at all, so
-    // they work on every deployment. The server-side generator — Cloudflare's
-    // Nano Banana first, the AI Horde as its free fallback — only matters when
-    // Puter can't deliver, so it is reported as a fallback rather than a
-    // blocker: missing keys there cost a slower photo, not an absent one.
-    imageConfigured: true,
-    imageFallbackConfigured: isCloudflareConfigured() || isAiHordeConfigured(),
+    // Photos are taken by Venice and nowhere else, so the presence of that
+    // key is the whole story. Reporting it separately is what makes the
+    // difference between "the chat is broken" and "her photographer needs
+    // paying" visible at a glance.
+    imageConfigured: hasMatureProvider(),
+    imageFallbackConfigured: hasMatureProvider(),
   }),
 });export const messages = query({
   args: {},
@@ -1765,9 +1765,9 @@ export const sendMessage = action<{ ctx: AnyCtx; args: { text: string } }>({
  * FELICIA_LOOK from `lib/felicia.ts`), and the only thing that changes between
  * photos is the scene the model or the user asked for.
  *
- * Generating a photo takes a moment: Nano Banana on Cloudflare answers in one
- * round trip, while the AI Horde fallback can take a couple of minutes. Each
- * attempt is retried once if it times out or is rejected, so a single request
+ * Generating a photo takes a moment — Venice renders on an uncensored
+ * photoreal model in a tall frame, which is a couple of seconds of work. A
+ * transient rejection is retried once with a plainer scene, so a single request
  * still only surfaces one error to the user.
  */
 export const generatePhoto = action<{ ctx: AnyCtx; args: { scene?: string } }>({
@@ -1790,8 +1790,8 @@ export const generatePhoto = action<{ ctx: AnyCtx; args: { scene?: string } }>({
     const notes = await ctx.runQuery(internal.felicia.notesFor, { userId });
     const look = (notes.appearance ?? "").trim() || FELICIA_LOOK;
 
-    // One photo per request. If the Horde stalls or rejects, try once more with
-    // the same look before surfacing the error.
+    // One photo per request. If Venice rejects the scene or stalls, try once
+    // more with a plainer one before surfacing the error.
     const candidates = [
       buildImagePrompt(requested, look),
       buildImagePrompt(FALLBACK_SCENE, look),
@@ -1807,7 +1807,7 @@ export const generatePhoto = action<{ ctx: AnyCtx; args: { scene?: string } }>({
         success = { prompt, storageId: attempt.storageId };
         break;
       } catch (error) {
-        if (!isFilterError(error) && !isHordeFailureRetryable(error)) {
+        if (!isFilterError(error) && !isRetryablePhotoFailure(error)) {
           throw error;
         }
       }
@@ -1838,16 +1838,16 @@ export const generatePhoto = action<{ ctx: AnyCtx; args: { scene?: string } }>({
 /**
  * Decide whether an image-generation failure is worth retrying.
  *
- * The AI Horde is a volunteer network: requests can stall, time out, or be
- * rejected for transient reasons. Those are worth a second attempt with a
- * plainer fallback scene. A real configuration or perma-electron error is not.
+ * Venice can reject a scene for its own safety reasons, stall, or answer with
+ * an empty image; those are worth a second attempt with a plainer fallback
+ * scene. A dead key or an empty balance is not — nothing about the second try
+ * changes either.
  */
-function isHordeFailureRetryable(error: unknown): boolean {
+function isRetryablePhotoFailure(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
 
-  // Retries already handle the Horde's own NSFW / safety filter noise; be a
-  // little broader than the Cloudflare-only matcher so a timeout or empty
-  // result still gets a second shot.
+  // Safety-filter noise and timeouts get a second shot; a configuration error
+  // is surfaced straight away.
   return /nsfw|content|blocked|filter|safety|timeout|empty|unreadable|not finish/i.test(
     message,
   );
