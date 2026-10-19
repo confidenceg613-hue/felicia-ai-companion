@@ -40,21 +40,22 @@ const VENICE_MODELS = ["venice-uncensored-role-play", "venice-uncensored-1-2"];
 const OPENROUTER_MODEL = "sao10k/l3.1-euryale-70b";
 
 /**
- * Her spoken voice on Venice.
+ * Her spoken voice on Groq's Orpheus TTS.
  *
- * Kokoro is a tenth of the price of the expressive models and reads like a
- * person on the other end of a phone line rather than a narrator. The first
- * voice tried here is the warm Black American female voice the user asked for;
- * the next two are warm feminine fallbacks if that voice ever disappears from
- * this account's catalog.
+ * This deployment now lets Felicia speak with Groq's TTS model instead of
+ * Venice. Chat is still Venice only.
  *
- * Note: Venice exposes these by model-specific IDs and the `af_` prefix means
- * American English female, not "African American" as a labeled category, so this
- * is the closest available warm Black American voice in the catalog right now.
+ * Orpheus is the only TTS model Groq exposes here; `hannah` is the female
+ * voice and is tried first, with `diana` and `autumn` as warm feminine
+ * fallbacks.
+ *
+ * Note: Groq TTS returns WAV by default and the input is short; if a request
+ * fails for balance or key reasons, this action returns null and the client
+ * can fall back to the on-device voice.
  */
-const VENICE_SPEECH_URL = "https://api.venice.ai/api/v1/audio/speech";
-const VENICE_SPEECH_MODEL = "tts-kokoro";
-const VENICE_VOICES = ["af_bella", "af_heart", "af_jadzia", "af_sky", "af_alloy", "af_aoede", "af_nicole", "af_nova", "af_river", "af_sarah", "af_jessica", "af_kore", "af_girl", "af_woody", "af_christmas", "af_bigbird", "af_lucky"];
+const GROQ_SPEECH_URL = "https://api.groq.com/openai/v1/audio/speech";
+const GROQ_SPEECH_MODEL = "canopylabs/orpheus-v1-english";
+const GROQ_VOICES = ["hannah", "diana", "autumn"];
 
 /** A message as the chat endpoint wants it. */
 const messageValidator = v.object({
@@ -293,34 +294,35 @@ function toChatRole(role: string): "system" | "user" | "assistant" {
 
 
 /**
- * One of her lines rendered by Venice.
+ * One of her lines rendered by Groq Orpheus TTS.
  *
- * Tries the warm Black American female Kokoro voice first, then the two warm
- * feminine fallbacks. The endpoint answers with audio bytes, but some deployments
- * wrap them in a JSON base64 field, so both shapes are handled. Returns null
- * rather than throwing: a silent line is better than a message that cannot be
- * read at all.
+ * Tries the female voice first, then the two warm feminine fallbacks. The
+ * endpoint answers with audio bytes and Groq returns WAV. Returns null rather
+ * than throwing: a silent line is better than a message that cannot be read at
+ * all.
  */
-async function veniceSpeak(
+async function groqSpeak(
   key: string,
   text: string,
   ctx: { storage: { store: (blob: Blob) => Promise<Id<"_storage">> } },
 ): Promise<Id<"_storage"> | null> {
-  for (const voice of VENICE_VOICES) {
+  const safeText = text.slice(0, 200);
+  if (!safeText.trim()) return null;
+
+  for (const voice of GROQ_VOICES) {
     let response: Response;
     try {
-      response = await fetch(VENICE_SPEECH_URL, {
+      response = await fetch(GROQ_SPEECH_URL, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${key}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: VENICE_SPEECH_MODEL,
-          input: text.slice(0, 800),
+          model: GROQ_SPEECH_MODEL,
+          input: safeText,
           voice,
-          response_format: "mp3",
-          speed: 1.02,
+          response_format: "wav",
         }),
       });
     } catch {
@@ -356,7 +358,7 @@ async function veniceSpeak(
       bytes.byteOffset,
       bytes.byteOffset + bytes.byteLength,
     ) as ArrayBuffer;
-    return await ctx.storage.store(new Blob([buffer], { type: "audio/mpeg" }));
+    return await ctx.storage.store(new Blob([buffer], { type: "audio/wav" }));
   }
 
   return null;
@@ -377,10 +379,10 @@ function fromBase64(base64: string): Uint8Array {
 /**
  * One of her lines rendered as audio, ready to be stored on the message.
  *
- * This deployment only uses Venice for voice. It always tries Venice first and
- * only returns audio when that succeeds; there is no on-device or browser voice
- * fallback inside this action — the client picks a fallback only after this
- * returns null.
+ * This deployment uses Groq Orpheus for voice while chat stays on Venice.
+ * It always tries Groq first and only returns audio when that succeeds; there
+ * is no on-device or browser voice fallback inside this action — the client
+ * picks a fallback only after this returns null.
  */
 export const speak = internalAction({
   args: { text: v.string() },
@@ -390,10 +392,9 @@ export const speak = internalAction({
   ): Promise<Id<"_storage"> | null> => {
     if (!text.trim()) return null;
 
-    // Always render her in her own voice when Venice is available.
-    const venice = veniceApiKey();
-    if (venice) {
-      const spoken = await veniceSpeak(venice, text, ctx).catch(() => null);
+    const groq = process.env.GROQ_API_KEY;
+    if (groq) {
+      const spoken = await groqSpeak(groq, text, ctx).catch(() => null);
       if (spoken) return spoken;
     }
 

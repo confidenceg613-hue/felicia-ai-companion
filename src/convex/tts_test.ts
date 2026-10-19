@@ -3,25 +3,12 @@
 import { action } from "./_generated/server";
 import { v } from "convex/values";
 
-const VENICE_TTS_URL = "https://api.venice.ai/api/v1/audio/speech";
-const VENICE_TTS_MODEL = "tts-kokoro";
+const GROQ_TTS_URL = "https://api.groq.com/openai/v1/audio/speech";
+const GROQ_TTS_MODEL = "canopylabs/orpheus-v1-english";
 const SAMPLE_TEXT =
   "Hey, I was just thinking about you. Say something warm and short.";
 
-const VENICE_VOICES = [
-  "af_bella",
-  "af_heart",
-  "af_jadzia",
-  "af_sky",
-  "af_alloy",
-  "af_aoede",
-  "af_nicole",
-  "af_nova",
-  "af_river",
-  "af_sarah",
-  "af_jessica",
-  "af_kore",
-];
+const GROQ_VOICES = ["hannah", "diana", "autumn"];
 
 type Attempt = {
   voice: string;
@@ -32,21 +19,21 @@ type Attempt = {
   error: string | null;
 };
 
-export const testVeniceTts = action({
+export const testGroqTts = action({
   args: {},
   handler: async () => {
-    const apiKey = process.env.VENICE_API_KEY;
+    const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
       return {
         configured: false,
         attempts: [],
-        note: "VENICE_API_KEY is not set in this deployment's environment.",
+        note: "GROQ_API_KEY is not set in this deployment's environment.",
       };
     }
 
     const attempts: Attempt[] = [];
 
-    for (const voice of VENICE_VOICES) {
+    for (const voice of GROQ_VOICES) {
       let status: number | null = null;
       let contentType = "unknown";
       let audioBytes: number | null = null;
@@ -54,18 +41,17 @@ export const testVeniceTts = action({
       let ok = false;
 
       try {
-        const response = await fetch(VENICE_TTS_URL, {
+        const response = await fetch(GROQ_TTS_URL, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${apiKey}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: VENICE_TTS_MODEL,
+            model: GROQ_TTS_MODEL,
             input: SAMPLE_TEXT,
             voice,
-            response_format: "mp3",
-            speed: 1.02,
+            response_format: "wav",
           }),
         });
 
@@ -94,16 +80,16 @@ export const testVeniceTts = action({
     return {
       configured: true,
       sampleText: SAMPLE_TEXT,
-      model: VENICE_TTS_MODEL,
+      model: GROQ_TTS_MODEL,
       attemptedCount: attempts.length,
       succeededCount: successful.length,
       firstSucceededVoice: successful[0]?.voice ?? null,
       attempts,
       summary:
         successful.length > 0
-          ? `Venice TTS responded with audio for ${successful.length} voice(s). First: ${successful[0].voice}.`
+          ? `Groq TTS responded with audio for ${successful.length} voice(s). First: ${successful[0].voice}.`
           : firstFailure
-            ? `Venice TTS did not return audio. First failing voice: ${firstFailure.voice}. ${firstFailure.error}`
+            ? `Groq TTS did not return audio. First failing voice: ${firstFailure.voice}. ${firstFailure.error}`
             : "No attempts completed.",
     };
   },
