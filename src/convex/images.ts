@@ -5,29 +5,25 @@ import type { Id } from "./_generated/dataModel";
 import { internalAction } from "./_generated/server";
 import { aiDashScopeApiKey, veniceApiKey } from "./config";
 
-/** Whether a retry is worth another attempt rather than a cause worth reporting. */
+/**
+ * Telling a retry from a cause worth reporting.
+ */
 export function isRetryablePhotoFailure(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return /time|stall|empty|unreadable|not finish|terminated|429/i.test(message);
 }
 
 /**
- * Taking a new photo of Felicia.
- *
- * Her photographers, in order of preference:
- *
- *   1. Alibaba Qwen Image 3 (DASHSCOPE_API_KEY) — free for the first 10 images
- *      per new user (Free Quota Only), no card needed in some regions. This is
- *      her default: it fits her look, it is free, and it is hers.
- *   2. Venice, when VENICE_API_KEY is set. It has to pay for every shot, but
- *      it is her second photographer and she already has a key on this
- *      deployment.
- *
- * Every backend that fails is skipped, and the errors are collected so a real
- * outage reads as one useful sentence instead of a silent no.
+ * Telling a retry from a cause worth reporting.
  */
+export function isRetryablePhotoFailure(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /time|stall|empty|unreadable|not finish|terminated|429/i.test(message);
+}
 
-/** The same 2:3 frame, in the form the Qwen family wants to be told. */
+const VENICE_IMAGE_URL = "https://api.venice.ai/api/v1/image/generate";
+const VENICE_WIDTH = 832;
+const VENICE_HEIGHT = 1216;
 const QV_ASPECT_RATIO = "2:3";
 
 /**
@@ -184,7 +180,9 @@ async function viaQwen(
   );
 }
 
-/** One round trip to Venice, stored as a Convex file (second photographer). */
+/**
+ * One round trip to Venice, stored as a Convex file (second photographer).
+ */
 async function viaVenice(
   key: string,
   prompt: string,
@@ -256,4 +254,34 @@ async function viaVenice(
   throw new Error(
     `Venice couldn't take that photo. ${failures.join(" · ")} — add a key in the project's Keys settings`,
   );
+}
+
+/** `data:image/...;base64,...` → the base64 part only. */
+function stripDataUrl(img: string): string {
+  const comma = img.indexOf(",");
+  return img.startsWith("data:") && comma !== -1 ? img.slice(comma + 1) : img;
+}
+
+/** base64 to bytes, without assuming Buffer is available. */
+function fromBase64(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
+
+async function storeBase64(
+  base64: string,
+  ctx: StorageCtx,
+  mimeType: string,
+): Promise<Id<"_storage">> {
+  const bytes = fromBase64(base64);
+  if (bytes.byteLength === 0) throw new Error("decoded an empty image");
+  const buffer = bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength,
+  ) as ArrayBuffer;
+  return await ctx.storage.store(new Blob([buffer], { type: mimeType }));
 }
