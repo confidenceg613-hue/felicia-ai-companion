@@ -13,14 +13,6 @@ export function isRetryablePhotoFailure(error: unknown): boolean {
   return /time|stall|empty|unreadable|not finish|terminated|429/i.test(message);
 }
 
-/**
- * Telling a retry from a cause worth reporting.
- */
-export function isRetryablePhotoFailure(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /time|stall|empty|unreadable|not finish|terminated|429/i.test(message);
-}
-
 const VENICE_IMAGE_URL = "https://api.venice.ai/api/v1/image/generate";
 const VENICE_WIDTH = 832;
 const VENICE_HEIGHT = 1216;

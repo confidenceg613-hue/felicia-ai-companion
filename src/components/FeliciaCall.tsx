@@ -326,12 +326,21 @@ export function FeliciaCall({
         <div className="glow-warm absolute inset-0 opacity-90" />
       </div>
 
-      <div className="relative flex flex-1 flex-col items-center justify-between px-6 py-8">
-        <header className="flex w-full max-w-md items-center justify-between">
-          <Badge
-            variant="outline"
-            className="gap-2 rounded-full border-primary/40 bg-primary/10 px-3 py-1 text-primary"
+      <div className="relative flex flex-1 flex-col items-center justify-between px-6 py-5"
+        >
+          <header className="flex w-full max-w-md items-center justify-between"
+            // ----------------------------------------------------------------
+            // Header: call indicator, timer; still comfortably above the composer.
+            // ----------------------------------------------------------------
           >
+            <Badge
+              variant="outline"
+              className="gap-2 rounded-full border-primary/40 bg-primary/10 px-3 py-1 text-primary"
+              // ----------------------------------------------------------------
+              // Badge: keeps the live call indicator compact so the whole bar tracks
+              // the smaller composer while still reading as "on a call".
+              // ----------------------------------------------------------------
+            >
             <span className="relative flex size-1.5">
               <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-75" />
               <span className="relative inline-flex size-1.5 rounded-full bg-primary" />
@@ -343,73 +352,82 @@ export function FeliciaCall({
           </span>
         </header>
 
-        <div className="flex flex-col items-center">
-          <motion.div
-            animate={status === "speaking" ? { scale: [1, 1.025, 1] } : { scale: 1 }}
-            transition={
-              status === "speaking"
-                ? { duration: 1.8, repeat: Infinity, ease: "easeInOut" }
-                : { duration: 0.3 }
-            }
-            className="relative"
+        <div className="flex flex-col items-center"
           >
-            <div className="absolute -inset-4 rounded-full bg-primary/15 blur-2xl" />
-            {photoUrl ? (
-              <img
-                src={photoUrl}
-                alt="Felicia"
-                className="relative h-64 w-52 rounded-3xl border border-border/60 object-cover shadow-2xl"
-              />
-            ) : (
-              <span className="aura relative block rounded-full bg-gradient-to-br from-primary/80 via-primary/40 to-fuchsia-500/50 p-[2px] shadow-2xl">
+            <motion.div
+              animate={status === "speaking" ? { scale: [1, 1.025, 1] } : { scale: 1 }}
+              transition={
+                status === "speaking"
+                  ? { duration: 1.8, repeat: Infinity, ease: "easeInOut" }
+                  : { duration: 0.3 }
+              }
+              className="relative"
+            >
+              <div className="absolute -inset-4 rounded-full bg-primary/15 blur-2xl" />
+              {photoUrl ? (
                 <img
-                  src={avatarUrl}
+                  src={photoUrl}
                   alt="Felicia"
-                  className="size-44 rounded-full border border-background/40 object-cover"
+                  className="relative h-52 w-44 rounded-3xl border border-border/60 object-cover shadow-2xl"
                 />
-              </span>
+              ) : (
+                <span className="aura relative block rounded-full bg-gradient-to-br from-primary/80 via-primary/40 to-fuchsia-500/50 p-[2px] shadow-2xl">
+                  <img
+                    src={avatarUrl}
+                    alt="Felicia"
+                    className="size-36 rounded-full border border-background/40 object-cover"
+                  />
+                </span>
+              )}
+            </motion.div>
+
+            <h2 className="mt-4 font-display text-3xl tracking-tight text-glow">
+              {FELICIA.fullName}
+            </h2>
+            <p className="mt-1 rounded-full border border-border/60 bg-card/60 px-3 py-1 text-xs text-muted-foreground backdrop-blur-md">
+              {STATUS_LABEL[status]}
+            </p>
+
+            {interim && (
+              <p className="mt-2 max-w-sm text-center text-sm text-foreground/60 italic">
+                &ldquo;{interim}&rdquo;
+              </p>
             )}
-          </motion.div>
 
-          <h2 className="mt-6 font-display text-4xl tracking-tight text-glow">
-            {FELICIA.fullName}
-          </h2>
-          <p className="mt-2 rounded-full border border-border/60 bg-card/60 px-3 py-1 text-xs text-muted-foreground backdrop-blur-md">
-            {STATUS_LABEL[status]}
-          </p>
+            {lastLine && (
+              <p className="mt-3 max-w-md text-center text-base leading-relaxed">
+                {lastLine}
+              </p>
+            )}
+          </div>
 
-          {interim && (
-            <p className="mt-3 max-w-sm text-center text-sm text-foreground/60 italic">
-              &ldquo;{interim}&rdquo;
-            </p>
-          )}
-
-          {lastLine && (
-            <p className="mt-4 max-w-md text-center text-base leading-relaxed">
-              {lastLine}
-            </p>
-          )}
-        </div>
-
-        <div className="w-full max-w-md">
+          <div className="w-full max-w-md">
           {note && (
-            <p className="mb-3 rounded-2xl border border-border/60 bg-card/80 px-3.5 py-2.5 text-xs leading-relaxed text-muted-foreground backdrop-blur-md">
+            <p className="mb-2 rounded-2xl border border-border/60 bg-card/80 px-3 py-2 text-xs leading-relaxed text-muted-foreground backdrop-blur-md"
+            >
               {note}
             </p>
           )}
 
-          <form onSubmit={handleTyped} className="flex items-center gap-2">
-            <Input
+          <form onSubmit={handleTyped} className="flex h-9 items-center gap-2"
+            >
+              <Input
               value={typed}
               onChange={(event) => setTyped(event.target.value)}
               placeholder={canType ? "Type to her…" : "Listening…"}
               disabled={!canType}
-              className="surface rounded-full border-0 bg-card/70 shadow-none backdrop-blur-md focus-visible:ring-2 focus-visible:ring-ring/50"
+              className="surface h-8 rounded-full border-0 bg-card/70 shadow-none backdrop-blur-md focus-visible:ring-2 focus-visible:ring-ring/50"
+              // ----------------------------------------------------------------
+              // Input: slightly shorter so the whole bar tracks the smaller composer.
+              // ----------------------------------------------------------------
             />
             <Button
               type="submit"
               size="icon"
-              className="lift-primary size-10 shrink-0 rounded-full transition-transform hover:scale-105 disabled:opacity-40 disabled:hover:scale-100"
+              className="lift-primary size-9 shrink-0 rounded-full transition-transform hover:scale-105 disabled:opacity-40 disabled:hover:scale-100"
+              // ----------------------------------------------------------------
+              // Submit: keeps a touch-friendly target while staying compact.
+              // ----------------------------------------------------------------
               disabled={!canType || !typed.trim()}
             >
               {status === "thinking" ? (
@@ -420,35 +438,36 @@ export function FeliciaCall({
             </Button>
           </form>
 
-          <div className="mt-5 flex items-center justify-center gap-3">
-            <Button
-              type="button"
-              variant={muted ? "secondary" : "outline"}
-              size="icon"
-              className="surface size-12 rounded-full border-border/60 bg-card/70 backdrop-blur-md hover:bg-card"
-              onClick={() => setMuted((value) => !value)}
-              disabled={!micSupported}
-              aria-label={muted ? "Unmute" : "Mute"}
-              title={muted ? "Unmute" : "Mute"}
+          <div className="mt-4 flex items-center justify-center gap-3"
             >
-              {muted ? (
-                <MicOff className="size-5" />
-              ) : (
-                <Mic className="size-5" />
-              )}
-            </Button>
+              <Button
+                type="button"
+                variant={muted ? "secondary" : "outline"}
+                size="icon"
+                className="surface size-11 rounded-full border-border/60 bg-card/70 backdrop-blur-md hover:bg-card"
+                onClick={() => setMuted((value) => !value)}
+                disabled={!micSupported}
+                aria-label={muted ? "Unmute" : "Mute"}
+                title={muted ? "Unmute" : "Mute"}
+              >
+                {muted ? (
+                  <MicOff className="size-4" />
+                ) : (
+                  <Mic className="size-4" />
+                )}
+              </Button>
 
-            <Button
-              type="button"
-              variant="destructive"
-              size="lg"
-              className="gap-2 rounded-full px-7 shadow-[0_14px_30px_-14px_oklch(0.55_0.2_28/90%)] transition-transform hover:scale-105"
-              onClick={handleHangUp}
-            >
-              <PhoneOff className="size-4" />
-              End call
-            </Button>
-          </div>
+              <Button
+                type="button"
+                variant="destructive"
+                size="lg"
+                className="gap-2 rounded-full px-7 shadow-[0_14px_30px_-14px_oklch(0.55_0.2_28/90%)] transition-transform hover:scale-105"
+                onClick={handleHangUp}
+              >
+                <PhoneOff className="size-4" />
+                End call
+              </Button>
+            </div>
         </div>
       </div>
     </div>
