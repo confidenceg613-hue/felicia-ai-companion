@@ -80,7 +80,9 @@ const VENICE_IMAGE_MODELS = ["lustify-v8", "venice-sd35"];
  */
 const VENICE_NEGATIVE =
   "close-up, headshot, cropped, cut off, portrait crop, bust shot, " +
-  "out of frame, cropped legs, cropped feet, deformed, extra limbs";
+  "out of frame, cropped legs, cropped feet, deformed, extra limbs, " +
+  "digital art, illustration, painting, cgi, 3d render, plastic airbrushed " +
+  "skin, doll, glamour retouch, oversaturated";
 
 /** The only part of an action context this file needs. */
 type StorageCtx = {
@@ -179,6 +181,9 @@ async function viaVenice(
         height: VENICE_HEIGHT,
         steps: 30,
         cfg_scale: 7,
+        // Hyperrealism, not "Photographic": the preset steers the model away
+        // from the retouched-glamour look that reads as generated.
+        style_preset: "Hyperrealism",
         safe_mode: false,
         hide_watermark: true,
         format: "webp",
@@ -230,7 +235,7 @@ async function viaCloudflareTall(
         negative_prompt: VENICE_NEGATIVE,
         width: VENICE_WIDTH,
         height: VENICE_HEIGHT,
-        num_steps: 8,
+        num_steps: 10,
         guidance: 7.5,
       }),
     },

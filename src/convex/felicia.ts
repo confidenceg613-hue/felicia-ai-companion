@@ -496,13 +496,18 @@ function buildImagePrompt(scene: string, look: string = FELICIA_LOOK): string {
   // The framing wording is not decoration: a model asked for a photo of a woman
   // will default to a head-and-shoulders portrait unless it is told, twice, to
   // step back. "head to toe" and "full length" are the phrases that do it.
+  // The realism wording is doing the same job — "realistic" alone gives a
+  // retouched glamour render, while naming the artifacts of a real photograph
+  // (skin texture, pores, phone camera, indoor evening light) is what makes it
+  // look like a picture somebody's boyfriend took.
   return (
-    `Photorealistic full-length photograph of ${look}, ${scene}. ` +
-    "Full body shot from head to toe, standing far enough back that her whole " +
-    "figure including her feet is inside the frame, 2:3 vertical composition, " +
-    "wide framing, not a close-up and not a portrait crop. Warm natural light, " +
-    "candid and unposed, true-to-life deep brown skin and dark hair, detailed " +
-    "face, high resolution."
+    `Photorealistic full-length candid photograph of ${look}, ${scene}. ` +
+    "Full body shot from head to toe, her whole figure including her feet " +
+    "inside the frame, 2:3 vertical composition, wide framing, not a close-up " +
+    "and not a portrait crop. Shot on a phone camera in an ordinary room, " +
+    "mixed window light and warm lamplight, natural skin texture with visible " +
+    "pores and fine hair, soft unretouched edges, slight camera grain, " +
+    "unposed, no filter, high resolution."
   );
 }
 

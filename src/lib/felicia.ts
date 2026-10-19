@@ -426,13 +426,24 @@ export const FELICIA_APPEARANCE_DEFAULT: FeliciaAppearance = {
   overrideScene: null,
 };
 
+/**
+ * What she looks like, in the words every photo is written with.
+ *
+ * This is the reference picture of her: box braids past her shoulders with her
+ * edges softly laid, warm medium-brown skin with its real texture, no makeup
+ * beyond a little gloss, small gold studs and a fine necklace, and a curvy,
+ * full-figured body. Naming the details that make a face specific — the edges,
+ * the studs, the gloss, the texture — is what stops a generation drifting into
+ * a generic model.
+ */
 export const FELICIA_LOOK =
-  "a young Black woman with a medium-to-deep brown skin tone and smooth " +
-  "complexion, long black box braids that fall down her back, full lips " +
-  "slightly parted with her tongue visible in a playful expression, defined " +
-  "cheekbones, and dark eyes looking toward the camera, a curvy, " +
-  "full-figured body with a prominent bust, soft midsection, wide hips, and " +
-  "thick thighs, photorealistic, high detail face, true-to-life skin and hair";
+  "a young Nigerian woman in her mid twenties with a warm medium-brown skin " +
+  "tone and natural skin texture, long black box braids falling past her " +
+  "shoulders with her edges softly laid, dark brown eyes looking straight at " +
+  "the camera, full lips with a soft natural gloss, small round gold stud " +
+  "earrings and a fine gold necklace, wearing almost no makeup, a curvy, " +
+  "full-figured body with a prominent bust, soft waist, wide hips and thick " +
+  "thighs, photographed as she really is — true-to-life skin, hair and hands";
 
 export const SHARED_NOTE_SECTIONS: Array<{
   key: string;
