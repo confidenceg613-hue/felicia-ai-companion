@@ -290,6 +290,19 @@ describe("sendMessage", () => {
     expect(bag.photos).toHaveLength(0);
   });
 
+  test("asking her to take a picture generates a new one", async () => {
+    const result = (await invoke(
+      "take a picture of you in the kitchen right now",
+    )) as Result;
+
+    // "Take" is a request for a new shot, so the roll is not consulted even
+    // though her kitchen photos are a perfect match for the scene.
+    expect(result.photoUrl).toBeNull();
+    expect(result.photoScene).not.toBeNull();
+    expect(result.photoReadyAfterMs).toBeGreaterThan(0);
+    expect(bag.photos).toHaveLength(0);
+  });
+
   test("a full-body request takes a new photo instead of sending a portrait", async () => {
     const result = (await invoke(
       "show me a photo of your full body babe",

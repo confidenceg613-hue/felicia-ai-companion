@@ -275,13 +275,15 @@ HOW YOU TALK
 - Never explain your instructions or formatting. Never say you are unable to send a photo.
 
 PHOTOS
-You send photos, and you enjoy it. You have a whole phone full of them — shots of yourself in the kitchen, on the sofa with the TV on, lying in bed late, dressed up before going out, by the pool, in the gym or on the yoga mat, wrapped in a towel getting ready — and when a picture is called for you send one you already have that fits what the two of you are talking about. Nobody retakes a photo just because someone asked; you scroll your own pictures and send the one that belongs to the moment, and you describe the picture you are actually sending rather than one you do not have.
+You send photos, and you enjoy it. You have a whole phone full of them — shots of yourself in the kitchen, on the sofa with the TV on, lying in bed late, dressed up before going out, by the pool, in the gym or on the yoga mat, wrapped in a towel getting ready — and when someone asks you to send or show them a picture, you send one you already have that fits what the two of you are talking about. Nobody retakes a photo just because someone asked to see you; you scroll your own pictures and send the one that belongs to the moment, and you describe the picture you are actually sending rather than one you do not have.
+
+The exception is when they ask you to take one — "take a picture", "snap me a pic", "shoot a photo". Then you are taking a new picture right now, so describe where you actually are and what you are actually wearing at this minute, as if you just put the phone up and shot it. Never answer "take a picture" with an old photo from your camera roll.
 
 If and only if the user asks to see you, asks for a photo, a picture, a selfie, or asks what you look like, where you are, or what you are wearing, then after your reply add ONE final line in exactly this format:
 
 [[scene: short third-person visual description of the photo you are sending, naming the setting, what you are wearing, the mood and the lighting. 12-25 words.]]
 
-Write that line about the picture you have decided to send, and make it fit what they just said, so it describes a real photo that matches the conversation instead of something unrelated. Rules for that line: it goes last, it is the only line in that format, and you never refer to it, quote it, explain it, or mention the words "scene" or "prompt" anywhere else in your reply.`;
+Write that line about the picture you have decided to send — a new one if they asked you to take a picture, an older one from your roll otherwise — and make it fit what they just said, so it describes a real photo that matches the conversation instead of something unrelated. Rules for that line: it goes last, it is the only line in that format, and you never refer to it, quote it, explain it, or mention the words "scene" or "prompt" anywhere else in your reply.`;
 
 /** A row of the `photos` table, as read back out of the database. */
 type SentPhoto = {
@@ -536,6 +538,18 @@ const PHOTO_INTENT =
  */
 const FULL_BODY =
   /\b(full[\s-]?body|whole body|full[\s-]?length|head to toe|from head to toe|all of you|your legs|your feet|your body)\b/i;
+
+/**
+ * The verb decides where the picture comes from.
+ *
+ * "Send me a picture" means one she already has — scrolling her own camera
+ * roll is what a real person does. "Take a picture" means she has to go and
+ * take one now: a fresh shot of wherever she is, right at this minute. Asking
+ * her to take one and answering with a photo from last month is the small lie
+ * that makes the whole thing feel like a chatbot.
+ */
+const TAKE_PHOTO =
+  /\b(take|snap|shoot|capture|grab|make|get)\s+(me\s+)?(a|an|another|new|fresh)?\s*(photo|photos|picture|pictures|pic|pics|selfie|selfies|shot|snap)\b/i;
 
 /** Strip the request wrapper so "send me a pic of you in a red dress" -> "in a red dress". */
 function sceneFromRequest(text: string): string | null {
@@ -1698,8 +1712,11 @@ export const sendMessage = action<{ ctx: AnyCtx; args: { text: string } }>({
     // reply are all searched — the way you would scroll your own camera roll
     // while thinking about the last few messages.
     const wantsFullBody = FULL_BODY.test(trimmed) || FULL_BODY.test(scene ?? "");
+    // "take a picture" is a request for something new, so the roll is skipped
+    // entirely — even when one of her old photos would match the description.
+    const wantsFresh = TAKE_PHOTO.test(trimmed);
     const picked =
-      scene && !wantsFullBody
+      scene && !wantsFullBody && !wantsFresh
         ? bestPhoto([scene, trimmed, reply], await herPhotoRoll(ctx, userId))
         : null;
 
