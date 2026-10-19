@@ -10,8 +10,25 @@ import { bestPhoto, type GalleryCandidate } from "../lib/galleryMatch";
 import {
   hasMatureProvider,
   isCloudflareConfigured,
-  isGroqConfigured,
 } from "./config";
+
+/**
+ * This deployment only ever talks to Venice for Felicia's words.
+ *
+ * Groq is no longer used for chat, voice, or nudges here.
+ */
+function isVeniceConfigured(): boolean {
+  try {
+    const mod = require("./config");
+    const key =
+      typeof mod.veniceApiKey === "function"
+        ? mod.veniceApiKey()
+        : null;
+    return Boolean(key);
+  } catch {
+    return false;
+  }
+}
 import { isIntimate, isRefusal, isRefusalMessage } from "./mature";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -38,6 +55,29 @@ type AnyArgs = any;
 /** Used when a request has no usable scene description. */
 export const DEFAULT_SCENE =
   "relaxing on a sunlit balcony at golden hour, wearing a soft linen shirt, holding a mug of coffee";
+
+/**
+ * A short inline greeting so sending the first hello does not need a separate
+ * backend round trip just to pick the words.
+ */
+async function inlineGreeting(ctx: AnyCtx, userId: Id<"users">) {
+  const raw = await ctx.runAction(internal.groq.chat, {
+    messages: [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: "Say hello. Short and warm. Under 140 characters." },
+    ],
+    temperature: 1.0,
+  });
+  let line = raw.trim().split("\n")[0];
+  line = line.replace(/\[\[[\s\S]*?\]\]/g, "").trim();
+  if (!line) line = "Hey, I was just thinking about you.";
+  await ctx.runMutation(internal.felicia.saveMessage, {
+    userId,
+    role: "felicia",
+    content: line.slice(0, 600),
+  });
+  return line;
+}
 
 /** A deliberately plain scene used to retry after a safety-filter false positive. */
 const FALLBACK_SCENE =
@@ -610,15 +650,12 @@ function extractScene(
 export const connectorStatus = query({
   args: {},
   handler: async () => ({
-    // Chat is the one the user notices first when she does not reply.
-    configured: isGroqConfigured(),
-    chatBackend: "groq",
-    chatConfigured: isGroqConfigured(),
-    voiceConfigured: isGroqConfigured() || isCloudflareConfigured(),
-    // Photos are taken by Venice and nowhere else, so the presence of that
-    // key is the whole story. Reporting it separately is what makes the
-    // difference between "the chat is broken" and "her photographer needs
-    // paying" visible at a glance.
+    // Chat and voice are now both Venice-only on this deployment.
+    configured: isVeniceConfigured(),
+    chatBackend: "venice",
+    chatConfigured: isVeniceConfigured(),
+    voiceConfigured: isVeniceConfigured(),
+    // Photos still come from Venice's image endpoints.
     imageConfigured: hasMatureProvider(),
     imageFallbackConfigured: hasMatureProvider(),
   }),
@@ -1671,12 +1708,9 @@ export const sendMessage = action<{ ctx: AnyCtx; args: { text: string } }>({
         !isRefusal(message.content),
     );
 
-    // Whether this turn is sexual decides which model writes her reply: the
-    // general one for everyday chat, the roleplay one when it counts.
-    const intimate = isIntimate(trimmed, history);
-
+    // This deployment only talks to Venice for Felicia's words.
     const raw = await ctx.runAction(internal.groq.chat, {
-      intimate,
+      intimate: false,
       messages: [
         {
           role: "system",
@@ -1930,6 +1964,7 @@ export const startCall = action<{ ctx: AnyCtx; args: {} }>({
     });
 
     const raw = await ctx.runAction(internal.groq.chat, {
+      intimate: false,
       messages: [
         {
           role: "system",
@@ -2005,9 +2040,7 @@ export const sendUserPhoto = action<{ ctx: AnyCtx; args: { data: Uint8Array; mim
       role: "user",
       content: "",
       imageStorageId: storageId,
-    });
-
-    const notes = await ctx.runQuery(internal.felicia.notesFor, { userId });
+    });    const notes = await ctx.runQuery(internal.felicia.notesFor, { userId });
     const memories = await ctx.runQuery(internal.felicia.topMemories, {
       userId,
     });
@@ -2020,6 +2053,7 @@ export const sendUserPhoto = action<{ ctx: AnyCtx; args: { data: Uint8Array; mim
     });
 
     const raw = await ctx.runAction(internal.groq.chat, {
+      intimate: false,
       messages: [
         {
           role: "system",
@@ -2027,6 +2061,8 @@ export const sendUserPhoto = action<{ ctx: AnyCtx; args: { data: Uint8Array; mim
             chapters,
             startedAt,
           }),
+
+
         },
         {
           role: "user",
@@ -2148,6 +2184,7 @@ export const captureMemories = action<{ ctx: AnyCtx; args: {} }>({
       .join("\n");
 
     const raw = await ctx.runAction(internal.groq.chat, {
+      intimate: false,
       messages: [
         {
           role: "system",
@@ -2278,6 +2315,7 @@ export const writeChapter = internalAction({
       .slice(0, CHAPTER_TRANSCRIPT_CHARS);
 
     const raw = await ctx.runAction(internal.groq.chat, {
+      intimate: false,
       messages: [
         {
           role: "system",
