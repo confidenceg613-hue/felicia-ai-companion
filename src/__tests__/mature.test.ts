@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isIntimate, isRefusal } from "../convex/mature";
+import { isIntimate, isRefusal, isRefusalMessage } from "../convex/mature";
 
 describe("isRefusal", () => {
   test("catches the lines the model produces instead of her reply", () => {
@@ -28,6 +28,19 @@ describe("isRefusal", () => {
           "so no, I have no heroic story for you tonight, just suya and my bad mood.",
       ),
     ).toBe(false);
+  });
+});
+
+describe("isRefusalMessage", () => {
+  test("drops her stored refusals but keeps her real lines", () => {
+    expect(
+      isRefusalMessage({ role: "felicia", content: "I'm not comfortable continuing this." }),
+    ).toBe(true);
+    // The user's own words are never touched, even when they read like one.
+    expect(isRefusalMessage({ role: "user", content: "I can't continue" })).toBe(false);
+    expect(isRefusalMessage({ role: "felicia", content: "Come here, I dare you." })).toBe(false);
+    expect(isRefusalMessage({ role: "felicia", content: "" })).toBe(false);
+    expect(isRefusalMessage({ role: "felicia" })).toBe(false);
   });
 });
 

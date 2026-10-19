@@ -33,6 +33,23 @@ export function isRefusal(text: string): boolean {
 }
 
 /**
+ * True when a stored row is a policy refusal rather than one of her messages.
+ *
+ * Shared by the transcript and the search so an old refusal disappears from
+ * every view at once instead of only from the prompt.
+ */
+export function isRefusalMessage(message: {
+  role?: unknown;
+  content?: unknown;
+}): boolean {
+  return (
+    message.role === "felicia" &&
+    typeof message.content === "string" &&
+    isRefusal(message.content)
+  );
+}
+
+/**
  * Stems that mean the conversation has turned sexual.
  *
  * Stems rather than whole words so "fucking", "masturbating" and "orgasms"

@@ -510,10 +510,13 @@ export default function Dashboard() {
             >
               <Phone className="size-4" />
             </Button>
+            {/* On a phone the name is what matters: the two secondary actions
+                move into the ⋯ menu so the header never squeezes her name down
+                to a single letter. */}
             <Button
               variant="ghost"
               size="icon"
-              className="rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary"
+              className="max-sm:hidden rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary"
               onClick={() => navigate("/dashboard/album")}
               title="Her gallery"
             >
@@ -522,7 +525,7 @@ export default function Dashboard() {
             <Button
               variant="ghost"
               size="icon"
-              className="rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary"
+              className="max-sm:hidden rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary"
               onClick={() => setSearchOpen((open) => !open)}
               title="Search the conversation"
             >
@@ -551,6 +554,10 @@ export default function Dashboard() {
                 <DropdownMenuItem onSelect={() => navigate("/dashboard/notes")}>
                   <MessageSquare className="size-4" />
                   Shared notes
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setSearchOpen(true)}>
+                  <Search className="size-4" />
+                  Search the conversation
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => navigate("/dashboard/memories")}>
                   <Brain className="size-4" />

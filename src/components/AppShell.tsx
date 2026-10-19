@@ -44,15 +44,17 @@ export default function AppShell() {
         aria-label="Sections"
         className="glass z-30 shrink-0 rounded-none pt-2 pb-[calc(0.55rem+env(safe-area-inset-bottom))] sm:mx-auto sm:mb-3 sm:w-fit sm:rounded-full sm:border-x sm:px-3 sm:pt-0 sm:pb-0"
       >
-        <ul className="flex items-center justify-between gap-1">
+        {/* Five equal columns on a phone: every tab keeps its own space, so the
+            last one can never be pushed off the edge of a narrow screen. */}
+        <ul className="grid w-full grid-cols-5 items-center gap-0.5 px-1 sm:flex sm:w-auto sm:justify-center sm:gap-1 sm:px-0">
           {TABS.map(({ to, label, Icon, end }) => (
-            <li key={to}>
+            <li key={to} className="min-w-0">
               <NavLink
                 to={to}
                 end={end}
                 className={({ isActive }) =>
                   [
-                    "relative flex flex-col items-center gap-1 rounded-full px-3 py-2 text-[10px] tracking-wide transition-colors sm:flex-row sm:gap-2 sm:px-4 sm:text-xs",
+                    "relative flex min-w-0 flex-col items-center gap-1 rounded-full px-1 py-2 text-[10px] leading-none tracking-wide transition-colors sm:flex-row sm:gap-2 sm:px-4 sm:text-xs",
                     isActive
                       ? "text-primary"
                       : "text-muted-foreground hover:text-foreground",
@@ -76,7 +78,7 @@ export default function AppShell() {
                       />
                     )}
                     <motion.span
-                      className="relative flex items-center gap-1.5"
+                      className="relative flex max-w-full items-center gap-1 sm:gap-1.5"
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.94 }}
                       transition={{ type: "spring", stiffness: 500, damping: 28 }}

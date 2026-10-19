@@ -12,7 +12,7 @@ import {
   isCloudflareConfigured,
   isGroqConfigured,
 } from "./config";
-import { isIntimate, isRefusal } from "./mature";
+import { isIntimate, isRefusal, isRefusalMessage } from "./mature";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { paginationOptsValidator } from "convex/server";
@@ -641,9 +641,16 @@ export const messagesPage = query({
       .order("desc")
       .paginate(paginationOpts);
 
+    // Her old policy refusals are dropped at the source. They were never hers,
+    // they read as a stranger interrupting the thread, and they are already
+    // kept out of the prompt — so the transcript simply does not show them.
+    const kept = (result.page as Array<Record<string, unknown>>).filter(
+      (message) => !isRefusalMessage(message),
+    );
+
     // Resolve shared photos here so a page renders without a round trip each.
     const page = await Promise.all(
-      (result.page as Array<Record<string, unknown>>).map(async (message) => ({
+      kept.map(async (message) => ({
         ...message,
         imageUrl: message.imageStorageId
           ? await ctx.storage.getUrl(message.imageStorageId)
@@ -861,6 +868,7 @@ export const searchMessages = query({
 
     return rows
       .filter((row: { content?: string }) => (row.content ?? "").trim().length > 0)
+      .filter((row: { role?: string; content?: string }) => !isRefusalMessage(row))
       .sort((a: { createdAt: number }, b: { createdAt: number }) => b.createdAt - a.createdAt)
       .map((row: { _id: unknown; role: "user" | "felicia"; content: string; createdAt: number }) => ({
         _id: row._id,

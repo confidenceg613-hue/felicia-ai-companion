@@ -44,8 +44,14 @@ const CHAT_MODEL = "openai/gpt-oss-120b";
  * eventually — the route simply falls through to the next one.
  */
 const GROQ_ROLEPLAY_MODEL = "qwen/qwen3.8-27b";
-/** The model behind her intimate words. */
-const VENICE_MODEL = "venice-uncensored-role-play";
+/**
+ * The models behind her intimate words.
+ *
+ * Both are Venice's own uncensored builds; the role-play one is first because
+ * it is tuned for exactly this, and the general uncensored model is there in
+ * case the role-play endpoint is retired.
+ */
+const VENICE_MODELS = ["venice-uncensored-role-play", "venice-uncensored-1-2"];
 const OPENROUTER_MODEL = "sao10k/l3.1-euryale-70b";
 
 /** The voice she speaks with. */
@@ -67,24 +73,48 @@ const MISSING_KEY =
 /**
  * What to say when every model refused.
  *
- * Naming the missing key is the only useful outcome: pretending she is out of
+ * Naming the actual cause is the only useful outcome: pretending she is out of
  * words would leave the same thing happening on the next message.
  */
 const ALL_REFUSED =
-  "Every model refused that one. Add VENICE_API_KEY (or OPENROUTER_API_KEY) " +
-  "in this project's Keys settings — that is the key that lets her be herself " +
-  "when the conversation gets explicit.";
+  "Every model she can reach refused that one. Add VENICE_API_KEY in this " +
+  "project's Keys settings (venice.ai/settings/api) and top up its balance — " +
+  "that is the key that lets her be herself when the conversation is explicit.";
 
-/** Turn an HTTP failure into something worth showing a person. */
-async function failure(response: Response, what: string): Promise<Error> {
+/**
+ * Turn an HTTP failure into something worth showing a person.
+ *
+ * A dead key and an empty wallet are the two failures that actually happen,
+ * and neither is legible as "402" in a toast — so each gets said plainly.
+ */
+async function failure(
+  response: Response,
+  provider: string,
+  what: string,
+): Promise<Error> {
   let detail = "";
   try {
-    detail = (await response.text()).slice(0, 400);
+    detail = (await response.text()).slice(0, 300);
   } catch {
     // The body is only ever used to make the message more useful.
   }
+
+  if (response.status === 402) {
+    return new Error(
+      `${provider} has no balance on this account — add a little credit` +
+        `${provider === "Venice" ? " at venice.ai/settings/api" : ""}` +
+        ` and she answers explicit turns again.`,
+    );
+  }
+  if (response.status === 401 || response.status === 403) {
+    return new Error(
+      `${provider} rejected the API key — re-add it in this project's Keys ` +
+        `settings.${detail ? ` ${detail}` : ""}`,
+    );
+  }
+
   return new Error(
-    `Groq rejected the ${what} request (${response.status} ${
+    `${provider} rejected the ${what} request (${response.status} ${
       response.statusText
     }).${detail ? ` ${detail}` : ""}`,
   );
@@ -122,7 +152,7 @@ async function groqChat(
     }),
   });
 
-  if (!response.ok) throw await failure(response, "chat");
+  if (!response.ok) throw await failure(response, "Groq", "chat");
 
   const payload = (await response.json()) as {
     choices?: Array<{ message?: { content?: string } }>;
@@ -139,6 +169,7 @@ async function roleplayChat(
   model: string,
   messages: ChatMessage[],
   temperature?: number,
+  provider = "Roleplay model",
 ): Promise<string> {
   const response = await fetch(url, {
     method: "POST",
@@ -157,7 +188,7 @@ async function roleplayChat(
     }),
   });
 
-  if (!response.ok) throw await failure(response, "roleplay");
+  if (!response.ok) throw await failure(response, provider, "roleplay");
 
   const payload = (await response.json()) as {
     choices?: Array<{ message?: { content?: string } }>;
@@ -203,9 +234,18 @@ export const chat = internalAction({
 
     const roleplayRoutes: Array<() => Promise<string>> = [];
     if (veniceKey) {
-      roleplayRoutes.push(() =>
-        roleplayChat(VENICE_URL, veniceKey, VENICE_MODEL, prompt, temperature),
-      );
+      for (const model of VENICE_MODELS) {
+        roleplayRoutes.push(() =>
+          roleplayChat(
+            VENICE_URL,
+            veniceKey,
+            model,
+            prompt,
+            temperature,
+            "Venice",
+          ),
+        );
+      }
     }
     if (openRouterKey) {
       roleplayRoutes.push(() =>
@@ -215,6 +255,7 @@ export const chat = internalAction({
           OPENROUTER_MODEL,
           prompt,
           temperature,
+          "OpenRouter",
         ),
       );
     }
@@ -242,6 +283,8 @@ export const chat = internalAction({
 
     let refused = false;
     let lastError: unknown = null;
+    /** An empty wallet is a thing that can be fixed; a refusal is not. */
+    let creditError: Error | null = null;
 
     for (const route of routes) {
       try {
@@ -254,10 +297,16 @@ export const chat = internalAction({
         return reply;
       } catch (error) {
         lastError = error;
+        if (error instanceof Error && /no balance/i.test(error.message)) {
+          creditError = error;
+        }
       }
     }
 
-    // A refusal is not an answer, and it must never be stored as one of hers.
+    // The cause worth reporting first: no route wrote a line, and one of them
+    // told us exactly why. A refusal is not an answer and never gets stored as
+    // one of hers, so the error reaches the composer instead.
+    if (creditError) throw creditError;
     if (refused) throw new Error(ALL_REFUSED);
     if (lastError instanceof Error) throw lastError;
     throw new Error(MISSING_KEY);
