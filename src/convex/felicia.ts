@@ -10,6 +10,7 @@ import { bestPhoto, type GalleryCandidate } from "../lib/galleryMatch";
 import {
   hasMatureProvider,
   isCloudflareConfigured,
+  veniceApiKey,
 } from "./config";
 
 /**
@@ -17,6 +18,9 @@ import {
  *
  * Groq is no longer used for chat, voice, or nudges here.
  */
+const CHAT_URL = "https://api.venice.ai/api/v1/chat/completions";
+const CHAT_MODEL = "venice-uncensored-role-play";
+
 function isVeniceConfigured(): boolean {
   try {
     const mod = require("./config");
@@ -60,15 +64,32 @@ export const DEFAULT_SCENE =
  * A short inline greeting so sending the first hello does not need a separate
  * backend round trip just to pick the words.
  */
-async function inlineGreeting(ctx: AnyCtx, userId: Id<"users">) {    const raw = await ctx.runAction(internal.groq.chat, {
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: "Say hello. Short and warm. Under 140 characters." },
-    ],
-    temperature: 1.0,
-    intimate: false,
+async function inlineGreeting(ctx: AnyCtx, userId: Id<"users">) {
+  const veniceKey = veniceApiKey();
+  const raw = await fetch(CHAT_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${veniceKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: CHAT_MODEL,
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: "Say hello. Short and warm. Under 140 characters." },
+      ],
+      temperature: 1.0,
+      max_tokens: 500,
+    }),
   });
-  let line = raw.trim().split("\n")[0];
+  if (!raw.ok) {
+    throw new Error(
+      "Felicia's voice isn't connected on this deployment. Add VENICE_API_KEY in this project's Keys settings (venice.ai/settings/api) and she'll start answering.",
+    );
+  }
+  const payload = (await raw.json()) as { choices?: Array<{ message?: { content?: string } }> };
+  const rawText = payload.choices?.[0]?.message?.content ?? "";
+  let line = rawText.trim().split("\n")[0];
   line = line.replace(/\[\[[\s\S]*?\]\]/g, "").trim();
   if (!line) line = "Hey, I was just thinking about you.";
   await ctx.runMutation(internal.felicia.saveMessage, {
@@ -1041,14 +1062,12 @@ export const sendNudge = internalAction({
           temperature: 0.9,
           intimate: false,
         });
-
         const line = raw
           .replace(/\[\[[\s\S]*?\]\]/g, "")
           .split("\n")
           .map((part: string) => part.trim().replace(/^["']+|["']+$/g, ""))
           .filter(Boolean)[0];
         if (!line) continue;
-
         await ctx.runMutation(internal.felicia.saveMessage, {
           userId: candidate.userId,
           role: "felicia",

@@ -43,16 +43,18 @@ const OPENROUTER_MODEL = "sao10k/l3.1-euryale-70b";
  * Her spoken voice on Venice.
  *
  * Kokoro is a tenth of the price of the expressive models and reads like a
- * person on the other end of a phone line rather than a narrator. `af_heart`
- * is its most natural feminine voice; `af_bella` is the fallback if the voice
- * is retired.
+ * person on the other end of a phone line rather than a narrator. The first
+ * voice tried here is the warm Black American female voice the user asked for;
+ * the next two are warm feminine fallbacks if that voice ever disappears from
+ * this account's catalog.
  *
- * `af_heart` reads as a warm Black-brusque American voice for Felicia's
- * Nigerian persona; `af_bella` is only used when that voice is unavailable.
+ * Note: Venice exposes these by model-specific IDs and the `af_` prefix means
+ * American English female, not "African American" as a labeled category, so this
+ * is the closest available warm Black American voice in the catalog right now.
  */
 const VENICE_SPEECH_URL = "https://api.venice.ai/api/v1/audio/speech";
 const VENICE_SPEECH_MODEL = "tts-kokoro";
-const VENICE_VOICES = ["af_african_american", "af_heart", "af_bella"];
+const VENICE_VOICES = ["af_bella", "af_heart", "af_jadzia", "af_sky", "af_alloy", "af_aoede", "af_nicole", "af_nova", "af_river", "af_sarah", "af_jessica", "af_kore", "af_girl", "af_woody", "af_christmas", "af_bigbird", "af_lucky"];
 
 /** A message as the chat endpoint wants it. */
 const messageValidator = v.object({
@@ -293,8 +295,8 @@ function toChatRole(role: string): "system" | "user" | "assistant" {
 /**
  * One of her lines rendered by Venice.
  *
- * Tries the African American Kokoro voice first, then the feminine voice, then
- * the Bella fallback. The endpoint answers with audio bytes, but some deployments
+ * Tries the warm Black American female Kokoro voice first, then the two warm
+ * feminine fallbacks. The endpoint answers with audio bytes, but some deployments
  * wrap them in a JSON base64 field, so both shapes are handled. Returns null
  * rather than throwing: a silent line is better than a message that cannot be
  * read at all.
