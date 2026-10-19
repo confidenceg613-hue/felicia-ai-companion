@@ -1,1 +1,0 @@
-import{p as e,d as o}from"./index-hhbR3EtF.js";import{h as a,d as f}from"./felicia-V7d8JbwQ.js";function s(){const r=e(o.feliciaAppearance.profile)?.avatarGalleryId;return r?f.find(i=>i.id===r)?.fullUrl??a:a}export{s as u};
