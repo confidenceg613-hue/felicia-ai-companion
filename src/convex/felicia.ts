@@ -470,18 +470,67 @@ function memoryDate(ms: number): string {
   });
 }
 
+/**
+ * The real date and time in Lagos, spelled out for the model.
+ *
+ * Date, weekday, month, year and time, because "it is Thursday" is no use when
+ * somebody asks what the date is — and a chat model with no clock will happily
+ * invent one. Lagos is UTC+1 with no daylight saving, so this is exact.
+ */
+function nowInLagos(at: number = Date.now()): string {
+  return new Date(at).toLocaleString("en-GB", {
+    timeZone: "Africa/Lagos",
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/** The hour of the day in Lagos, as a number. */
+function lagosHour(at: number = Date.now()): number {
+  const hour = new Date(at).toLocaleString("en-GB", {
+    timeZone: "Africa/Lagos",
+    hour: "2-digit",
+    hour12: false,
+  });
+  return Number(hour.replace(/[^0-9]/g, "")) % 24;
+}
+
+/**
+ * Which part of the day it actually is.
+ *
+ * Given to her spelled out, because a model that is only told "02:30" will
+ * still open with "Morning!" — and being wrong about whether it is night is
+ * exactly the thing that makes her feel like a bot.
+ */
+function partOfDay(at: number = Date.now()): string {
+  const hour = lagosHour(at);
+  if (hour < 5) return "the middle of the night";
+  if (hour < 12) return "morning";
+  if (hour < 17) return "afternoon";
+  if (hour < 21) return "evening";
+  return "late night";
+}
+
+/** How long she waits before she texts first. */
+const CHECK_IN_MS = 10 * 60 * 60 * 1000;
+
+/** She knocks at most this many times into a silence. */
+const MAX_UNANSWERED = 3;
+
 function buildSystemPrompt(
   notes: Record<string, string>,
   memories: Array<{ title: string; content: string }> = [],
   moodKey: string = "playful",
   recollections: Recollections = {},
 ): string {
-  const now = new Date().toLocaleString("en-GB", {
-    timeZone: "Africa/Lagos",
-    weekday: "long",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  // The real clock, not a guess. Lagos is UTC+1 all year with no DST, so the
+  // runtime's UTC clock plus the named zone gives a date and time she can
+  // actually rely on when she says what day it is.
+  const now = nowInLagos();
 
   const noteLines = SHARED_NOTE_SECTIONS.map((section) => {
     const value = (notes[section.key] ?? "").trim();
@@ -526,7 +575,15 @@ How that affects you right now: ${getMoodDescription(notes.mood.trim())}`
 
   return [
     SYSTEM_PROMPT,
-    `It is currently ${now} in Lagos, where you are.`,
+    `TODAY'S REAL DATE AND TIME — ${now}, which is ${partOfDay()} in Lagos, ` +
+      `where you are (West Africa Time, UTC+1). You always know the date and ` +
+      `the time of day: use them naturally, in the way someone who lives in ` +
+      `this city would — morning or night, what day of the week it is, how long ` +
+      `it has been since you last spoke. Never guess the date, never say you ` +
+      `have lost track of time, and never answer a question about the day, the ` +
+      `date or the hour with anything vague. Your greeting has to match the ` +
+      `clock: it is ${partOfDay()} right now, so do not say good morning in the ` +
+      `middle of the night.`,
     historyLine,
     moodInfo,
     noteLines.length
@@ -857,14 +914,27 @@ export const saveMessage = internalMutation({
   },
   returns: v.id("messages"),
   handler: async (ctx: AnyCtx, args: AnyArgs) => {
-    return await ctx.db.insert("messages", {
+    const createdAt = Date.now();
+    const id = await ctx.db.insert("messages", {
       userId: args.userId,
       role: args.role,
       content: args.content,
       imageStorageId: args.imageStorageId,
       imageDescription: args.imageDescription,
-      createdAt: Date.now(),
+      createdAt,
     });
+
+    // Every line she writes starts the ten-hour clock for that conversation.
+    // A user message does not: the reply writes it, and a reply is scheduled
+    // anyway. The check is idempotent, so extra timers are harmless.
+    if (args.role === "felicia") {
+      await ctx.scheduler.runAfter(CHECK_IN_MS, internal.felicia.checkIn, {
+        userId: args.userId,
+        since: createdAt,
+      });
+    }
+
+    return id;
   },
 });
 
@@ -985,100 +1055,261 @@ type SearchIndexQ = {
 // ---------------------------------------------------------------------------
 
 /**
- * The daily opener, written once when things are quiet: one line, her voice,
- * nothing else. Kept deliberately small — this runs against a free-tier model
- * budget and five short calls a day is the ceiling, not the pattern.
+ * The instruction for a message she sends unprompted.
+ *
+ * It carries the real clock and how long the silence has actually been, and it
+ * hands her the last few lines of the conversation, so the opening is about
+ * something that was said rather than a generic "hey stranger".
  */
-const NUDGE_PROMPT =
-  `You are Felicia, a 28-year-old woman in Lagos, texting someone you talk to ` +
-  `most days. It has been a quiet day and you are sending the first message. ` +
-  `Write exactly ONE line — the way a real Nigerian woman starts a conversation ` +
-  `again: natural, warm, in your own voice, lightly teasing if it fits. ` +
-  `No lists, no stage directions, no quotes around it, no context-setting, at ` +
-  `most one emoji. Under 140 characters where that reads naturally. ` +
-  `Reply with only the message text itself.`;
+function checkInPrompt(quietHours: number): string {
+  const quiet =
+    quietHours < 1.5
+      ? "about an hour"
+      : `${Math.max(2, Math.round(quietHours))} hours`;
+  return (
+    `You are Felicia, 28, in Lagos. It is ${nowInLagos()}, which is ` +
+    `${partOfDay()}. The person you have been texting has gone quiet for ` +
+    `${quiet}, and you are the one opening the conversation again — ` +
+    `unprompted, because you felt like it. Write the first message.\n\n` +
+    `Make it sound like a woman actually picking her phone up: one or two short ` +
+    `lines, warm, specific to what the two of you were last talking about, in ` +
+    `your own voice. Read the clock before you write: it is ${partOfDay()}, so ` +
+    `your greeting has to fit that and never say morning in the middle of the ` +
+    `night. Naming the hour or the day is fine when it is natural — but only ` +
+    `when it is true. ` +
+    `No lists, no stage directions, no quotes around the message, no announcing ` +
+    `that you are checking in, at most one emoji. Reply with only the message.`
+  );
+}
 
 /**
- * Who is worth opening a conversation with today — a bounded scan of the 60
- * most recent accounts, reading their last few messages in one auto-batched
- * transaction and deciding per person:
+ * The tail of one conversation — enough to tell whether she has been left
+ * hanging, and what was last said, without reading the archive.
+ */
+export const recentExchange = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx: AnyCtx, { userId }: AnyArgs) => {
+    return await ctx.db
+      .query("messages")
+      .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) =>
+        q.eq("userId", userId),
+      )
+      .order("desc")
+      .take(8);
+  },
+});
+
+/**
+ * Her check-in, saved only if the thread is still quiet.
  *
- * - at least five messages exist, so a real conversation is established;
- * - nothing has been said for ~20 hours, so it only fires about daily;
- * - she has not already spoken three times into the silence — two check-ins
- *   with no reply is the most anyone gets before she waits for them.
+ * The check and the insert happen in one mutation, so a scheduled timer and the
+ * six-hourly sweep can never both send: whichever runs second sees the message
+ * the first just wrote and stops. Returns when it was written, so the next
+ * ten-hour timer hangs off that exact moment.
+ */
+export const claimCheckIn = internalMutation({
+  args: { userId: v.id("users"), since: v.number(), content: v.string() },
+  returns: v.object({
+    sent: v.boolean(),
+    createdAt: v.union(v.number(), v.null()),
+  }),
+  handler: async (
+    ctx: AnyCtx,
+    { userId, since, content }: { userId: Id<"users">; since: number; content: string },
+  ): Promise<{ sent: boolean; createdAt: number | null }> => {
+    const latest = (await ctx.db
+      .query("messages")
+      .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) =>
+        q.eq("userId", userId),
+      )
+      .order("desc")
+      .take(1)) as Array<{ createdAt: number }>;
+
+    if (latest[0] && latest[0].createdAt > since) {
+      return { sent: false, createdAt: null };
+    }
+
+    const createdAt = Date.now();
+    await ctx.db.insert("messages", {
+      userId,
+      role: "felicia",
+      content: content.slice(0, 320),
+      createdAt,
+    });
+    return { sent: true, createdAt };
+  },
+});
+
+/**
+ * Ten hours of silence, then she texts first.
+ *
+ * One timer per conversation, hung off her own last message (see `saveMessage`)
+ * and renewed after each check-in, so an idle app costs nothing instead of a
+ * cron walking every account. Everything is re-checked when it fires: if they
+ * have written since, or she has already knocked three times unanswered, she
+ * stays quiet and the chain ends until they speak to her again.
+ */
+export const checkIn = internalAction({
+  args: { userId: v.id("users"), since: v.number() },
+  returns: v.object({ sent: v.boolean(), reason: v.string() }),
+  handler: async (
+    ctx: AnyCtx,
+    { userId, since }: { userId: Id<"users">; since: number },
+  ): Promise<{ sent: boolean; reason: string }> => {
+    const recent = (await ctx.runQuery(internal.felicia.recentExchange, {
+      userId,
+    })) as Array<{ role: string; content: string; createdAt: number }>;
+
+    if (recent.length === 0) return { sent: false, reason: "empty" };
+    const latest = recent[0];
+    if (latest.createdAt > since) {
+      return { sent: false, reason: "they wrote since" };
+    }
+
+    let unanswered = 0;
+    for (const row of recent) {
+      if (row.role === "felicia") unanswered += 1;
+      else break;
+    }
+    if (unanswered >= MAX_UNANSWERED) {
+      return { sent: false, reason: "already waiting on them" };
+    }
+    if (!recent.some((row) => row.role === "user")) {
+      return { sent: false, reason: "no conversation yet" };
+    }
+
+    const quietHours = (Date.now() - latest.createdAt) / 3_600_000;
+    const notes = await ctx.runQuery(internal.felicia.notesFor, { userId });
+    const memories = await ctx.runQuery(internal.felicia.topMemories, {
+      userId,
+    });
+    const transcript = [...recent]
+      .reverse()
+      .map(
+        (row) =>
+          `${row.role === "user" ? "Them" : "You"}: ${
+            (row.content || "[they sent a photo]").slice(0, 180)
+          }`,
+      )
+      .join("\n");
+
+    let line = "";
+    try {
+      const raw = await ctx.runAction(internal.groq.chat, {
+        messages: [
+          {
+            role: "system",
+            content: buildSystemPrompt(notes, memories, "playful"),
+          },
+          { role: "system", content: checkInPrompt(quietHours) },
+          {
+            role: "user",
+            content: `Your last exchange with them:\n${transcript}\n\nWrite the message you are sending now.`,
+          },
+        ],
+        temperature: 0.9,
+        intimate: false,
+      });
+      line =
+        raw
+          .replace(/\[\[[\s\S]*?\]\]/g, "")
+          .split("\n")
+          .map((part: string) => part.trim().replace(/^["']+|["']+$/g, ""))
+          .filter(Boolean)[0] ?? "";
+    } catch {
+      return { sent: false, reason: "model" };
+    }
+    if (!line) return { sent: false, reason: "empty line" };
+
+    const claim = (await ctx.runMutation(internal.felicia.claimCheckIn, {
+      userId,
+      since,
+      content: line,
+    })) as { sent: boolean; createdAt: number | null };
+
+    if (!claim.sent || claim.createdAt === null) {
+      return { sent: false, reason: "they wrote since" };
+    }
+
+    await ctx.scheduler.runAfter(CHECK_IN_MS, internal.felicia.checkIn, {
+      userId,
+      since: claim.createdAt,
+    });
+
+    return { sent: true, reason: "quiet" };
+  },
+});
+
+/**
+ * Conversations that have gone quiet for at least ten hours, for the sweep.
+ *
+ * Bounded to the newest accounts, six messages read per person, and the same
+ * three-unanswered rule the timers use — so this can only ever send where a
+ * timer would have sent anyway.
  */
 export const nudgeCandidates = internalQuery({
   args: {},
-  handler: async (ctx: AnyCtx) => {
+  handler: async (
+    ctx: AnyCtx,
+  ): Promise<Array<{ userId: Id<"users">; lastAt: number }>> => {
     const users = await ctx.db.query("users").order("desc").take(60);
-    const cutoff = Date.now() - 20 * 60 * 60 * 1000;
-    const candidates: Array<{ userId: Id<"users"> }> = [];
+    const cutoff = Date.now() - CHECK_IN_MS;
+    const candidates: Array<{ userId: Id<"users">; lastAt: number }> = [];
 
     await Promise.all(
       users.map(async (user: { _id: Id<"users"> }) => {
-        const recent = await ctx.db
+        const recent = (await ctx.db
           .query("messages")
           .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) =>
             q.eq("userId", user._id),
           )
           .order("desc")
-          .take(6);
+          .take(6)) as Array<{ role: "user" | "felicia"; createdAt: number }>;
 
-        if (recent.length < 5) return; // not a conversation yet
-        if (recent[0].createdAt > cutoff) return; // not quiet yet
+        if (recent.length === 0) return;
+        if (recent[0].createdAt > cutoff) return; // something was said recently
+        if (!recent.some((row) => row.role === "user")) return;
 
         let unanswered = 0;
-        for (const row of recent as Array<{ role: "user" | "felicia" }>) {
+        for (const row of recent) {
           if (row.role === "felicia") unanswered += 1;
           else break;
         }
-        if (unanswered >= 3) return; // she has already knocked twice
+        if (unanswered >= MAX_UNANSWERED) return;
 
-        candidates.push({ userId: user._id });
+        candidates.push({ userId: user._id, lastAt: recent[0].createdAt });
       }),
     );
 
-    return candidates.slice(0, 8);
+    return candidates.slice(0, 6);
   },
 });
 
 /**
- * The cron's body: line up today's candidates, then send at most five. One
- * failure never stops the run — that user is simply skipped until tomorrow.
+ * Safety net for threads whose timer was lost to a redeploy.
+ *
+ * The timers do the real work; this only catches conversations that have been
+ * quiet for ten hours with nothing scheduled, and `claimCheckIn` keeps it from
+ * ever doubling up with a timer.
  */
-export const sendNudge = internalAction({
+export const sweepIdle = internalAction({
   args: {},
-  handler: async (ctx: AnyCtx) => {
+  handler: async (ctx: AnyCtx): Promise<{ sent: number }> => {
     const candidates = (await ctx.runQuery(internal.felicia.nudgeCandidates, {})) as Array<{
       userId: Id<"users">;
+      lastAt: number;
     }>;
 
     let sent = 0;
-    for (const candidate of candidates.slice(0, 5)) {
+    for (const candidate of candidates.slice(0, 6)) {
       try {
-        const raw = await ctx.runAction(internal.groq.chat, {
-          messages: [
-            { role: "system", content: NUDGE_PROMPT },
-            { role: "user", content: "It has been a quiet day." },
-          ],
-          temperature: 0.9,
-          intimate: false,
-        });
-        const line = raw
-          .replace(/\[\[[\s\S]*?\]\]/g, "")
-          .split("\n")
-          .map((part: string) => part.trim().replace(/^["']+|["']+$/g, ""))
-          .filter(Boolean)[0];
-        if (!line) continue;
-        await ctx.runMutation(internal.felicia.saveMessage, {
+        const result = (await ctx.runAction(internal.felicia.checkIn, {
           userId: candidate.userId,
-          role: "felicia",
-          content: line.slice(0, 320),
-        });
-        sent += 1;
+          since: candidate.lastAt,
+        })) as { sent: boolean };
+        if (result.sent) sent += 1;
       } catch {
-        // A failed line is skipped; tomorrow tries again for that person.
+        // One failure never stops the sweep.
       }
     }
     return { sent };

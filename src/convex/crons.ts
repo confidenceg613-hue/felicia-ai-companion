@@ -3,10 +3,16 @@ import { internal } from "./_generated/api";
 
 const crons = cronJobs();
 
-// Her first text of the day. 08:00 UTC is 09:00 in Lagos (WAT, UTC+1) — a
-// natural morning to open a conversation. The function itself decides who is
-// worth messaging and never sends more than a handful, so a quiet day with no
-// conversations open costs nothing.
-crons.cron("felicia reaches out", "0 8 * * *", internal.felicia.sendNudge, {});
+// Her ten-hour check-in is scheduled per conversation from her own last message
+// (see `saveMessage` in felicia.ts), so a quiet app costs nothing. This sweep is
+// only the safety net for a thread whose timer was lost to a redeploy: it finds
+// conversations that have been silent for ten hours, writes to at most six of
+// them, and never doubles up with a timer that already fired.
+crons.interval(
+  "felicia checks quiet threads",
+  { hours: 6 },
+  internal.felicia.sweepIdle,
+  {},
+);
 
 export default crons;
