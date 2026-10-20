@@ -65,10 +65,6 @@ const messageValidator = v.object({
 
 type ChatMessage = { role: string; content: string };
 
-const MISSING_KEY =
-  "Groq isn't connected on this deployment. Add GROQ_API_KEY in this " +
-  "project's Keys settings and she'll start answering.";
-
 /**
  * What to say when every model refused.
  *

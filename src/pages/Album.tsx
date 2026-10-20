@@ -20,7 +20,6 @@ import {
   FELICIA_APPEARANCE_DEFAULT,
   FELICIA_BACKGROUNDS,
   FELICIA_OUTFITS,
-  FELICIA_LOOK,
   type FeliciaAppearance,
 } from "@/lib/felicia";
 import { FELICIA_GALLERY, type GalleryPhoto } from "@/lib/gallery";
@@ -186,10 +185,6 @@ export default function Album() {
     setCursor(queue.length);
   }
 
-  function appendQueueItem(scene: string) {
-    setQueue((prev) => [...prev, { scene, createdAt: Date.now() }]);
-  }
-
   function dequeue() {
     if (queue.length === 0) return;
     const next = queue[0] ?? null;
@@ -206,66 +201,9 @@ export default function Album() {
     }
   }
 
-  async function enqueueResolve(item: QueuedPhotoWithId) {
-    if (!ready) return null;
-    const startedAt = Date.now();
-    setDeveloping(true);
-    try {
-      const result = await generatePhoto({ scene: resolveScene(item.scene) });
-      const remaining = DEVELOP_MS - (Date.now() - startedAt);
-      if (remaining > 0) await sleep(remaining);
-      if (result.url) await preloadImage(result.url);
-      return {
-        ...item,
-        url: result.url,
-        id: item.id ?? undefined,
-        createdAt: item.createdAt,
-      };
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Felicia couldn't send that.",
-      );
-      return null;
-    } finally {
-      setDeveloping(false);
-    }
-  }
-
-  function insertResultAfter(itemResult: QueuedPhotoWithId) {
-    setQueue((prev) => {
-      const index = prev.findIndex(
-        (x) =>
-          x.scene === itemResult.scene && x.createdAt === itemResult.createdAt,
-      );
-      if (index === -1) return [...prev, itemResult];
-      const next = [...prev];
-      next[index] = itemResult;
-      return next;
-    });
-  }
-
-  function requeue(index: number) {
-    setQueue((prev) => {
-      const item = prev[index];
-      if (!item) return prev;
-      const next = [...prev];
-      next.splice(index, 1);
-      next.unshift(item);
-      if (index < cursor) setCursor((c) => Math.max(0, c - 1));
-      return next;
-    });
-    setQueueOpen(true);
-    setCursor(0);
-  }
-
   function moveCursor(delta: number) {
     setCursor((c) => Math.max(0, Math.min(queue.length, c + delta)));
   }
-
-  const currentQueueItem = cursor < queue.length ? queue[cursor] : null;
-  const nextQueueItem = cursor + 1 < queue.length ? queue[cursor + 1] : null;
-  const prevQueueItem =
-    cursor - 1 >= 0 ? queue[cursor - 1] : null;
 
   const pendingCount = queue.length;
   const lastPhoto = allPhotos[0];
@@ -418,7 +356,7 @@ export default function Album() {
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ duration: 0.3 }}
                     className={cn(
-                      "group relative overflow-hidden rounded-3xl surface",
+                      "group relative overflow-hidden rounded-2xl surface transition-shadow duration-300 hover:shadow-[0_26px_55px_-34px_var(--foreground)]",
                       isAvatar && "ring-2 ring-primary/70 ring-offset-2 ring-offset-background",
                     )}
                   >

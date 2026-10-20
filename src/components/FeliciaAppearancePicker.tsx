@@ -6,7 +6,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
@@ -17,7 +16,6 @@ import {
   type FeliciaAppearance,
 } from "@/lib/felicia";
 import { cn } from "@/lib/utils";
-import { motion } from "framer-motion";
 import { Sparkles } from "lucide-react";
 import { useState } from "react";
 

@@ -1,3 +1,9 @@
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import AmbientOrbits from "@/components/AmbientOrbits";
@@ -49,6 +55,25 @@ const STEPS = [
     n: "03",
     title: "Ask and she sends a photo",
     body: "Ask to see her and she'll say where she is and what she's doing — then she sends the picture from her own album that fits it, or takes a new one.",
+  },
+];
+
+const FAQ = [
+  {
+    q: "Is she a real person?",
+    a: "No — and she never pretends to be. Felicia is a written character with a fixed biography, a city, a family and a job, played by a language model. She is fiction, and the app says so on the way in and at the bottom of this page.",
+  },
+  {
+    q: "Will she remember what I tell her?",
+    a: "Everything you say is stored in her archive and searched whenever she answers, so she can bring up something you told her months ago instead of starting over. Nothing in the conversation expires.",
+  },
+  {
+    q: "What does it cost?",
+    a: "Nothing in this build. Messages, photos and voice all run on this project's own model keys, so there is no subscription to cancel and no credits to top up.",
+  },
+  {
+    q: "Who is this for?",
+    a: "Adults. The app asks you to confirm you are 18 or over before you go in, and it stays a companion — not a substitute for the people in your life.",
   },
 ];
 
@@ -138,7 +163,7 @@ export default function Landing() {
   const enter = (where: string) => navigate(`/auth?returnTo=${where}`);
 
   return (
-    <div className="relative min-h-screen overflow-x-hidden bg-background text-foreground">
+    <div className="grain relative min-h-screen overflow-x-hidden bg-background text-foreground">
       {/* ---------------------------------------------------------------- nav */}
       <header className="sticky top-0 z-40 border-b border-border/40 bg-background/70 backdrop-blur-xl">
         <div className="mx-auto flex w-full max-w-5xl items-center justify-between px-4 py-3 sm:px-6 sm:py-4">
@@ -189,11 +214,16 @@ export default function Landing() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
           >
+            <div className="flex items-center gap-3 text-[11px] font-medium tracking-[0.24em] text-muted-foreground/80 uppercase">
+              <span className="h-px w-10 bg-border" />
+              Lagos · WAT · 28
+            </div>
+
             <Badge
               variant="outline"
-              className="gap-2 border-primary/40 bg-primary/10 py-1.5 text-xs font-medium text-primary"
+              className="mt-5 gap-2 rounded-full border-primary/25 bg-primary/8 px-3 py-1.5 text-[11px] font-medium tracking-wide text-primary"
             >
-              <Sparkles className="size-3.5" />
+              <Sparkles className="size-3" />
               She is not a chatbot. She is Felicia.
             </Badge>
 
@@ -233,7 +263,7 @@ export default function Landing() {
               {[
                 { k: "Age", v: "28" },
                 { k: "Based in", v: "Lagos" },
-                { k: "Replies", v: "Like a real person" },
+                { k: "Follows", v: "402k" },
               ].map((item) => (
                 <div key={item.k}>
                   <dt className="text-[11px] font-medium tracking-widest text-muted-foreground/70 uppercase">
@@ -251,21 +281,21 @@ export default function Landing() {
             transition={{ duration: 0.8, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
             className="relative"
           >
-            <div className="aura relative mx-auto w-full max-w-sm rounded-[2.5rem]">
+            <div className="aura relative mx-auto w-full max-w-sm rounded-[2.25rem]">
               <div className="glow-warm absolute -inset-4 rounded-[2.5rem] blur-3xl" />
-              <div className="relative overflow-hidden rounded-[1.75rem] border border-border/60 bg-card shadow-2xl">
+              <div className="relative overflow-hidden rounded-[1.75rem] border border-foreground/10 bg-card p-1.5 shadow-[0_40px_80px_-45px_rgba(30,20,12,0.55)] ring-1 ring-foreground/5">
                 <img
                   src={PORTRAIT.fullUrl}
                   alt={PORTRAIT.about}
-                  className="aspect-4/5 w-full object-cover"
+                  className="aspect-4/5 w-full rounded-[1.35rem] object-cover"
                 />
-                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent p-5 pt-16">
-                  <p className="font-display text-xl text-white">
+                <div className="absolute inset-x-1.5 bottom-1.5 rounded-b-[1.35rem] bg-gradient-to-t from-black/85 via-black/35 to-transparent p-5 pt-16">
+                  <p className="font-display text-xl tracking-tight text-white">
                     {FELICIA.fullName}
                   </p>
-                  <p className="text-xs text-white/70">{FELICIA.traits[0].title}</p>
-
-                  {/* todo: keep this point to the personality summary instead of the removed eyebrow */}
+                  <p className="mt-0.5 text-[11px] tracking-[0.14em] text-white/70 uppercase">
+                    {FELICIA.traits[0].title}
+                  </p>
                 </div>
               </div>
 
@@ -312,7 +342,8 @@ export default function Landing() {
       <section id="moments" className="relative border-t border-border/40 py-14 sm:py-16">
         <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
           <Reveal>
-            <h2 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
+            <p className="eyebrow">01 — The photos</p>
+            <h2 className="mt-3 font-display text-2xl font-semibold tracking-tight sm:text-3xl">
               The photos are the point
             </h2>
             <p className="mt-3 max-w-2xl text-muted-foreground">
@@ -326,7 +357,7 @@ export default function Landing() {
           <div className="mt-8 grid gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
             {MOMENTS.map((moment, index) => (
               <Reveal key={moment.src} delay={index * 0.08}>
-                <figure className="group surface overflow-hidden rounded-2xl transition-transform duration-500 hover:-translate-y-1">
+                <figure className="group surface overflow-hidden rounded-2xl ring-1 ring-foreground/5 transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_30px_60px_-38px_var(--foreground)]">
                   <div className="overflow-hidden">
                     <img
                       src={moment.src}
@@ -336,7 +367,7 @@ export default function Landing() {
                     />
                   </div>
                   <figcaption className="p-5">
-                    <p className="text-[11px] tracking-widest text-primary uppercase">
+                    <p className="text-[10px] font-medium tracking-[0.2em] text-primary/85 uppercase">
                       {moment.place}
                     </p>
                     <p className="mt-2 text-sm text-muted-foreground">
@@ -354,9 +385,11 @@ export default function Landing() {
       <section className="border-t border-border/40 py-14 sm:py-16">
         <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
           <Reveal>
-            <h2 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
+            <p className="eyebrow">02 — Her</p>
+            <h2 className="mt-3 font-display text-2xl font-semibold tracking-tight sm:text-3xl">
               Who she is
-            </h2>            <p className="mt-3 max-w-2xl text-muted-foreground">
+            </h2>
+            <p className="mt-3 max-w-2xl text-muted-foreground">
               Felicia is a creator in Lagos — Yoruba, 28, raised in Surulere and
               living in Yaba — who films and photographs the city for a living.
               She keeps every conversation the two of you have ever had, so
@@ -367,15 +400,17 @@ export default function Landing() {
             </p>
           </Reveal>
 
-          <div className="mt-8 grid gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
+          {/* Nine traits, set the way a magazine sets a character list: a
+              numbered index down the margin and a hairline between each, not
+              nine identical cards with the same heading on them. */}
+          <div className="mt-9 grid gap-x-10 sm:grid-cols-2">
             {FELICIA_PERSONALITY.map((trait, index) => (
-              <Reveal key={index} delay={index * 0.05}>
-                <div className="h-full rounded-2xl border border-border/60 bg-card p-6 transition-colors hover:border-primary/40">
-                  <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                    <Sparkles className="size-5" />
-                  </div>
-                  <h3 className="mt-4 font-display text-lg">A little of who she is</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              <Reveal key={trait} delay={index * 0.03}>
+                <div className="group flex gap-4 border-t border-border/60 py-4">
+                  <span className="mt-[3px] font-display text-[11px] tabular-nums text-primary/60 transition-colors group-hover:text-primary">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                  <p className="text-sm leading-relaxed text-muted-foreground transition-colors group-hover:text-foreground">
                     {trait}
                   </p>
                 </div>
@@ -389,7 +424,8 @@ export default function Landing() {
       <section className="border-t border-border/40 py-14 sm:py-16">
         <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
           <Reveal>
-            <h2 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
+            <p className="eyebrow">03 — Mood</p>
+            <h2 className="mt-3 font-display text-2xl font-semibold tracking-tight sm:text-3xl">
               What she actually feels
             </h2>
             <p className="mt-3 max-w-2xl text-muted-foreground">
@@ -420,7 +456,8 @@ export default function Landing() {
       <section className="border-t border-border/40 py-14 sm:py-16">
         <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
           <Reveal>
-            <h2 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
+            <p className="eyebrow">04 — How it works</p>
+            <h2 className="mt-3 font-display text-2xl font-semibold tracking-tight sm:text-3xl">
               How it works
             </h2>
           </Reveal>
@@ -457,7 +494,7 @@ export default function Landing() {
         </div>
         <div className="relative mx-auto w-full max-w-2xl px-4 py-16 text-center sm:px-6">
           <Reveal>
-            <h2 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+            <h2 className="font-display text-3xl font-semibold tracking-tight italic sm:text-4xl">
               She's already in Lagos.
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-muted-foreground">
@@ -477,9 +514,14 @@ export default function Landing() {
       </section>
 
       <footer className="border-t border-border/40 py-10">
-        <div className="mx-auto flex w-full max-w-5xl flex-col items-center justify-between gap-3 px-4 text-xs text-muted-foreground sm:flex-row sm:px-6">
-          <p>Felicia · a companion character. She is fiction, written warmly.</p>
-          <p>Photos from her album, plus new ones generated with Cloudflare image/voice.</p>
+        <div className="mx-auto flex w-full max-w-5xl flex-col items-center justify-between gap-3 px-4 text-[11px] tracking-wide text-muted-foreground sm:flex-row sm:px-6">
+          <p className="flex items-center gap-2">
+            <span className="size-1.5 rounded-full bg-primary/70" />
+            Felicia · a companion character, written warmly. She is fiction.
+          </p>
+          <p className="text-muted-foreground/80">
+            Photographs from her album, and new ones taken live.
+          </p>
         </div>
       </footer>
     </div>

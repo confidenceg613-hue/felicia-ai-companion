@@ -346,7 +346,7 @@ export default function Settings() {
                   alt=""
                   className="size-12 rounded-full border border-border/60 object-cover"
                 />
-                <span className="absolute -right-0.5 -bottom-0.5 size-3 rounded-full border-2 border-card bg-emerald-400" />
+                <span className="absolute -right-0.5 -bottom-0.5 size-3 rounded-full border-2 border-card bg-chart-2" />
               </div>
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium">{label}</p>

@@ -7,31 +7,10 @@ import {
 } from "../lib/felicia";
 import { FELICIA_GALLERY } from "../lib/gallery";
 import { bestPhoto, type GalleryCandidate } from "../lib/galleryMatch";
-import {
-  hasMatureProvider,
-  isCloudflareConfigured,
-  veniceApiKey,
-} from "./config";
-
-/**
- * This deployment only ever talks to Venice for Felicia's words.
- *
- * Groq is no longer used for chat, voice, or nudges here.
- */
-const CHAT_URL = "https://api.venice.ai/api/v1/chat/completions";
-const CHAT_MODEL = "venice-uncensored-role-play";
+import { hasMatureProvider, veniceApiKey } from "./config";
 
 function isVeniceConfigured(): boolean {
-  try {
-    const mod = require("./config");
-    const key =
-      typeof mod.veniceApiKey === "function"
-        ? mod.veniceApiKey()
-        : null;
-    return Boolean(key);
-  } catch {
-    return false;
-  }
+  return Boolean(veniceApiKey());
 }
 import { isIntimate, isRefusal, isRefusalMessage } from "./mature";
 import { internal } from "./_generated/api";
@@ -59,46 +38,6 @@ type AnyArgs = any;
 /** Used when a request has no usable scene description. */
 export const DEFAULT_SCENE =
   "relaxing on a sunlit balcony at golden hour, wearing a soft linen shirt, holding a mug of coffee";
-
-/**
- * A short inline greeting so sending the first hello does not need a separate
- * backend round trip just to pick the words.
- */
-async function inlineGreeting(ctx: AnyCtx, userId: Id<"users">) {
-  const veniceKey = veniceApiKey();
-  const raw = await fetch(CHAT_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${veniceKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: CHAT_MODEL,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: "Say hello. Short and warm. Under 140 characters." },
-      ],
-      temperature: 1.0,
-      max_tokens: 500,
-    }),
-  });
-  if (!raw.ok) {
-    throw new Error(
-      "Felicia's voice isn't connected on this deployment. Add VENICE_API_KEY in this project's Keys settings (venice.ai/settings/api) and she'll start answering.",
-    );
-  }
-  const payload = (await raw.json()) as { choices?: Array<{ message?: { content?: string } }> };
-  const rawText = payload.choices?.[0]?.message?.content ?? "";
-  let line = rawText.trim().split("\n")[0];
-  line = line.replace(/\[\[[\s\S]*?\]\]/g, "").trim();
-  if (!line) line = "Hey, I was just thinking about you.";
-  await ctx.runMutation(internal.felicia.saveMessage, {
-    userId,
-    role: "felicia",
-    content: line.slice(0, 600),
-  });
-  return line;
-}
 
 /** A deliberately plain scene used to retry after a safety-filter false positive. */
 const FALLBACK_SCENE =
@@ -251,12 +190,6 @@ export const MOOD_LIST: Array<{
       "dry, cheeky, she has a comment and is not asking permission",
   },
 ];
-
-const MOOD_KEY_TO_EMOJI: Record<string, string> = Object.fromEntries(
-  MOOD_LIST.map((m) => [m.key, m.emoji]),
-);
-
-const KNOWN_MOOD_KEYS = new Set(MOOD_LIST.map((m) => m.key));
 
 function getMoodDescription(raw: string): string {
   const key = raw.trim().split(/\s+/)[0].toLowerCase();
@@ -2361,7 +2294,7 @@ export const speakMessage = action<{ ctx: AnyCtx; args: { messageId: Id<"message
  * Her greeting is generated as herself and saved as a real message, so the
  * spoken call also reads back as a transcript in the chat.
  */
-export const startCall = action<{ ctx: AnyCtx; args: {} }>({
+export const startCall = action<{ ctx: AnyCtx; args: Record<string, never> }>({
   args: {},
   returns: v.object({
     messageId: v.id("messages"),
@@ -2702,7 +2635,7 @@ function parseMemoryList(raw: string): Array<{
  * yields zero new memories rather than an error — a model that rambles should
  * not break the page.
  */
-export const captureMemories = action<{ ctx: AnyCtx; args: {} }>({
+export const captureMemories = action<{ ctx: AnyCtx; args: Record<string, never> }>({
   args: {},
   returns: v.object({ added: v.number(), total: v.number() }),
   handler: async (

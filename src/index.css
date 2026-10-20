@@ -50,79 +50,87 @@
 
 /* CHANGE VALUES FOR THEME */
 /*
- * Two themes, one shared family.
- *   :root        violet-light — deep violet paper, chalk text, violet accent
- *   .dark        violet-dusk — violet-leaning espresso surfaces, softer
- *   Felicia's palette in both; the app follows the device by default and the
- *   override lives in Settings. Purple is the brand color in both.
+ * One woman, two rooms.
+ *
+ *   :root   Ivory & Oxblood — warm paper, espresso ink, a deep terracotta
+ *           accent. Editorial, printed, expensive-looking: hairline rules,
+ *           generous margins, photographs sitting on cream rather than neon.
+ *   .dark   Ink & Ember — near-black warm charcoal, bone text, and the accent
+ *           turned to copper, the way a lamp looks in a dark room.
+ *
+ * No purples anywhere, in either theme: the colour that reads as "AI app" is
+ * exactly the colour this one refuses. Accent is hue ~32 light / ~62 dark, the
+ * rest of the palette is warm neutrals so the photographs stay the loudest
+ * thing on the screen.
  */
 :root {
-  --radius: 1rem;
-  --background: oklch(0.16 0.04 300);
-  --foreground: oklch(0.96 0.01 300);
-  --card: oklch(0.22 0.04 300);
-  --card-foreground: oklch(0.96 0.01 300);
-  --popover: oklch(0.22 0.04 300);
-  --popover-foreground: oklch(0.96 0.01 300);
-  --primary: oklch(0.55 0.15 300);
-  --primary-foreground: oklch(0.97 0.005 300);
-  --secondary: oklch(0.81 0.02 300);
-  --secondary-foreground: oklch(0.35 0.03 300);
-  --muted: oklch(0.91 0.015 300);
-  --muted-foreground: oklch(0.64 0.018 300);
-  --accent: oklch(0.81 0.025 300);
-  --accent-foreground: oklch(0.96 0.01 300);
-  --destructive: oklch(0.55 0.2 28);
-  --border: oklch(0.9 0.015 300);
-  --input: oklch(0.78 0.02 300);
-  --ring: oklch(0.55 0.15 300);
-  --chart-1: oklch(0.55 0.15 300);
-  --chart-2: oklch(0.5 0.1 180);
-  --chart-3: oklch(0.48 0.09 255);
-  --chart-4: oklch(0.5 0.12 330);
-  --chart-5: oklch(0.46 0.13 45);
-  --sidebar: oklch(0.76 0.015 300);
-  --sidebar-foreground: oklch(0.96 0.01 300);
-  --sidebar-primary: oklch(0.55 0.15 300);
-  --sidebar-primary-foreground: oklch(0.97 0.005 300);
-  --sidebar-accent: oklch(0.7 0.02 300);
-  --sidebar-accent-foreground: oklch(0.96 0.01 300);
-  --sidebar-border: oklch(0.9 0.015 300);
-  --sidebar-ring: oklch(0.55 0.15 300);
+  --radius: 0.875rem;
+
+  --background: oklch(0.972 0.009 84);
+  --foreground: oklch(0.235 0.015 55);
+  --card: oklch(0.995 0.004 90);
+  --card-foreground: oklch(0.235 0.015 55);
+  --popover: oklch(0.995 0.004 90);
+  --popover-foreground: oklch(0.235 0.015 55);
+  --primary: oklch(0.43 0.115 32);
+  --primary-foreground: oklch(0.985 0.008 90);
+  --secondary: oklch(0.945 0.012 85);
+  --secondary-foreground: oklch(0.32 0.02 55);
+  --muted: oklch(0.945 0.012 85);
+  --muted-foreground: oklch(0.5 0.018 62);
+  --accent: oklch(0.925 0.03 78);
+  --accent-foreground: oklch(0.33 0.045 45);
+  --destructive: oklch(0.52 0.19 27);
+  --border: oklch(0.895 0.014 80);
+  --input: oklch(0.87 0.014 80);
+  --ring: oklch(0.5 0.11 35);
+  --chart-1: oklch(0.43 0.115 32);
+  --chart-2: oklch(0.52 0.08 135);
+  --chart-3: oklch(0.46 0.07 220);
+  --chart-4: oklch(0.66 0.1 78);
+  --chart-5: oklch(0.4 0.06 340);
+  --sidebar: oklch(0.955 0.01 84);
+  --sidebar-foreground: oklch(0.235 0.015 55);
+  --sidebar-primary: oklch(0.43 0.115 32);
+  --sidebar-primary-foreground: oklch(0.985 0.008 90);
+  --sidebar-accent: oklch(0.925 0.02 78);
+  --sidebar-accent-foreground: oklch(0.3 0.03 50);
+  --sidebar-border: oklch(0.895 0.014 80);
+  --sidebar-ring: oklch(0.5 0.11 35);
 }
 
 .dark {
-  --background: oklch(0.135 0.03 300);
-  --foreground: oklch(0.97 0.008 300);
-  --card: oklch(0.185 0.025 300);
-  --card-foreground: oklch(0.97 0.008 300);
-  --popover: oklch(0.185 0.025 300);
-  --popover-foreground: oklch(0.97 0.008 300);
-  --primary: oklch(0.68 0.14 300);
-  --primary-foreground: oklch(0.985 0.004 300);
-  --secondary: oklch(0.9 0.012 300);
-  --secondary-foreground: oklch(0.96 0.01 300);
-  --muted: oklch(0.88 0.012 300);
-  --muted-foreground: oklch(0.6 0.015 300);
-  --accent: oklch(0.9 0.016 300);
-  --accent-foreground: oklch(0.97 0.008 300);
-  --destructive: oklch(0.62 0.2 28);
-  --border: oklch(0.86 0.012 300);
-  --input: oklch(0.82 0.014 300);
-  --ring: oklch(0.68 0.14 300);
-  --chart-1: oklch(0.68 0.14 300);
-  --chart-2: oklch(0.58 0.1 180);
-  --chart-3: oklch(0.54 0.08 255);
-  --chart-4: oklch(0.55 0.1 330);
-  --chart-5: oklch(0.52 0.12 45);
-  --sidebar: oklch(0.105 0.01 300);
-  --sidebar-foreground: oklch(0.97 0.008 300);
-  --sidebar-primary: oklch(0.68 0.14 300);
-  --sidebar-primary-foreground: oklch(0.985 0.004 300);
-  --sidebar-accent: oklch(0.165 0.02 300);
-  --sidebar-accent-foreground: oklch(0.97 0.008 300);
-  --sidebar-border: oklch(0.86 0.012 300);
-  --sidebar-ring: oklch(0.68 0.14 300);
+  --background: oklch(0.155 0.012 58);
+  --foreground: oklch(0.945 0.01 85);
+  --card: oklch(0.196 0.014 58);
+  --card-foreground: oklch(0.945 0.01 85);
+  --popover: oklch(0.196 0.014 58);
+  --popover-foreground: oklch(0.945 0.01 85);
+  --primary: oklch(0.755 0.108 62);
+  --primary-foreground: oklch(0.185 0.02 55);
+  --secondary: oklch(0.25 0.014 58);
+  --secondary-foreground: oklch(0.93 0.01 85);
+  --muted: oklch(0.245 0.012 58);
+  --muted-foreground: oklch(0.72 0.014 80);
+  --accent: oklch(0.29 0.03 62);
+  --accent-foreground: oklch(0.94 0.012 85);
+  --destructive: oklch(0.6 0.18 27);
+  --border: oklch(0.29 0.014 58);
+  --input: oklch(0.32 0.014 58);
+  --ring: oklch(0.755 0.108 62);
+  --chart-1: oklch(0.755 0.108 62);
+  --chart-2: oklch(0.66 0.08 140);
+  --chart-3: oklch(0.62 0.07 220);
+  --chart-4: oklch(0.8 0.09 85);
+  --chart-5: oklch(0.56 0.06 340);
+  --sidebar: oklch(0.175 0.012 58);
+  --sidebar-foreground: oklch(0.945 0.01 85);
+  --sidebar-primary: oklch(0.755 0.108 62);
+  --sidebar-primary-foreground: oklch(0.185 0.02 55);
+  --sidebar-accent: oklch(0.26 0.02 60);
+  --sidebar-accent-foreground: oklch(0.94 0.012 85);
+  --sidebar-border: oklch(0.29 0.014 58);
+  --sidebar-ring: oklch(0.755 0.108 62);
 }
 
 @layer base {
@@ -138,12 +146,14 @@
   body {
     @apply bg-background text-foreground;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
     overflow-x: hidden;
+    font-feature-settings: "ss01" 1, "cv05" 1, "calt" 1;
   }
-  /* Light in the room behind the app: two soft washes of the brand colour, one
-     warm, one cool, so surfaces have something to sit against instead of a
-     flat field. Fixed so it stays put as content scrolls over it. */
+  /* Room light. Two very soft washes — ember low on the left, cool daylight
+     high on the right — enough for cream surfaces to have depth without any
+     colour banding. Fixed so it stays put as content scrolls over it. */
   body::before {
     content: "";
     position: fixed;
@@ -151,12 +161,18 @@
     z-index: -1;
     pointer-events: none;
     background:
-      radial-gradient(70rem 50rem at 12% -10%, oklch(0.62 0.19 300 / 22%), transparent 62%),
-      radial-gradient(55rem 45rem at 96% 8%, oklch(0.58 0.15 340 / 16%), transparent 60%),
-      radial-gradient(80rem 60rem at 50% 118%, oklch(0.55 0.12 265 / 16%), transparent 65%);
+      radial-gradient(62rem 44rem at 8% -8%, oklch(0.72 0.1 55 / 16%), transparent 62%),
+      radial-gradient(52rem 40rem at 98% 4%, oklch(0.7 0.04 220 / 8%), transparent 60%),
+      radial-gradient(70rem 52rem at 50% 120%, oklch(0.62 0.08 32 / 10%), transparent 66%);
+  }
+  .dark body::before {
+    background:
+      radial-gradient(62rem 44rem at 10% -10%, oklch(0.72 0.12 58 / 14%), transparent 62%),
+      radial-gradient(48rem 38rem at 96% 2%, oklch(0.5 0.05 220 / 10%), transparent 60%),
+      radial-gradient(70rem 52rem at 50% 118%, oklch(0.5 0.09 30 / 12%), transparent 66%);
   }
   ::selection {
-    background: oklch(0.76 0.13 62 / 35%);
+    background: color-mix(in oklab, var(--primary) 22%, transparent);
   }
   button:not([disabled]),
   [role="button"]:not([disabled]) {
@@ -165,7 +181,7 @@
   /* Slim, unobtrusive scrollbars instead of the platform default chrome. */
   * {
     scrollbar-width: thin;
-    scrollbar-color: oklch(0.6 0.02 300 / 45%) transparent;
+    scrollbar-color: color-mix(in oklab, var(--foreground) 22%, transparent) transparent;
   }
   *::-webkit-scrollbar {
     width: 10px;
@@ -175,13 +191,13 @@
     background: transparent;
   }
   *::-webkit-scrollbar-thumb {
-    background-color: oklch(0.6 0.02 300 / 35%);
+    background-color: color-mix(in oklab, var(--foreground) 20%, transparent);
     border: 3px solid transparent;
     background-clip: content-box;
     border-radius: 999px;
   }
   *::-webkit-scrollbar-thumb:hover {
-    background-color: oklch(0.6 0.02 300 / 55%);
+    background-color: color-mix(in oklab, var(--foreground) 32%, transparent);
   }
 }
 
@@ -189,46 +205,66 @@
    Surfaces
 
    A small vocabulary the pages share, so a card looks like a card everywhere
-   rather than each screen inventing its own border, blur and shadow.
+   rather than each screen inventing its own border, blur and shadow. The
+   shadows are layered and warm-tinted rather than black, which is what keeps a
+   dark card from looking like a hole in the page.
    --------------------------------------------------------------------------- */
 @layer components {
   /* A floating panel: translucent, blurred, one hairline of light at the edge.
      Used for headers, composers, toolbars — anything that sits above content. */
   .glass {
-    background: color-mix(in oklab, var(--card) 72%, transparent);
-    backdrop-filter: blur(1.25rem) saturate(1.35);
-    -webkit-backdrop-filter: blur(1.25rem) saturate(1.35);
-    border: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
+    background: color-mix(in oklab, var(--card) 78%, transparent);
+    backdrop-filter: blur(1.5rem) saturate(1.15);
+    -webkit-backdrop-filter: blur(1.5rem) saturate(1.15);
+    border: 1px solid color-mix(in oklab, var(--border) 65%, transparent);
     box-shadow:
-      0 1px 0 0 color-mix(in oklab, var(--foreground) 8%, transparent) inset,
-      0 18px 40px -24px oklch(0.1 0.02 300 / 70%);
+      0 1px 0 0 color-mix(in oklab, var(--foreground) 6%, transparent) inset,
+      0 1px 2px 0 oklch(0.2 0.03 60 / 6%),
+      0 24px 48px -32px oklch(0.2 0.04 55 / 35%);
   }
 
   /* A card that rests on the background instead of floating above it. */
   .surface {
-    background: color-mix(in oklab, var(--card) 88%, transparent);
-    border: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
-    box-shadow: 0 22px 45px -32px oklch(0.08 0.02 300 / 85%);
+    background: color-mix(in oklab, var(--card) 92%, transparent);
+    border: 1px solid color-mix(in oklab, var(--border) 78%, transparent);
+    box-shadow:
+      0 1px 0 0 color-mix(in oklab, var(--foreground) 4%, transparent) inset,
+      0 18px 40px -30px oklch(0.22 0.04 55 / 32%);
+  }
+  .dark .surface {
+    box-shadow:
+      0 1px 0 0 color-mix(in oklab, var(--foreground) 6%, transparent) inset,
+      0 20px 44px -30px oklch(0.02 0.01 60 / 85%);
   }
 
   /* The brand colour, lifted: for primary buttons and active states. */
   .lift-primary {
     box-shadow:
-      0 1px 0 0 color-mix(in oklab, #fff 22%, transparent) inset,
-      0 12px 28px -12px oklch(0.62 0.19 300 / 85%);
+      0 1px 0 0 color-mix(in oklab, #fff 26%, transparent) inset,
+      0 2px 4px 0 color-mix(in oklab, var(--primary) 22%, transparent),
+      0 12px 26px -14px color-mix(in oklab, var(--primary) 65%, transparent);
   }
 
   /* Warmth behind the portrait and the hero image, so photographs have a glow
      to sit in rather than a hard edge against the background. */
   .glow-warm {
     background:
-      radial-gradient(60% 60% at 50% 35%, oklch(0.7 0.16 320 / 30%), transparent 70%),
-      radial-gradient(50% 50% at 70% 80%, oklch(0.6 0.14 255 / 22%), transparent 70%);
+      radial-gradient(60% 60% at 50% 32%, oklch(0.74 0.1 62 / 26%), transparent 70%),
+      radial-gradient(52% 52% at 72% 82%, oklch(0.6 0.08 28 / 20%), transparent 72%);
+  }
+  .dark .glow-warm {
+    background:
+      radial-gradient(60% 60% at 50% 32%, oklch(0.76 0.12 62 / 22%), transparent 70%),
+      radial-gradient(52% 52% at 72% 82%, oklch(0.55 0.1 30 / 22%), transparent 72%);
   }
 
-  /* Text that carries a little light, for display headings. */
+  /* Text that carries a little light, for display headings. Kept gentle: a
+     printed page has warmth in the paper, not a halo around the type. */
   .text-glow {
-    text-shadow: 0 0 26px color-mix(in oklab, var(--primary) 45%, transparent);
+    text-shadow: 0 1px 0 color-mix(in oklab, var(--background) 60%, transparent);
+  }
+  .dark .text-glow {
+    text-shadow: 0 0 30px color-mix(in oklab, var(--primary) 22%, transparent);
   }
 
   /* A living glow around her, so she reads as present rather than pasted in.
@@ -241,30 +277,45 @@
   .aura::before {
     content: "";
     position: absolute;
-    inset: -8px;
+    inset: -10px;
     z-index: -1;
     border-radius: inherit;
     background: conic-gradient(
       from 180deg,
-      oklch(0.7 0.16 300 / 55%),
-      oklch(0.64 0.16 20 / 40%),
-      oklch(0.6 0.15 255 / 45%),
-      oklch(0.7 0.16 300 / 55%)
+      oklch(0.78 0.1 62 / 45%),
+      oklch(0.66 0.1 26 / 35%),
+      oklch(0.7 0.06 200 / 25%),
+      oklch(0.78 0.1 62 / 45%)
     );
-    filter: blur(12px);
-    opacity: 0.5;
-    animation: aura-breathe 6s ease-in-out infinite;
+    filter: blur(14px);
+    opacity: 0.45;
+    animation: aura-breathe 7s ease-in-out infinite;
+  }
+  .dark .aura::before {
+    opacity: 0.55;
   }
   @keyframes aura-breathe {
     0%,
     100% {
-      opacity: 0.3;
+      opacity: 0.28;
       transform: scale(0.97);
     }
     50% {
-      opacity: 0.7;
-      transform: scale(1.04);
+      opacity: 0.62;
+      transform: scale(1.03);
     }
+  }
+
+  /* A hairline with a warm centre, used to separate editorial sections without
+     a hard rule across the page. */
+  .hairline {
+    height: 1px;
+    background: linear-gradient(
+      to right,
+      transparent,
+      color-mix(in oklab, var(--border) 90%, transparent),
+      transparent
+    );
   }
 
   /* Chip rows and horizontal scrollers should not show a scrollbar. */
@@ -273,6 +324,49 @@
   }
   .no-scrollbar::-webkit-scrollbar {
     display: none;
+  }
+
+  /* Paper grain. A printed page has tooth; a flat screen looks like plastic
+     without it. Laid over a whole section at 3%, it is felt rather than seen,
+     and it never intercepts a tap. */
+  .grain::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    pointer-events: none;
+    opacity: 0.032;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 140px 140px;
+  }
+  .dark .grain::after {
+    opacity: 0.05;
+  }
+
+  /* The small caps line that opens a section: a rule, a number, a word. */
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: color-mix(in oklab, var(--primary) 85%, transparent);
+  }
+  .eyebrow::before {
+    content: "";
+    width: 1.75rem;
+    height: 1px;
+    background: color-mix(in oklab, var(--primary) 45%, transparent);
+  }
+
+  /* A quieter card than `.surface`: no shadow, just a hairline and warm paper.
+     Used for lists and supporting panels, so the loudest thing on screen stays
+     the photographs. */
+  .paper {
+    background: color-mix(in oklab, var(--card) 70%, transparent);
+    border: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
   }
 }
 

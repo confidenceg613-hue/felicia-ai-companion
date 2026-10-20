@@ -25,7 +25,7 @@ import { FELICIA } from "@/lib/felicia";
 import { DEVELOP_MS, preloadImage } from "@/lib/photo";
 import { cn } from "@/lib/utils";
 import { beginVoiceNote, playAudioUrl, speakWithBrowser } from "@/lib/voice";
-import { useAction, useMutation, usePaginatedQuery, useQuery } from "convex/react";
+import { useAction, usePaginatedQuery, useQuery } from "convex/react";
 import { motion } from "framer-motion";
 import {
   Camera,
@@ -187,12 +187,9 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (photoScheduledAt === null) return;
-    const remaining = photoScheduledAt - Date.now();
-    if (remaining <= 0) {
-      setPhotoScheduledAt(null);
-      setPendingPhotoScene(null);
-      return;
-    }
+    // A zero-delay timeout rather than a synchronous setState: the reveal is
+    // always dispatched from the timer, so this effect never cascades a render.
+    const remaining = Math.max(0, photoScheduledAt - Date.now());
     const timer = setTimeout(() => {
       setPhotoScheduledAt(null);
       if (pendingPhotoScene) void requestPhoto(pendingPhotoScene);
@@ -474,8 +471,8 @@ export default function Dashboard() {
               {/* Online: the little ring keeps breathing so the header reads as
                   live rather than a static screenshot. */}
               <span className="absolute right-0 bottom-0 flex size-2.5">
-                <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-70" />
-                <span className="relative inline-flex size-2.5 rounded-full border-2 border-background bg-emerald-400" />
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-chart-2 opacity-70" />
+                <span className="relative inline-flex size-2.5 rounded-full border-2 border-background bg-chart-2" />
               </span>
             </span>
             <div className="min-w-0">
@@ -899,7 +896,7 @@ export default function Dashboard() {
                       className={cn(
                         "max-w-[85%] px-4 py-2.5 text-sm leading-relaxed",
                         isUser
-                          ? "rounded-3xl rounded-br-lg bg-gradient-to-br from-primary to-primary/85 text-primary-foreground shadow-[0_14px_30px_-18px_oklch(0.55_0.15_300/90%)]"
+                          ? "rounded-3xl rounded-br-lg bg-gradient-to-br from-primary to-primary/88 text-primary-foreground shadow-[0_16px_32px_-20px_var(--primary)]"
                           : "surface rounded-3xl rounded-tl-lg text-foreground",
                       )}
                     >
@@ -1045,7 +1042,7 @@ export default function Dashboard() {
                     className="mt-1 size-7 shrink-0 rounded-full object-cover"
                   />
                   <motion.div
-                    animate={{ borderColor: ["oklch(0.55 0.15 300 / 30%)", "oklch(0.55 0.15 300 / 70%)", "oklch(0.55 0.15 300 / 30%)"] }}
+                    animate={{ borderColor: ["oklch(0.55 0.12 32 / 30%)", "oklch(0.55 0.12 32 / 70%)", "oklch(0.55 0.12 32 / 30%)"] }}
                     transition={{
                       duration: 1.8,
                       repeat: Infinity,
@@ -1107,7 +1104,7 @@ export default function Dashboard() {
                   </div>
                 )}
 
-                <div className="surface flex items-end gap-0.5 rounded-full py-1 pl-1 pr-1 transition-shadow focus-within:shadow-[0_0_0_3px_oklch(0.55_0.15_300/18%)]">
+                <div className="surface flex items-end gap-0.5 rounded-full py-1 pl-1 pr-1 transition-shadow focus-within:ring-1 focus-within:ring-primary/30">
                   <Button
                     type="button"
                     variant="ghost"

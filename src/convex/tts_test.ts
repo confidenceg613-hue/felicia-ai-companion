@@ -1,7 +1,6 @@
 "use node";
 
 import { action } from "./_generated/server";
-import { v } from "convex/values";
 
 const GROQ_TTS_URL = "https://api.groq.com/openai/v1/audio/speech";
 const GROQ_TTS_MODEL = "canopylabs/orpheus-v1-english";

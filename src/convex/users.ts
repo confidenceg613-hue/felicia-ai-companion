@@ -1,5 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { query } from "./_generated/server";
+import { query, type QueryCtx } from "./_generated/server";
 
 /**
  * Get the current signed in user. Returns null if the user is not signed in.
@@ -8,7 +8,7 @@ import { query } from "./_generated/server";
  */
 export const currentUser = query({
   args: {},
-  handler: async (ctx: any) => {
+  handler: async (ctx: QueryCtx) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) return null;
     return await ctx.db.get(userId);
