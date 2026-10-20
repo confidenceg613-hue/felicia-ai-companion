@@ -6,9 +6,22 @@ import { FELICIA } from "@/lib/felicia";
 import { THEME_OPTIONS, useTheme, type Theme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { GUEST_MERGE_KEY } from "@/lib/upgrade";
-import { Check, LogOut, Mail, Monitor, Moon, Sun } from "lucide-react";
+import { api } from "@/convex/_generated/api";
+import { useMutation, useQuery } from "convex/react";
+import {
+  CalendarDays,
+  Check,
+  Heart,
+  Images,
+  LogOut,
+  Mail,
+  Monitor,
+  Moon,
+  Sun,
+} from "lucide-react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router";
+import { toast } from "sonner";
 
 const THEME_ICON = {
   light: Sun,
@@ -21,6 +34,58 @@ export default function Settings() {
   const navigate = useNavigate();
   const { theme, setTheme, isDark } = useTheme();
   const avatarUrl = useFeliciaAvatar();
+
+  const relationship = useQuery(api.felicia.relationship);
+  const prefs = useQuery(api.felicia.prefs);
+  const savePrefs = useMutation(api.felicia.savePrefs);
+
+  const gap = prefs?.minGapHours ?? 10;
+  const quietStart = prefs?.quietStart ?? 23;
+  const quietEnd = prefs?.quietEnd ?? 7;
+
+  const GAPS = [
+    { value: 0, label: "Never", hint: "You start every conversation." },
+    { value: 10, label: "Every 10 hours", hint: "A check-in when a thread goes quiet." },
+    { value: 24, label: "Once a day", hint: "At most one message a day." },
+  ];
+
+  const QUIETS = [
+    { start: 23, end: 7, label: "23:00 – 07:00" },
+    { start: 22, end: 8, label: "22:00 – 08:00" },
+    { start: 0, end: 0, label: "No quiet hours" },
+  ];
+
+  async function chooseGap(hours: number) {
+    try {
+      await savePrefs({ minGapHours: hours, quietStart, quietEnd });
+      toast.success(
+        hours === 0
+          ? "She'll wait for you to write first."
+          : hours === 24
+            ? "She'll reach out once a day at most."
+            : "She'll reach out every 10 hours of quiet.",
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Couldn't save that.",
+      );
+    }
+  }
+
+  async function chooseQuiet(start: number, end: number) {
+    try {
+      await savePrefs({ minGapHours: gap, quietStart: start, quietEnd: end });
+      toast.success(
+        start === end
+          ? "Quiet hours off — she'll text whenever the moment comes."
+          : `She'll stay quiet from ${QUIETS.find((q) => q.start === start)?.label ?? "23:00 – 07:00"}.`,
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Couldn't save that.",
+      );
+    }
+  }
 
   const label =
     (typeof user?.name === "string" && user.name) ||
@@ -113,6 +178,151 @@ export default function Settings() {
                 {isDark ? "dark" : "light"}
               </span>{" "}
               theme.
+            </p>
+          </motion.section>
+
+          {/* ------------------------------------------------- the two of you */}
+          <motion.section
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{
+              duration: 0.45,
+              delay: 0.06,
+              ease: [0.22, 1, 0.36, 1],
+            }}
+            className="surface rounded-3xl p-6"
+          >
+            <h2 className="font-display text-lg">The two of you</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              How long this has been going on. Nothing here is a score to chase —
+              it is just the truth about a conversation that keeps going.
+            </p>
+
+            <div className="mt-4 grid grid-cols-3 gap-3">
+              {[
+                {
+                  Icon: CalendarDays,
+                  value: relationship ? `Day ${relationship.days}` : "Today",
+                  label: "together",
+                },
+                {
+                  Icon: Images,
+                  value: String(relationship?.photos ?? 0),
+                  label: "photos from her",
+                },
+                {
+                  Icon: Heart,
+                  value: relationship?.firstAt
+                    ? new Date(relationship.firstAt).toLocaleDateString([], {
+                        day: "numeric",
+                        month: "short",
+                      })
+                    : "—",
+                  label: "first met",
+                },
+              ].map(({ Icon, value, label: caption }) => (
+                <div
+                  key={caption}
+                  className="rounded-xl border border-border/60 bg-background/40 p-3"
+                >
+                  <Icon className="size-4 text-primary" />
+                  <p className="mt-2 font-display text-lg leading-none">
+                    {value}
+                  </p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    {caption}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </motion.section>
+
+          {/* ------------------------------------------------ when she texts */}
+          <motion.section
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{
+              duration: 0.45,
+              delay: 0.07,
+              ease: [0.22, 1, 0.36, 1],
+            }}
+            className="surface rounded-3xl p-6"
+          >
+            <h2 className="font-display text-lg">When she texts first</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              She would rather hear from you, but she will open the conversation
+              when it goes quiet. You decide how often, and when she has to stay
+              silent.
+            </p>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              {GAPS.map((option) => {
+                const active = gap === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => void chooseGap(option.value)}
+                    className={cn(
+                      "relative rounded-xl border p-4 text-left transition-colors",
+                      active
+                        ? "border-primary bg-primary/10"
+                        : "border-border/60 bg-background/40 hover:border-primary/40",
+                    )}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">{option.label}</span>
+                      {active && (
+                        <motion.span
+                          initial={{ scale: 0, rotate: -25 }}
+                          animate={{ scale: 1, rotate: 0 }}
+                          transition={{
+                            type: "spring",
+                            stiffness: 520,
+                            damping: 18,
+                          }}
+                          className="flex"
+                        >
+                          <Check className="size-4 text-primary" />
+                        </motion.span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      {option.hint}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-5 flex items-center gap-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              <Moon className="size-3.5" />
+              Quiet hours in Lagos
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {QUIETS.map((option) => {
+                const active =
+                  quietStart === option.start && quietEnd === option.end;
+                return (
+                  <button
+                    key={option.label}
+                    type="button"
+                    onClick={() => void chooseQuiet(option.start, option.end)}
+                    className={cn(
+                      "rounded-full border px-3 py-1.5 text-xs transition-colors",
+                      active
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border/60 bg-background/40 text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-3 text-[11px] text-muted-foreground/80">
+              Times are Felicia's own clock in Lagos (UTC+1), so a 23:00 quiet
+              hour is 23:00 where she is.
             </p>
           </motion.section>
 

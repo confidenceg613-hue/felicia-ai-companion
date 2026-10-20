@@ -117,6 +117,19 @@ const schema = defineSchema(
       .index("by_user", ["userId"])
       .index("by_user_to", ["userId", "toCreatedAt"]),
 
+    // How she is allowed to reach out. One row per user; anything missing falls
+    // back to the defaults in felicia.ts (texts first every ten hours, silent
+    // between 23:00 and 07:00 Lagos time).
+    companionPrefs: defineTable({
+      userId: v.id("users"),
+      // Hours of silence before she writes first. 0 means she never does.
+      minGapHours: v.number(),
+      // Lagos hours; the window runs from quietStart up to quietEnd.
+      quietStart: v.number(),
+      quietEnd: v.number(),
+      updatedAt: v.number(),
+    }).index("by_user", ["userId"]),
+
     // Felicia's persisted appearance choice: outfit, background and optional
     // custom scene. This is what the photo prompt is built from once the user
     // picks a look instead of relying on the Appearance note alone.

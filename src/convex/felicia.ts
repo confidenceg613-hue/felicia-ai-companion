@@ -1140,6 +1140,147 @@ export const claimCheckIn = internalMutation({
   },
 });
 
+/** What she does when nobody has told her otherwise. */
+const DEFAULT_PREFS = { minGapHours: 10, quietStart: 23, quietEnd: 7 };
+
+/** Is the clock inside her quiet window right now? */
+function inQuietHours(at: number, start: number, end: number): boolean {
+  if (start === end) return false;
+  const hour = lagosHour(at);
+  return start < end ? hour >= start && hour < end : hour >= start || hour < end;
+}
+
+function wholeNumber(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+/**
+ * The user's settings for her initiative.
+ *
+ * Initiative is the one part of a companion app that has to be adjustable: a
+ * message every ten hours is company to one person and noise to another, and
+ * nobody wants their phone lighting up at 3am. `minGapHours: 0` means she never
+ * writes first at all.
+ */
+export const prefsFor = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx: AnyCtx, { userId }: AnyArgs) => {
+    const row = await ctx.db
+      .query("companionPrefs")
+      .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) =>
+        q.eq("userId", userId),
+      )
+      .unique();
+
+    if (!row) return { ...DEFAULT_PREFS };
+    return {
+      minGapHours: Number(row.minGapHours ?? DEFAULT_PREFS.minGapHours),
+      quietStart: Number(row.quietStart ?? DEFAULT_PREFS.quietStart),
+      quietEnd: Number(row.quietEnd ?? DEFAULT_PREFS.quietEnd),
+    };
+  },
+});
+
+/** The controls, ready for the settings screen. */
+export const prefs = query({
+  args: {},
+  handler: async (ctx: AnyCtx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return { ...DEFAULT_PREFS };
+
+    const row = await ctx.db
+      .query("companionPrefs")
+      .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) =>
+        q.eq("userId", userId),
+      )
+      .unique();
+
+    if (!row) return { ...DEFAULT_PREFS };
+    return {
+      minGapHours: Number(row.minGapHours ?? DEFAULT_PREFS.minGapHours),
+      quietStart: Number(row.quietStart ?? DEFAULT_PREFS.quietStart),
+      quietEnd: Number(row.quietEnd ?? DEFAULT_PREFS.quietEnd),
+    };
+  },
+});
+
+/** Save the controls. Values are clamped here, never trusted from the client. */
+export const savePrefs = mutation({
+  args: {
+    minGapHours: v.number(),
+    quietStart: v.number(),
+    quietEnd: v.number(),
+  },
+  returns: v.object({
+    minGapHours: v.number(),
+    quietStart: v.number(),
+    quietEnd: v.number(),
+  }),
+  handler: async (ctx: AnyCtx, args: AnyArgs) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Sign in first.");
+
+    // 0 = never, up to two days between messages.
+    const minGapHours = wholeNumber(args.minGapHours, 0, 48);
+    const quietStart = wholeNumber(args.quietStart, 0, 23);
+    const quietEnd = wholeNumber(args.quietEnd, 0, 23);
+
+    const existing = await ctx.db
+      .query("companionPrefs")
+      .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) =>
+        q.eq("userId", userId),
+      )
+      .unique();
+
+    const next = { minGapHours, quietStart, quietEnd, updatedAt: Date.now() };
+
+    if (existing) {
+      await ctx.db.patch(existing._id, next);
+    } else {
+      await ctx.db.insert("companionPrefs", { userId, ...next });
+    }
+
+    return { minGapHours, quietStart, quietEnd };
+  },
+});
+
+/**
+ * How long the two of them have been talking.
+ *
+ * Deliberately cheap: the first message, and how many photos she has sent (a
+ * bounded read). No level meter, no streak that punishes a quiet day — just the
+ * true age of the conversation, which is the part people actually care about.
+ */
+export const relationship = query({
+  args: {},
+  handler: async (ctx: AnyCtx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return null;
+
+    const first = (await ctx.db
+      .query("messages")
+      .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) =>
+        q.eq("userId", userId),
+      )
+      .order("asc")
+      .take(1)) as Array<{ createdAt: number }>;
+    const photos = await ctx.db
+      .query("photos")
+      .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) =>
+        q.eq("userId", userId),
+      )
+      .take(200);
+
+    const firstAt = first[0]?.createdAt ?? null;
+    return {
+      firstAt,
+      days: firstAt ? Math.floor((Date.now() - firstAt) / 86_400_000) + 1 : 0,
+      photos: photos.length,
+    };
+  },
+});
+
 /**
  * Ten hours of silence, then she texts first.
  *
@@ -1166,6 +1307,18 @@ export const checkIn = internalAction({
       return { sent: false, reason: "they wrote since" };
     }
 
+    // The user's own settings come first: off is off, and quiet hours are
+    // quiet even if the silence is long enough.
+    const prefs = (await ctx.runQuery(internal.felicia.prefsFor, {
+      userId,
+    })) as { minGapHours: number; quietStart: number; quietEnd: number };
+    if (prefs.minGapHours <= 0) {
+      return { sent: false, reason: "she is not texting first" };
+    }
+    if (inQuietHours(Date.now(), prefs.quietStart, prefs.quietEnd)) {
+      return { sent: false, reason: "quiet hours" };
+    }
+
     let unanswered = 0;
     for (const row of recent) {
       if (row.role === "felicia") unanswered += 1;
@@ -1179,6 +1332,12 @@ export const checkIn = internalAction({
     }
 
     const quietHours = (Date.now() - latest.createdAt) / 3_600_000;
+    // Not been quiet for as long as they asked for. The six-hourly sweep will
+    // come back to it, so nothing needs to be scheduled from here.
+    if (quietHours < prefs.minGapHours) {
+      return { sent: false, reason: "too soon" };
+    }
+
     const notes = await ctx.runQuery(internal.felicia.notesFor, { userId });
     const memories = await ctx.runQuery(internal.felicia.topMemories, {
       userId,
@@ -1231,10 +1390,12 @@ export const checkIn = internalAction({
       return { sent: false, reason: "they wrote since" };
     }
 
-    await ctx.scheduler.runAfter(CHECK_IN_MS, internal.felicia.checkIn, {
-      userId,
-      since: claim.createdAt,
-    });
+    // The next knock waits for the gap they chose, not a hardcoded ten hours.
+    await ctx.scheduler.runAfter(
+      Math.max(1, prefs.minGapHours) * 3_600_000,
+      internal.felicia.checkIn,
+      { userId, since: claim.createdAt },
+    );
 
     return { sent: true, reason: "quiet" };
   },
