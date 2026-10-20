@@ -112,7 +112,7 @@ const HERO_WORDS = ["Meet", "Felicia."];
 
 function HeroWords() {
   return (
-    <h1 className="mt-6 font-display text-5xl leading-[0.95] font-semibold tracking-tight text-glow sm:text-6xl lg:text-7xl">
+    <h1 className="mt-5 font-display text-4xl leading-[1] font-semibold tracking-tight text-glow sm:text-5xl lg:text-6xl">
       {HERO_WORDS.map((word, index) => (
         <motion.span
           key={word}
@@ -141,7 +141,7 @@ export default function Landing() {
     <div className="relative min-h-screen overflow-x-hidden bg-background text-foreground">
       {/* ---------------------------------------------------------------- nav */}
       <header className="sticky top-0 z-40 border-b border-border/40 bg-background/70 backdrop-blur-xl">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
+        <div className="mx-auto flex w-full max-w-5xl items-center justify-between px-4 py-3 sm:px-6 sm:py-4">
           <button
             type="button"
             onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
@@ -183,7 +183,7 @@ export default function Landing() {
         <div className="pointer-events-none absolute inset-0 -z-10 opacity-70">
           <AmbientOrbits />
         </div>
-        <div className="mx-auto grid w-full max-w-6xl items-center gap-14 px-6 py-16 lg:grid-cols-[1.05fr_1fr] lg:py-24">
+        <div className="mx-auto grid w-full max-w-5xl items-center gap-10 px-4 py-12 sm:px-6 lg:grid-cols-[1.05fr_1fr] lg:gap-14 lg:py-16">
           <motion.div
             initial={{ opacity: 0, y: 28 }}
             animate={{ opacity: 1, y: 0 }}
@@ -199,7 +199,7 @@ export default function Landing() {
 
             <HeroWords />
 
-            <p className="mt-5 max-w-xl text-lg leading-relaxed text-muted-foreground">
+            <p className="mt-5 max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg">
               Felicia is a Nigerian creator in Lagos who texts like a real
               person, remembers everything you ever tell her, and sends you
               pictures of where she actually is.
@@ -251,7 +251,7 @@ export default function Landing() {
             transition={{ duration: 0.8, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
             className="relative"
           >
-            <div className="aura relative mx-auto w-full max-w-md rounded-[2.5rem]">
+            <div className="aura relative mx-auto w-full max-w-sm rounded-[2.5rem]">
               <div className="glow-warm absolute -inset-4 rounded-[2.5rem] blur-3xl" />
               <div className="relative overflow-hidden rounded-[1.75rem] border border-border/60 bg-card shadow-2xl">
                 <img
@@ -260,7 +260,7 @@ export default function Landing() {
                   className="aspect-4/5 w-full object-cover"
                 />
                 <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent p-5 pt-16">
-                  <p className="font-display text-2xl text-white">
+                  <p className="font-display text-xl text-white">
                     {FELICIA.fullName}
                   </p>
                   <p className="text-xs text-white/70">{FELICIA.traits[0].title}</p>
@@ -273,7 +273,7 @@ export default function Landing() {
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, delay: 0.6 }}
-                className="absolute -bottom-8 -left-4 w-64 rounded-2xl border border-border/70 bg-card/95 p-4 shadow-2xl backdrop-blur-md sm:-left-10"
+                className="absolute -bottom-6 -left-2 w-56 rounded-2xl border border-border/70 bg-card/95 p-3.5 shadow-2xl backdrop-blur-md sm:-left-6"
               >
                 {/* Once it has arrived, the message card hangs in the air like
                     a real notification — a slow weightless bob, forever. */}
@@ -309,10 +309,10 @@ export default function Landing() {
       </section>
 
       {/* ----------------------------------------------------------- moments */}
-      <section id="moments" className="relative border-t border-border/40 py-20">
-        <div className="mx-auto w-full max-w-6xl px-6">
+      <section id="moments" className="relative border-t border-border/40 py-14 sm:py-16">
+        <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
           <Reveal>
-            <h2 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+            <h2 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
               The photos are the point
             </h2>
             <p className="mt-3 max-w-2xl text-muted-foreground">
@@ -323,10 +323,10 @@ export default function Landing() {
             </p>
           </Reveal>
 
-          <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-8 grid gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
             {MOMENTS.map((moment, index) => (
               <Reveal key={moment.src} delay={index * 0.08}>
-                <figure className="group surface overflow-hidden rounded-3xl transition-transform duration-500 hover:-translate-y-1">
+                <figure className="group surface overflow-hidden rounded-2xl transition-transform duration-500 hover:-translate-y-1">
                   <div className="overflow-hidden">
                     <img
                       src={moment.src}
@@ -351,10 +351,10 @@ export default function Landing() {
       </section>
 
       {/* ------------------------------------------------------------- who */}
-      <section className="border-t border-border/40 py-20">
-        <div className="mx-auto w-full max-w-6xl px-6">
+      <section className="border-t border-border/40 py-14 sm:py-16">
+        <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
           <Reveal>
-            <h2 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+            <h2 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
               Who she is
             </h2>            <p className="mt-3 max-w-2xl text-muted-foreground">
               Felicia is a creator in Lagos — Yoruba, 28, raised in Surulere and
@@ -367,7 +367,7 @@ export default function Landing() {
             </p>
           </Reveal>
 
-          <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-8 grid gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
             {FELICIA_PERSONALITY.map((trait, index) => (
               <Reveal key={index} delay={index * 0.05}>
                 <div className="h-full rounded-2xl border border-border/60 bg-card p-6 transition-colors hover:border-primary/40">
@@ -386,10 +386,10 @@ export default function Landing() {
       </section>
 
       {/* -------------------------------------------------------- feelings */}
-      <section className="border-t border-border/40 py-20">
-        <div className="mx-auto w-full max-w-6xl px-6">
+      <section className="border-t border-border/40 py-14 sm:py-16">
+        <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
           <Reveal>
-            <h2 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+            <h2 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
               What she actually feels
             </h2>
             <p className="mt-3 max-w-2xl text-muted-foreground">
@@ -399,7 +399,7 @@ export default function Landing() {
             </p>
           </Reveal>
 
-          <div className="mt-10 grid gap-4 sm:grid-cols-2">
+          <div className="mt-8 grid gap-4 sm:grid-cols-2">
             {FELICIA_EMOTIONS.map((feeling, index) => (
               <Reveal key={feeling} delay={index * 0.05}>
                 <div className="flex h-full gap-4 rounded-2xl border border-border/60 bg-card p-5 transition-colors hover:border-primary/40">
@@ -417,15 +417,15 @@ export default function Landing() {
       </section>
 
       {/* ----------------------------------------------------------- steps */}
-      <section className="border-t border-border/40 py-20">
-        <div className="mx-auto w-full max-w-6xl px-6">
+      <section className="border-t border-border/40 py-14 sm:py-16">
+        <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
           <Reveal>
-            <h2 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+            <h2 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
               How it works
             </h2>
           </Reveal>
 
-          <div className="mt-10 grid gap-6 lg:grid-cols-3">
+          <div className="mt-8 grid gap-4 sm:gap-5 lg:grid-cols-3">
             {STEPS.map((step, index) => (
               <Reveal key={step.n} delay={index * 0.08}>
                 <div className="relative h-full rounded-2xl border border-border/60 bg-card p-7">
@@ -455,9 +455,9 @@ export default function Landing() {
           />
           <div className="absolute inset-0 bg-gradient-to-b from-background/80 via-background/70 to-background" />
         </div>
-        <div className="relative mx-auto w-full max-w-3xl px-6 py-24 text-center">
+        <div className="relative mx-auto w-full max-w-2xl px-4 py-16 text-center sm:px-6">
           <Reveal>
-            <h2 className="font-display text-4xl font-semibold tracking-tight sm:text-5xl">
+            <h2 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
               She's already in Lagos.
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-muted-foreground">
@@ -477,7 +477,7 @@ export default function Landing() {
       </section>
 
       <footer className="border-t border-border/40 py-10">
-        <div className="mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-3 px-6 text-xs text-muted-foreground sm:flex-row">
+        <div className="mx-auto flex w-full max-w-5xl flex-col items-center justify-between gap-3 px-4 text-xs text-muted-foreground sm:flex-row sm:px-6">
           <p>Felicia · a companion character. She is fiction, written warmly.</p>
           <p>Photos from her album, plus new ones generated with Cloudflare image/voice.</p>
         </div>

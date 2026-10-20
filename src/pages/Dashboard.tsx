@@ -1076,7 +1076,7 @@ export default function Dashboard() {
           </div>
 
           {/* composer — deliberately compact: one slim pill, nothing more. */}
-          <div className="glass mx-auto w-full max-w-2xl shrink-0 rounded-2xl px-2.5 py-2">
+          <div className="glass mx-auto w-full max-w-3xl shrink-0 rounded-2xl px-2.5 py-2">
             <form
               onSubmit={(event) => {
                 event.preventDefault();

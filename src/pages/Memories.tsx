@@ -285,7 +285,7 @@ export default function Memories() {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {/* ------------------------------------------------------------ header */}
-      <header className="glass sticky top-0 z-20 rounded-none border-x-0 border-t-0 px-4 py-4 sm:rounded-b-3xl sm:border-x">
+      <header className="glass sticky top-0 z-20 rounded-none border-x-0 border-t-0 px-4 py-4 sm:rounded-b-3xl sm:border-x sm:px-6">
         <div className="mx-auto flex w-full max-w-5xl flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="font-display text-3xl tracking-tight">
