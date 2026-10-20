@@ -480,6 +480,40 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* -------------------------------------------------------------- answers */}
+      <section className="border-t border-border/40 py-14 sm:py-16">
+        <div className="mx-auto grid w-full max-w-5xl gap-10 px-4 sm:px-6 lg:grid-cols-[0.85fr_1fr] lg:gap-16">
+          <Reveal>
+            <div className="lg:sticky lg:top-28">
+              <p className="eyebrow">05 — Straight answers</p>
+              <h2 className="mt-3 font-display text-2xl font-semibold tracking-tight sm:text-3xl">
+                No fine print,
+                <br className="hidden sm:block" /> no pretending.
+              </h2>
+              <p className="mt-3 max-w-sm text-sm leading-relaxed text-muted-foreground">
+                The honest version of what this is, in four answers — before you
+                sign in for anything.
+              </p>
+            </div>
+          </Reveal>
+
+          <Reveal delay={0.08}>
+            <Accordion type="single" collapsible className="w-full">
+              {FAQ.map((item) => (
+                <AccordionItem key={item.q} value={item.q}>
+                  <AccordionTrigger className="py-5 font-display text-base tracking-tight hover:no-underline">
+                    {item.q}
+                  </AccordionTrigger>
+                  <AccordionContent className="max-w-prose text-sm leading-relaxed text-muted-foreground">
+                    {item.a}
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
+          </Reveal>
+        </div>
+      </section>
+
       {/* ------------------------------------------------------------- cta */}
       <section className="relative overflow-hidden border-t border-border/40">
         <div className="absolute inset-0">
@@ -517,10 +551,14 @@ export default function Landing() {
         <div className="mx-auto flex w-full max-w-5xl flex-col items-center justify-between gap-3 px-4 text-[11px] tracking-wide text-muted-foreground sm:flex-row sm:px-6">
           <p className="flex items-center gap-2">
             <span className="size-1.5 rounded-full bg-primary/70" />
-            Felicia · a companion character, written warmly. She is fiction.
+            Felicia · a companion character, written warmly. She is fiction, and
+            an AI.
           </p>
-          <p className="text-muted-foreground/80">
-            Photographs from her album, and new ones taken live.
+          <p className="flex items-center gap-3 text-muted-foreground/80">
+            <span>Photographs from her album, and new ones taken live.</span>
+            <span className="rounded-full border border-border/70 px-2 py-0.5 text-[10px] font-medium tracking-widest">
+              18+
+            </span>
           </p>
         </div>
       </footer>

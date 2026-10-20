@@ -4,6 +4,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -29,6 +30,7 @@ import { useAction, usePaginatedQuery, useQuery } from "convex/react";
 import { motion } from "framer-motion";
 import {
   Camera,
+  Check,
   Clock,
   Ellipsis,
   Images,
@@ -96,6 +98,13 @@ type TimelineItem = {
   messageId?: Id<"messages">;
 };
 
+/** A photo waiting in the picker, with a local preview URL. */
+type StagedPhoto = {
+  id: string;
+  file: File;
+  url: string;
+};
+
 /** A photo as `api.felicia.photos` returns it, with its URL already resolved. */
 type PhotoRow = {
   _id: unknown;
@@ -138,6 +147,15 @@ export default function Dashboard() {
   const photoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [infoOpen, setInfoOpen] = useState(false);
+  /**
+   * The picker stages candidates locally first: she receives only the photo
+   * that was actually chosen, not every file that passed through the chooser.
+   */
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [staged, setStaged] = useState<StagedPhoto[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [sendingPhoto, setSendingPhoto] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   /**
    * The chat should feel like it *arrives* when you open it: the newest
    * messages cascade in, older history is simply there. This flips off shortly
@@ -385,24 +403,75 @@ export default function Dashboard() {
     }
   }
 
-  async function handleFile(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
+  /** Preview URLs live only while the picker does; drop them on unmount. */
+  const stagedRef = useRef<StagedPhoto[]>([]);
+  stagedRef.current = staged;
+  useEffect(
+    () => () => {
+      for (const photo of stagedRef.current) URL.revokeObjectURL(photo.url);
+    },
+    [],
+  );
+
+  /** Throw away every candidate and the preview URLs they came with. */
+  function clearStaged() {
+    for (const photo of staged) URL.revokeObjectURL(photo.url);
+    setStaged([]);
+    setSelectedId(null);
+  }
+
+  /** Files the chooser or a drop handed over — validated, then staged. */
+  function addPhotos(files: FileList | File[]) {
+    const accepted: StagedPhoto[] = [];
+    for (const file of Array.from(files)) {
+      if (!file.type.startsWith("image/")) {
+        toast.error("Send an image file.");
+        continue;
+      }
+      if (file.size > 6_000_000) {
+        toast.error("That photo is over 6 MB — try a smaller one.");
+        continue;
+      }
+      accepted.push({
+        id: `${file.lastModified}-${accepted.length}-${Math.random()
+          .toString(36)
+          .slice(2, 8)}`,
+        file,
+        url: URL.createObjectURL(file),
+      });
+    }
+    if (accepted.length === 0) return;
+    setStaged((current) => [...current, ...accepted]);
+    setSelectedId((current) => current ?? accepted[0]?.id ?? null);
+  }
+
+  function stageChosenFiles(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = event.target.files;
     event.target.value = "";
-    if (!file || composing) return;
+    if (files && files.length > 0) addPhotos(files);
+  }
 
-    if (!file.type.startsWith("image/")) {
-      toast.error("Send an image file.");
-      return;
-    }
-    if (file.size > 6_000_000) {
-      toast.error("That photo is over 6 MB — try a smaller one.");
-      return;
-    }
+  function dropStaged(id: string) {
+    const photo = staged.find((item) => item.id === id);
+    if (photo) URL.revokeObjectURL(photo.url);
+    const next = staged.filter((item) => item.id !== id);
+    setStaged(next);
+    if (selectedId === id) setSelectedId(next[0]?.id ?? null);
+  }
 
+  /** Only the selected photo leaves the device. */
+  async function sendSelectedPhoto() {
+    const photo = staged.find((item) => item.id === selectedId);
+    if (!photo || sendingPhoto || composing) return;
+
+    setSendingPhoto(true);
     setThinking(true);
     try {
-      const data = await file.arrayBuffer();
-      const result = await sendUserPhoto({ data, mimeType: file.type });
+      const data = await photo.file.arrayBuffer();
+      const result = await sendUserPhoto({ data, mimeType: photo.file.type });
+      setPickerOpen(false);
+      clearStaged();
+      toast.success("Sent — Felicia is looking at it.");
       if (autoVoiceRef.current) {
         void playMessage(result.replyMessageId, result.reply);
       }
@@ -411,6 +480,7 @@ export default function Dashboard() {
         error instanceof Error ? error.message : "That photo didn't send.",
       );
     } finally {
+      setSendingPhoto(false);
       setThinking(false);
     }
   }
@@ -454,6 +524,8 @@ export default function Dashboard() {
     await signOut();
     navigate("/");
   }
+
+  const selectedPhoto = staged.find((item) => item.id === selectedId);
 
   return (
     <>
@@ -680,7 +752,9 @@ export default function Dashboard() {
                 !dismissedMemory && (
                   <motion.div
                     initial={{ opacity: 0, y: -8 }}
-                    animate={{ opacity: 1, y: 0 }}                    transition={{ duration: 0.32,
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{
+                      duration: 0.32,
                       delay: 0.12,
                       ease: [0.22, 1, 0.36, 1],
                     }}
@@ -733,11 +807,11 @@ export default function Dashboard() {
                 >
                   <motion.div
                     animate={{ scale: [1, 1.06, 1] }}
-                  transition={{
-                    duration: 1.2,
-                    repeat: Infinity,
-                    ease: "easeInOut",
-                  }}
+                    transition={{
+                      duration: 1.2,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                    }}
                     className="glow-warm relative flex size-20 items-center justify-center rounded-full bg-primary/10 text-primary"
                   >
                     <motion.span
@@ -840,10 +914,9 @@ export default function Dashboard() {
                       />
                       <button
                         type="button"
-                        onClick={() => setLightbox(item.imageUrl)}
-                      className="group w-fit max-w-[80%] overflow-hidden rounded-t-3xl rounded-bl-lg surface text-left"
-                      title={item.scene}
-                    >
+                        onClick={() => setLightbox(item.imageUrl)}                        className="surface group w-fit max-w-[80%] overflow-hidden rounded-[1.35rem] rounded-bl-md text-left"
+                        title={item.scene}
+                      >
                       {/* contain, not cover: a full-length photo is tall, and
                           cropping it to the bubble is what made her look cut
                           off at the waist. */}
@@ -871,9 +944,10 @@ export default function Dashboard() {
                         ? { opacity: 0, y: 10, scale: 0.98 }
                         : false
                     }
-                    animate={{ opacity: 1, y: 0, scale: 1 }}                      transition={{
-                        type: "spring",
-                        stiffness: 520,
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    transition={{
+                      type: "spring",
+                      stiffness: 520,
                         damping: 30,
                         delay: entranceDelay,
                       }}
@@ -896,8 +970,8 @@ export default function Dashboard() {
                       className={cn(
                         "max-w-[85%] px-4 py-2.5 text-sm leading-relaxed",
                         isUser
-                          ? "rounded-3xl rounded-br-lg bg-gradient-to-br from-primary to-primary/88 text-primary-foreground shadow-[0_16px_32px_-20px_var(--primary)]"
-                          : "surface rounded-3xl rounded-tl-lg text-foreground",
+                          ? "rounded-[1.35rem] rounded-br-md bg-primary text-primary-foreground shadow-[inset_0_1px_0_0_rgba(255,255,255,0.14),0_14px_30px_-18px_var(--primary)]"
+                          : "surface rounded-[1.35rem] rounded-tl-md text-foreground",
                       )}
                     >
                       {item.imageUrl && item.content === "" ? (
@@ -959,16 +1033,15 @@ export default function Dashboard() {
               })}
 
               {showPending && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10, scale: 0.96 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  transition={{ type: "spring", stiffness: 580, damping: 28 }}
-                  className="flex justify-end pb-2"
-                >
-                  <div className="max-w-[85%] rounded-2xl rounded-bl-md bg-primary px-4 py-2.5 text-sm text-primary-foreground">
-                    <p className="whitespace-pre-wrap">{pending}</p>
-                  </div>
-                </motion.div>
+                <motion.div                    initial={{ opacity: 0, y: 10, scale: 0.96 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    transition={{ type: "spring", stiffness: 580, damping: 28 }}
+                    className="flex justify-end pb-2"
+                  >
+                    <div className="max-w-[85%] rounded-[1.35rem] rounded-br-md bg-primary px-4 py-2.5 text-sm text-primary-foreground shadow-[inset_0_1px_0_0_rgba(255,255,255,0.14),0_14px_30px_-18px_var(--primary)]">
+                      <p className="whitespace-pre-wrap">{pending}</p>
+                    </div>
+                  </motion.div>
               )}
 
               {thinking && (
@@ -1035,7 +1108,9 @@ export default function Dashboard() {
                   <motion.img
                     src={avatarUrl}
                     alt=""
-                    animate={{ scale: [1, 1.06, 1] }}                    transition={{ duration: 1.0,
+                    animate={{ scale: [1, 1.06, 1] }}
+                    transition={{
+                      duration: 1.0,
                       repeat: Infinity,
                       ease: "easeInOut",
                     }}
@@ -1085,8 +1160,9 @@ export default function Dashboard() {
                   ref={fileRef}
                   type="file"
                   accept="image/*"
+                  multiple
                   className="hidden"
-                  onChange={(event) => void handleFile(event)}
+                  onChange={(event) => stageChosenFiles(event)}
                 />
 
                 {recording && (
@@ -1110,9 +1186,9 @@ export default function Dashboard() {
                     variant="ghost"
                     size="icon"
                     className="size-8 shrink-0 rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary"
-                    title="Send her a photo"
+                    title="Choose a photo to send"
                     disabled={composing}
-                    onClick={() => fileRef.current?.click()}
+                    onClick={() => setPickerOpen(true)}
                   >
                     <Paperclip className="size-3.5" />
                   </Button>
@@ -1270,6 +1346,182 @@ export default function Dashboard() {
               className="max-h-[75vh] w-full rounded-xl object-contain"
             />
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* photo picker — stage the candidates, then choose which one she gets */}
+      <Dialog
+        open={pickerOpen}
+        onOpenChange={(open) => {
+          if (!open && !sendingPhoto) {
+            setPickerOpen(false);
+            clearStaged();
+          }
+        }}
+      >
+        <DialogContent
+          className="max-w-xl gap-0 overflow-hidden border-border/60 bg-card/95 p-0 backdrop-blur-xl"
+          onDragOver={(event) => {
+            event.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={(event) => {
+            // Children fire their own dragleave as the cursor passes over them;
+            // only dim when the pointer has genuinely left the dialog.
+            if (
+              !(event.relatedTarget instanceof Node) ||
+              !event.currentTarget.contains(event.relatedTarget)
+            ) {
+              setDragOver(false);
+            }
+          }}
+          onDrop={(event) => {
+            event.preventDefault();
+            setDragOver(false);
+            if (event.dataTransfer.files.length > 0) {
+              addPhotos(event.dataTransfer.files);
+            }
+          }}
+        >
+          <DialogHeader className="border-b border-border/50 px-6 py-5">
+            <DialogTitle className="font-display text-xl tracking-tight">
+              Send Felicia a photo
+            </DialogTitle>
+            <DialogDescription>
+              Pick the one you want — she gets only what you choose.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="px-6 py-5">
+            {selectedPhoto ? (
+              <div className="space-y-3">
+                <div className="relative overflow-hidden rounded-2xl border border-border/50 bg-muted/30">
+                  <motion.img
+                    key={selectedPhoto.id}
+                    src={selectedPhoto.url}
+                    alt="The photo you picked"
+                    initial={{ opacity: 0, scale: 0.98 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+                    className="max-h-[42vh] min-h-32 w-full object-contain"
+                  />
+                  <span className="absolute top-3 left-3 flex items-center gap-1.5 rounded-full border border-border/50 bg-background/85 px-2.5 py-1 text-[10px] tracking-widest uppercase backdrop-blur">
+                    <Check className="size-3 text-primary" />
+                    she receives this
+                  </span>
+                </div>
+
+                <div className="max-h-36 overflow-y-auto pr-0.5">
+                  <ul className="grid grid-cols-5 gap-2">
+                    {staged.map((photo) => (
+                      <li key={photo.id} className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedId(photo.id)}
+                          aria-pressed={photo.id === selectedId}
+                          className={cn(
+                            "block aspect-square w-full overflow-hidden rounded-lg border transition-all duration-200",
+                            photo.id === selectedId
+                              ? "border-primary ring-2 ring-primary/40"
+                              : "border-border/50 opacity-70 hover:border-border hover:opacity-100",
+                          )}
+                        >
+                          <img
+                            src={photo.url}
+                            alt=""
+                            className="h-full w-full object-cover"
+                          />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Remove this photo"
+                          onClick={() => dropStaged(photo.id)}
+                          className="absolute top-1 right-1 flex size-5 items-center justify-center rounded-full bg-background/85 text-muted-foreground opacity-70 backdrop-blur transition-opacity hover:text-foreground hover:opacity-100 after:absolute after:-inset-1.5 after:content-['']"
+                        >
+                          <X className="size-3" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            ) : (
+              <div
+                className={cn(
+                  "flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed px-6 py-10 text-center transition-colors duration-200",
+                  dragOver
+                    ? "border-primary bg-primary/10"
+                    : "border-border/60 bg-muted/20",
+                )}
+              >
+                <span className="flex size-12 items-center justify-center rounded-full border border-border/50 bg-background">
+                  <Images className="size-5 text-primary" />
+                </span>
+                <div className="space-y-0.5">
+                  <p className="text-sm font-medium">Drop a photo here</p>
+                  <p className="text-xs text-muted-foreground">
+                    JPEG or PNG, up to 6 MB — she can see what's in it
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileRef.current?.click()}
+                >
+                  Choose from device
+                </Button>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="items-center justify-between gap-3 border-t border-border/50 px-6 py-4 sm:justify-between">
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground"
+                onClick={() => fileRef.current?.click()}
+              >
+                <Images className="size-3.5" />
+                {staged.length > 0 ? "Add more" : "Choose photos"}
+              </Button>
+              {staged.length > 0 && (
+                <span className="text-[11px] text-muted-foreground/70">
+                  {staged.length} {staged.length === 1 ? "photo" : "photos"}
+                </span>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={sendingPhoto}
+                onClick={() => {
+                  setPickerOpen(false);
+                  clearStaged();
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="lift-primary"
+                disabled={!selectedPhoto || sendingPhoto}
+                onClick={() => void sendSelectedPhoto()}
+              >
+                {sendingPhoto ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Send className="size-4" />
+                )}
+                {sendingPhoto ? "Sending…" : "Send to Felicia"}
+              </Button>
+            </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
