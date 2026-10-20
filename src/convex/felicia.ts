@@ -6,7 +6,15 @@ import {
   SHARED_NOTE_SECTIONS,
 } from "../lib/felicia";
 import { FELICIA_GALLERY } from "../lib/gallery";
-import { bestPhoto, type GalleryCandidate } from "../lib/galleryMatch";
+import {
+  bestPhoto,
+  photoFits,
+  requestDemands,
+  textFits,
+  type Demand,
+  type GalleryCandidate,
+  type GalleryMatch,
+} from "../lib/galleryMatch";
 import { hasMatureProvider, veniceApiKey } from "./config";
 
 function isVeniceConfigured(): boolean {
@@ -553,14 +561,33 @@ function buildImagePrompt(scene: string, look: string = FELICIA_LOOK): string {
   // retouched glamour render, while naming the artifacts of a real photograph
   // (skin texture, pores, phone camera, indoor evening light) is what makes it
   // look like a picture somebody's boyfriend took.
+  //
+  // Both are read off the scene: a scene asking for a selfie gets portrait
+  // framing rather than head-to-toe, and a scene asking for a pose gets told to
+  // match it — "unposed" next to "dancing" is the model being given two
+  // different pictures to render.
+  const closeFrame = /\b(selfie|selfies|headshot|close[ -]?up|chest up|head and shoulders)\b/i.test(
+    scene,
+  );
+  const posed = /\b(pose|posing|posed|danc\w*|yoga|stretch\w*|twirl\w*|jump\w*|crouch\w*|kneel\w*|spin\w*|arms up|workout|exercise)\b/i.test(
+    scene,
+  );
+  const framing = closeFrame
+    ? `Close candid photograph of ${look}, ${scene}. Head-and-shoulders framing ` +
+        "with her face clearly in the picture, 2:3 vertical composition, shot " +
+        "at arm's length, not a full-length shot. "
+    : `Photorealistic full-length candid photograph of ${look}, ${scene}. ` +
+        "Full body shot from head to toe, her whole figure including her feet " +
+        "inside the frame, 2:3 vertical composition, wide framing, not a " +
+        "close-up and not a portrait crop. ";
+
   return (
-    `Photorealistic full-length candid photograph of ${look}, ${scene}. ` +
-    "Full body shot from head to toe, her whole figure including her feet " +
-    "inside the frame, 2:3 vertical composition, wide framing, not a close-up " +
-    "and not a portrait crop. Shot on a phone camera in an ordinary room, " +
+    framing +
+    "Shot on a phone camera in an ordinary room, " +
     "mixed window light and warm lamplight, natural skin texture with visible " +
     "pores and fine hair, soft unretouched edges, slight camera grain, " +
-    "unposed, no filter, high resolution."
+    (posed ? "pose and movement exactly as described, " : "unposed, ") +
+    "no filter, high resolution."
   );
 }
 
@@ -604,21 +631,63 @@ const TAKE_PHOTO =
   /\b(take|snap|shoot|capture|grab|make|get)\s+(me\s+)?(a|an|another|new|fresh)?\s*(photo|photos|picture|pictures|pic|pics|selfie|selfies|shot|snap)\b/i;
 
 /** Strip the request wrapper so "send me a pic of you in a red dress" -> "in a red dress". */
-function sceneFromRequest(text: string): string | null {
+export function sceneFromRequest(text: string): string | null {
   const cleaned = text
-    .replace(/^(hey|hi|hello|felicia)[,\s]*/i, "")
+    // The greeting comes off first: it usually sits in front of the request,
+    // and whatever it names would otherwise ride along into the scene —
+    // "good night! send a pic of you at the beach" must not describe the night.
+    .replace(
+      /^(?:good\s+)?(?:morning|afternoon|evening|night|hey|hi|hello|yo|felicia)\b[!,.\s]*/i,
+      "",
+    )
     .replace(/\b(can|could|would|will)\s+you\b/gi, "")
     .replace(/\bplease\b/gi, "")
+    // The ask itself goes — the verbs and the articles — but the noun stays
+    // when it says what KIND of picture this is: "selfie" and "portrait" are
+    // content the photo has to honour, while "photo" and "pic" are not.
     .replace(
-      /\b(send|show|share|give)\s+(me\s+)?(a|an|some|another|one)?\s*(new\s+)?(photo|photos|picture|pictures|pic|pics|selfie|selfies|snap|snaps|polaroid)\b/gi,
+      /\b(send|show|share|give|take|snap|shoot|capture|grab|get|make|fetch)\s+(me\s+)?(a|an|some|another|one)?\s*(new\s+|fresh\s+)?/gi,
       "",
     )
     .replace(/\b(of|for)\s+you\b/gi, "")
     .replace(/\bof\s+yourself\b/gi, "")
+    // A request can open with the picture itself — "a picture of you at the
+    // beach" has no send-verb for the rule above to catch. Only the generic
+    // photo words are stripped here; "selfie" and "portrait" are left standing
+    // because they describe the frame they are asking for.
+    .replace(
+      /^\s*(?:an?\s+|some\s+|another\s+|one\s+|new\s+|fresh\s+)?(?:photo|picture|pic|snap|polaroid)s?\s*(?:of\s+)?/i,
+      "",
+    )
     .replace(/[?.!]+$/g, "")
     .replace(/^[\s,]+/, "")
     .trim();
-  return cleaned.length > 12 ? cleaned : null;
+  // The bar is deliberately low: "at the beach" and "in a red dress" are both
+  // short and both are exactly what a picture has to show. The old bar of a
+  // dozen characters threw those away and answered them with the generic
+  // balcony scene instead. Below this there is nothing left but glue.
+  return cleaned.length >= 6 ? cleaned : null;
+}
+
+/**
+ * The fragment of a request that names what the photo has to show, for
+ * stitching into a scene line that left it out.
+ *
+ * The last sentence that covers every demand wins, so a question in front of
+ * the ask ("how was your day? send me a pic in a red dress") does not ride
+ * along into the image prompt. Null when nothing in the request covers them.
+ */
+export function demandText(fragment: string, demands: Demand[]): string | null {
+  if (demands.length === 0) return null;
+  const sentences = fragment
+    .split(/(?:[?!]+|\.(?=\s|$))\s*/)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+  for (let index = sentences.length - 1; index >= 0; index -= 1) {
+    const sentence = sentences[index];
+    if (sentence && textFits(sentence, demands)) return sentence;
+  }
+  return null;
 }
 
 /** Pull the hidden [[scene: ...]] marker out of the model's reply. */
@@ -2087,7 +2156,26 @@ export const sendMessage = action<{ ctx: AnyCtx; args: { text: string } }>({
       ],
     });
 
-    const { reply, scene } = extractScene(raw, trimmed);
+    const { reply, scene: declaredScene } = extractScene(raw, trimmed);
+
+    // What they asked the picture to show, taken from the request itself: a
+    // place, an outfit, a colour, a pose. Her line for the scene is not used
+    // here on purpose — the model can name details they never asked for, and a
+    // demand has to trace back to their own words.
+    const requestFragment = sceneFromRequest(trimmed);
+    const demands = requestDemands(requestFragment ?? trimmed);
+
+    // Her line for the scene can leave the request out entirely — "on a balcony
+    // at golden hour" for "in a red dress" — which is exactly how a fresh photo
+    // comes out wrong. Whatever they asked for and her scene does not name is
+    // put back in before anything is generated.
+    let scene = declaredScene;
+    if (declaredScene && demands.length > 0 && !textFits(declaredScene, demands)) {
+      const missing = demandText(requestFragment ?? trimmed, demands);
+      if (missing) {
+        scene = `${declaredScene.replace(/[.\s]+$/, "")}, ${missing}`;
+      }
+    }
 
     const replyMessageId = await ctx.runMutation(internal.felicia.saveMessage, {
       userId,
@@ -2104,10 +2192,17 @@ export const sendMessage = action<{ ctx: AnyCtx; args: { text: string } }>({
     // "take a picture" is a request for something new, so the roll is skipped
     // entirely — even when one of her old photos would match the description.
     const wantsFresh = TAKE_PHOTO.test(trimmed);
-    const picked =
-      scene && !wantsFullBody && !wantsFresh
-        ? bestPhoto([scene, trimmed, reply], await herPhotoRoll(ctx, userId))
-        : null;
+    // The roll is narrowed first: a photo only stays in it when it really shows
+    // every specific thing they asked for — the place, the outfit, the colour,
+    // the pose. A request with no specifics keeps the whole roll, and when
+    // nothing in it survives she takes a new photo instead of sending one that
+    // only resembles the ask.
+    let picked: GalleryMatch | null = null;
+    if (scene && !wantsFullBody && !wantsFresh) {
+      const roll = await herPhotoRoll(ctx, userId);
+      const fitting = roll.filter((candidate) => photoFits(candidate, demands));
+      picked = bestPhoto([scene, trimmed, reply], fitting);
+    }
 
     if (picked) {
       await ctx.runMutation(internal.felicia.savePhoto, {
