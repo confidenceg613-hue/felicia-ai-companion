@@ -54,12 +54,12 @@ import { toast } from "sonner";
  */
 
 const CATEGORIES = [
-  { key: "person", label: "People", color: "#e08a4a" },
+  { key: "person", label: "People", color: "#8b9cf7" },
   { key: "place", label: "Places", color: "#57a0c6" },
   { key: "preference", label: "Tastes", color: "#c96f92" },
   { key: "moment", label: "Moments", color: "#78a867" },
   { key: "goal", label: "Goals", color: "#9b7bc9" },
-  { key: "fact", label: "Facts", color: "#a9a065" },
+  { key: "fact", label: "Facts", color: "#5fb8a8" },
 ] as const;
 
 const categoryOf = (key: string) =>

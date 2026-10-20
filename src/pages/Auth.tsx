@@ -150,7 +150,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
         >
-        <Card className="min-w-[350px] rounded-3xl border-border/60 bg-card/85 p-0 shadow-[0_40px_80px_-48px_rgba(35,24,16,0.55)] ring-1 ring-foreground/5 backdrop-blur-xl">
+        <Card className="min-w-[350px] rounded-3xl border-border/60 bg-card/85 p-0 shadow-[0_40px_80px_-48px_rgba(24,14,44,0.55)] ring-1 ring-foreground/5 backdrop-blur-xl">
           <AnimatePresence mode="wait" initial={false}>
           {step === "signIn" ? (
             <motion.div

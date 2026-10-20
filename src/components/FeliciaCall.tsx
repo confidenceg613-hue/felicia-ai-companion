@@ -461,7 +461,7 @@ export function FeliciaCall({
                 type="button"
                 variant="destructive"
                 size="lg"
-                className="gap-2 rounded-full px-7 shadow-[0_14px_30px_-14px_oklch(0.55_0.2_28/90%)] transition-transform hover:scale-105"
+                className="gap-2 rounded-full px-7 shadow-[0_14px_30px_-14px_oklch(0.55_0.2_300/90%)] transition-transform hover:scale-105"
                 onClick={handleHangUp}
               >
                 <PhoneOff className="size-4" />

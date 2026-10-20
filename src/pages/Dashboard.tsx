@@ -40,6 +40,7 @@ import {
   Paperclip,
   Phone,
   Send,
+  Sparkle,
   Sparkles,
   Volume2,
   VolumeX,
@@ -85,6 +86,27 @@ function timeLabel(ms: number) {
 /** How many of the newest messages get a staggered entrance when the chat
  *  opens — the older ones are already-read history and simply are there. */
 const ENTRANCE_WINDOW = 24;
+
+/** Ambient stars scattered behind the conversation — decoration only, and
+ *  every one runs on its own clock so the field never pulses in unison. */
+const CHAT_SPARKLES = [
+  { key: "s1", top: "3%", left: "5%", size: 16, delay: 0, duration: 4.4 },
+  { key: "s2", top: "11%", left: "89%", size: 12, delay: 1.1, duration: 5.6 },
+  { key: "s3", top: "24%", left: "2%", size: 10, delay: 2.4, duration: 6.2 },
+  { key: "s4", top: "37%", left: "94%", size: 15, delay: 0.6, duration: 4.8 },
+  { key: "s5", top: "51%", left: "4%", size: 11, delay: 3.2, duration: 5.9 },
+  { key: "s6", top: "64%", left: "91%", size: 9, delay: 1.8, duration: 4.6 },
+  { key: "s7", top: "77%", left: "9%", size: 13, delay: 2.9, duration: 6.4 },
+  { key: "s8", top: "89%", left: "84%", size: 11, delay: 0.3, duration: 5.2 },
+];
+
+/** Where the sparkles fly when one of her replies lands. */
+const SPARKLE_BURST = [
+  { dx: -22, dy: -18, delay: 0 },
+  { dx: 16, dy: -24, delay: 0.08 },
+  { dx: 26, dy: 8, delay: 0.16 },
+  { dx: -14, dy: 14, delay: 0.24 },
+];
 
 type TimelineItem = {
   id: string;
@@ -156,6 +178,8 @@ export default function Dashboard() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sendingPhoto, setSendingPhoto] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  /** The id of the reply that should shimmer when it arrives. */
+  const [sparkleBurstId, setSparkleBurstId] = useState<string | null>(null);
   /**
    * The chat should feel like it *arrives* when you open it: the newest
    * messages cascade in, older history is simply there. This flips off shortly
@@ -383,6 +407,7 @@ export default function Dashboard() {
       const result = await sendMessage({ text: trimmed });
       setPending(null);
       setThinking(false);
+      setSparkleBurstId(String(result.replyMessageId));
       if (autoVoiceRef.current) {
         void playMessage(result.replyMessageId, result.reply);
       }
@@ -471,6 +496,7 @@ export default function Dashboard() {
       const result = await sendUserPhoto({ data, mimeType: photo.file.type });
       setPickerOpen(false);
       clearStaged();
+      setSparkleBurstId(String(result.replyMessageId));
       toast.success("Sent — Felicia is looking at it.");
       if (autoVoiceRef.current) {
         void playMessage(result.replyMessageId, result.reply);
@@ -730,9 +756,32 @@ export default function Dashboard() {
           </motion.div>
         )}
 
-        <div className="flex min-h-0 flex-1 flex-col gap-3">
+        <div className="relative flex min-h-0 flex-1 flex-col gap-3">
+          {/* Ambient shimmer behind the conversation — never interactive. */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
+          >
+            {CHAT_SPARKLES.map((star) => (
+              <span
+                key={star.key}
+                className="chat-sparkle absolute block"
+                style={{
+                  top: star.top,
+                  left: star.left,
+                  width: star.size,
+                  height: star.size,
+                  animationDelay: `${star.delay}s`,
+                  animationDuration: `${star.duration}s`,
+                }}
+              >
+                <Sparkle className="h-full w-full" />
+              </span>
+            ))}
+          </div>
+
           {missingKeys.length > 0 && connection && (
-            <div className="border-b border-primary/30 bg-primary/10 px-4 py-3 text-xs">
+            <div className="relative z-10 border-b border-primary/30 bg-primary/10 px-4 py-3 text-xs">
               <p className="font-medium text-primary">Not connected on this deployment</p>
               <p className="mt-1 text-muted-foreground">
                 Add {missingKeys.join(", ")} in this project's Keys settings.
@@ -742,7 +791,7 @@ export default function Dashboard() {
 
             <div
               ref={scrollRef}
-              className="min-h-0 flex-1 overflow-y-auto px-1 sm:px-2 pb-2"
+              className="relative z-10 min-h-0 flex-1 overflow-y-auto px-1 sm:px-2 pb-2"
             >
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
               {/* On this day — a real moment from an earlier year, surfaced only
@@ -884,8 +933,8 @@ export default function Dashboard() {
               {items.map((item, index) => {
                 const isUser = item.role === "user";
                 const position = index - (items.length - ENTRANCE_WINDOW);
-                const staged = firstPaintRef.current && position >= 0;
-                const entranceDelay = staged
+                const isEntrance = firstPaintRef.current && position >= 0;
+                const entranceDelay = isEntrance
                   ? Math.min(position, ENTRANCE_WINDOW - 1) * 0.035
                   : 0;
 
@@ -894,7 +943,7 @@ export default function Dashboard() {
                     <motion.div
                       key={item.id}
                       initial={
-                        staged
+                        isEntrance
                           ? { opacity: 0, y: 14, scale: 0.96 }
                           : false
                       }
@@ -938,12 +987,11 @@ export default function Dashboard() {
 
                 return (
                   <motion.div
-                    key={item.id}
-                    initial={
-                      staged
+                    key={item.id}                    initial={
+                      isEntrance
                         ? { opacity: 0, y: 10, scale: 0.98 }
                         : false
-                    }
+                      }
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     transition={{
                       type: "spring",
@@ -952,10 +1000,48 @@ export default function Dashboard() {
                         delay: entranceDelay,
                       }}
                     className={cn(
-                      "flex gap-3",
+                      "relative flex gap-3",
                       isUser ? "justify-end" : "justify-start",
                     )}
                   >
+                    {/* ✨ her reply lands with a little shimmer */}
+                    {!isUser &&
+                      item.messageId !== undefined &&
+                      sparkleBurstId === String(item.messageId) && (
+                        <span
+                          aria-hidden
+                          className="pointer-events-none absolute -top-2 left-8 z-20"
+                        >
+                          {SPARKLE_BURST.map((burst) => (
+                            <motion.span
+                              key={`${burst.dx}-${burst.dy}`}
+                              className="absolute text-primary"
+                              initial={{
+                                opacity: 0,
+                                scale: 0.2,
+                                x: 0,
+                                y: 0,
+                                rotate: -25,
+                              }}
+                              animate={{
+                                opacity: [0, 1, 0],
+                                scale: [0.2, 1.1, 0.35],
+                                x: burst.dx,
+                                y: burst.dy,
+                                rotate: 35,
+                              }}
+                              transition={{
+                                duration: 1.1,
+                                delay: burst.delay,
+                                ease: "easeOut",
+                              }}
+                            >
+                              <Sparkle className="size-3.5" />
+                            </motion.span>
+                          ))}
+                        </span>
+                      )}
+
                     {!isUser && (
                       <span className="mt-1 shrink-0 self-start rounded-full bg-gradient-to-br from-primary/70 to-primary/20 p-[1.5px]">
                         <img
@@ -1117,7 +1203,7 @@ export default function Dashboard() {
                     className="mt-1 size-7 shrink-0 rounded-full object-cover"
                   />
                   <motion.div
-                    animate={{ borderColor: ["oklch(0.55 0.12 32 / 30%)", "oklch(0.55 0.12 32 / 70%)", "oklch(0.55 0.12 32 / 30%)"] }}
+                    animate={{ borderColor: ["oklch(0.75 0.155 296 / 30%)", "oklch(0.75 0.155 296 / 75%)", "oklch(0.75 0.155 296 / 30%)"] }}
                     transition={{
                       duration: 1.8,
                       repeat: Infinity,

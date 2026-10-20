@@ -50,87 +50,85 @@
 
 /* CHANGE VALUES FOR THEME */
 /*
- * One woman, two rooms.
+ * Midnight violet, two weights.
  *
- *   :root   Ivory & Oxblood — warm paper, espresso ink, a deep terracotta
- *           accent. Editorial, printed, expensive-looking: hairline rules,
- *           generous margins, photographs sitting on cream rather than neon.
- *   .dark   Ink & Ember — near-black warm charcoal, bone text, and the accent
- *           turned to copper, the way a lamp looks in a dark room.
+ *   .dark   Deep violet-black glass — the app as a lit screen at night:
+ *           translucent panels over a purple ink, one luminous orchid accent,
+ *           borders and shadows tinted violet rather than grey.
+ *   :root   The same violet family lifted to daylight — porcelain with a
+ *           lilac cast, aubergine ink, and the accent turned deep violet.
  *
- * No purples anywhere, in either theme: the colour that reads as "AI app" is
- * exactly the colour this one refuses. Accent is hue ~32 light / ~62 dark, the
- * rest of the palette is warm neutrals so the photographs stay the loudest
- * thing on the screen.
+ * One hue family end to end (295 ± 5), glass surfaces carry the depth, and
+ * the photographs still get to be the loudest thing on the screen.
  */
 :root {
   --radius: 0.875rem;
 
-  --background: oklch(0.972 0.009 84);
-  --foreground: oklch(0.235 0.015 55);
-  --card: oklch(0.995 0.004 90);
-  --card-foreground: oklch(0.235 0.015 55);
-  --popover: oklch(0.995 0.004 90);
-  --popover-foreground: oklch(0.235 0.015 55);
-  --primary: oklch(0.43 0.115 32);
-  --primary-foreground: oklch(0.985 0.008 90);
-  --secondary: oklch(0.945 0.012 85);
-  --secondary-foreground: oklch(0.32 0.02 55);
-  --muted: oklch(0.945 0.012 85);
-  --muted-foreground: oklch(0.5 0.018 62);
-  --accent: oklch(0.925 0.03 78);
-  --accent-foreground: oklch(0.33 0.045 45);
-  --destructive: oklch(0.52 0.19 27);
-  --border: oklch(0.895 0.014 80);
-  --input: oklch(0.87 0.014 80);
-  --ring: oklch(0.5 0.11 35);
-  --chart-1: oklch(0.43 0.115 32);
-  --chart-2: oklch(0.52 0.08 135);
-  --chart-3: oklch(0.46 0.07 220);
-  --chart-4: oklch(0.66 0.1 78);
-  --chart-5: oklch(0.4 0.06 340);
-  --sidebar: oklch(0.955 0.01 84);
-  --sidebar-foreground: oklch(0.235 0.015 55);
-  --sidebar-primary: oklch(0.43 0.115 32);
-  --sidebar-primary-foreground: oklch(0.985 0.008 90);
-  --sidebar-accent: oklch(0.925 0.02 78);
-  --sidebar-accent-foreground: oklch(0.3 0.03 50);
-  --sidebar-border: oklch(0.895 0.014 80);
-  --sidebar-ring: oklch(0.5 0.11 35);
+  --background: oklch(0.972 0.012 295);
+  --foreground: oklch(0.26 0.035 295);
+  --card: oklch(0.995 0.006 296);
+  --card-foreground: oklch(0.26 0.035 295);
+  --popover: oklch(0.995 0.006 296);
+  --popover-foreground: oklch(0.26 0.035 295);
+  --primary: oklch(0.46 0.17 295);
+  --primary-foreground: oklch(0.985 0.01 300);
+  --secondary: oklch(0.945 0.018 295);
+  --secondary-foreground: oklch(0.33 0.05 295);
+  --muted: oklch(0.945 0.018 295);
+  --muted-foreground: oklch(0.5 0.04 295);
+  --accent: oklch(0.93 0.035 296);
+  --accent-foreground: oklch(0.34 0.07 296);
+  --destructive: oklch(0.55 0.19 25);
+  --border: oklch(0.9 0.02 295);
+  --input: oklch(0.875 0.02 295);
+  --ring: oklch(0.5 0.15 295);
+  --chart-1: oklch(0.46 0.17 295);
+  --chart-2: oklch(0.52 0.09 190);
+  --chart-3: oklch(0.46 0.09 240);
+  --chart-4: oklch(0.6 0.11 325);
+  --chart-5: oklch(0.4 0.09 160);
+  --sidebar: oklch(0.955 0.014 295);
+  --sidebar-foreground: oklch(0.26 0.035 295);
+  --sidebar-primary: oklch(0.46 0.17 295);
+  --sidebar-primary-foreground: oklch(0.985 0.01 300);
+  --sidebar-accent: oklch(0.93 0.03 296);
+  --sidebar-accent-foreground: oklch(0.32 0.055 295);
+  --sidebar-border: oklch(0.9 0.02 295);
+  --sidebar-ring: oklch(0.5 0.15 295);
 }
 
 .dark {
-  --background: oklch(0.155 0.012 58);
-  --foreground: oklch(0.945 0.01 85);
-  --card: oklch(0.196 0.014 58);
-  --card-foreground: oklch(0.945 0.01 85);
-  --popover: oklch(0.196 0.014 58);
-  --popover-foreground: oklch(0.945 0.01 85);
-  --primary: oklch(0.755 0.108 62);
-  --primary-foreground: oklch(0.185 0.02 55);
-  --secondary: oklch(0.25 0.014 58);
-  --secondary-foreground: oklch(0.93 0.01 85);
-  --muted: oklch(0.245 0.012 58);
-  --muted-foreground: oklch(0.72 0.014 80);
-  --accent: oklch(0.29 0.03 62);
-  --accent-foreground: oklch(0.94 0.012 85);
-  --destructive: oklch(0.6 0.18 27);
-  --border: oklch(0.29 0.014 58);
-  --input: oklch(0.32 0.014 58);
-  --ring: oklch(0.755 0.108 62);
-  --chart-1: oklch(0.755 0.108 62);
-  --chart-2: oklch(0.66 0.08 140);
-  --chart-3: oklch(0.62 0.07 220);
-  --chart-4: oklch(0.8 0.09 85);
-  --chart-5: oklch(0.56 0.06 340);
-  --sidebar: oklch(0.175 0.012 58);
-  --sidebar-foreground: oklch(0.945 0.01 85);
-  --sidebar-primary: oklch(0.755 0.108 62);
-  --sidebar-primary-foreground: oklch(0.185 0.02 55);
-  --sidebar-accent: oklch(0.26 0.02 60);
-  --sidebar-accent-foreground: oklch(0.94 0.012 85);
-  --sidebar-border: oklch(0.29 0.014 58);
-  --sidebar-ring: oklch(0.755 0.108 62);
+  --background: oklch(0.17 0.032 292);
+  --foreground: oklch(0.955 0.012 295);
+  --card: oklch(0.225 0.038 292);
+  --card-foreground: oklch(0.955 0.012 295);
+  --popover: oklch(0.235 0.038 292);
+  --popover-foreground: oklch(0.955 0.012 295);
+  --primary: oklch(0.75 0.155 296);
+  --primary-foreground: oklch(0.18 0.045 300);
+  --secondary: oklch(0.28 0.04 292);
+  --secondary-foreground: oklch(0.94 0.012 295);
+  --muted: oklch(0.27 0.036 292);
+  --muted-foreground: oklch(0.75 0.035 296);
+  --accent: oklch(0.32 0.06 296);
+  --accent-foreground: oklch(0.95 0.012 295);
+  --destructive: oklch(0.62 0.19 25);
+  --border: oklch(0.325 0.04 292);
+  --input: oklch(0.35 0.04 292);
+  --ring: oklch(0.75 0.155 296);
+  --chart-1: oklch(0.75 0.155 296);
+  --chart-2: oklch(0.7 0.1 195);
+  --chart-3: oklch(0.65 0.09 245);
+  --chart-4: oklch(0.8 0.12 325);
+  --chart-5: oklch(0.6 0.1 160);
+  --sidebar: oklch(0.195 0.032 292);
+  --sidebar-foreground: oklch(0.955 0.012 295);
+  --sidebar-primary: oklch(0.75 0.155 296);
+  --sidebar-primary-foreground: oklch(0.18 0.045 300);
+  --sidebar-accent: oklch(0.28 0.05 294);
+  --sidebar-accent-foreground: oklch(0.95 0.012 295);
+  --sidebar-border: oklch(0.31 0.04 292);
+  --sidebar-ring: oklch(0.75 0.155 296);
 }
 
 @layer base {
@@ -151,9 +149,10 @@
     overflow-x: hidden;
     font-feature-settings: "ss01" 1, "cv05" 1, "calt" 1;
   }
-  /* Room light. Two very soft washes — ember low on the left, cool daylight
-     high on the right — enough for cream surfaces to have depth without any
-     colour banding. Fixed so it stays put as content scrolls over it. */
+  /* Room light. Three very soft violet washes — orchid high on the left, a
+     cooler indigo to the right, magenta pooling at the floor — enough for the
+     glass panels to have depth without any colour banding. Fixed so it stays
+     put as content scrolls over it. */
   body::before {
     content: "";
     position: fixed;
@@ -161,15 +160,15 @@
     z-index: -1;
     pointer-events: none;
     background:
-      radial-gradient(62rem 44rem at 8% -8%, oklch(0.72 0.1 55 / 16%), transparent 62%),
-      radial-gradient(52rem 40rem at 98% 4%, oklch(0.7 0.04 220 / 8%), transparent 60%),
-      radial-gradient(70rem 52rem at 50% 120%, oklch(0.62 0.08 32 / 10%), transparent 66%);
+      radial-gradient(62rem 44rem at 8% -8%, oklch(0.72 0.13 300 / 13%), transparent 62%),
+      radial-gradient(52rem 40rem at 98% 4%, oklch(0.7 0.08 250 / 9%), transparent 60%),
+      radial-gradient(70rem 52rem at 50% 120%, oklch(0.6 0.1 325 / 8%), transparent 66%);
   }
   .dark body::before {
     background:
-      radial-gradient(62rem 44rem at 10% -10%, oklch(0.72 0.12 58 / 14%), transparent 62%),
-      radial-gradient(48rem 38rem at 96% 2%, oklch(0.5 0.05 220 / 10%), transparent 60%),
-      radial-gradient(70rem 52rem at 50% 118%, oklch(0.5 0.09 30 / 12%), transparent 66%);
+      radial-gradient(62rem 44rem at 10% -10%, oklch(0.55 0.15 300 / 16%), transparent 62%),
+      radial-gradient(48rem 38rem at 96% 2%, oklch(0.5 0.11 250 / 12%), transparent 60%),
+      radial-gradient(70rem 52rem at 50% 118%, oklch(0.5 0.12 325 / 12%), transparent 66%);
   }
   ::selection {
     background: color-mix(in oklab, var(--primary) 22%, transparent);
@@ -206,8 +205,8 @@
 
    A small vocabulary the pages share, so a card looks like a card everywhere
    rather than each screen inventing its own border, blur and shadow. The
-   shadows are layered and warm-tinted rather than black, which is what keeps a
-   dark card from looking like a hole in the page.
+   shadows are layered and violet-tinted rather than black, which is what keeps
+   a dark card from looking like a hole in the page.
    --------------------------------------------------------------------------- */
 @layer components {
   /* A floating panel: translucent, blurred, one hairline of light at the edge.
@@ -219,8 +218,20 @@
     border: 1px solid color-mix(in oklab, var(--border) 65%, transparent);
     box-shadow:
       0 1px 0 0 color-mix(in oklab, var(--foreground) 6%, transparent) inset,
-      0 1px 2px 0 oklch(0.2 0.03 60 / 6%),
-      0 24px 48px -32px oklch(0.2 0.04 55 / 35%);
+      0 1px 2px 0 oklch(0.2 0.06 295 / 6%),
+      0 24px 48px -32px oklch(0.16 0.07 295 / 40%);
+  }
+  /* In the dark the panels are lit glass: thinner, more translucent, with a
+     faint orchid edge where the light catches the rim. */
+  .dark .glass {
+    background: color-mix(in oklab, var(--card) 62%, transparent);
+    backdrop-filter: blur(1.75rem) saturate(1.3);
+    -webkit-backdrop-filter: blur(1.75rem) saturate(1.3);
+    border-color: color-mix(in oklab, oklch(0.75 0.155 296) 22%, transparent);
+    box-shadow:
+      0 1px 0 0 color-mix(in oklab, #fff 10%, transparent) inset,
+      0 1px 2px 0 oklch(0.05 0.05 300 / 40%),
+      0 28px 56px -34px oklch(0.04 0.06 300 / 85%);
   }
 
   /* A card that rests on the background instead of floating above it. */
@@ -229,12 +240,14 @@
     border: 1px solid color-mix(in oklab, var(--border) 78%, transparent);
     box-shadow:
       0 1px 0 0 color-mix(in oklab, var(--foreground) 4%, transparent) inset,
-      0 18px 40px -30px oklch(0.22 0.04 55 / 32%);
+      0 18px 40px -30px oklch(0.2 0.07 295 / 35%);
   }
   .dark .surface {
+    background: color-mix(in oklab, var(--card) 82%, transparent);
+    border-color: color-mix(in oklab, var(--border) 62%, transparent);
     box-shadow:
-      0 1px 0 0 color-mix(in oklab, var(--foreground) 6%, transparent) inset,
-      0 20px 44px -30px oklch(0.02 0.01 60 / 85%);
+      0 1px 0 0 color-mix(in oklab, #fff 7%, transparent) inset,
+      0 20px 44px -30px oklch(0.03 0.05 300 / 85%);
   }
 
   /* The brand colour, lifted: for primary buttons and active states. */
@@ -245,17 +258,17 @@
       0 12px 26px -14px color-mix(in oklab, var(--primary) 65%, transparent);
   }
 
-  /* Warmth behind the portrait and the hero image, so photographs have a glow
+  /* Light behind the portrait and the hero image, so photographs have a glow
      to sit in rather than a hard edge against the background. */
   .glow-warm {
     background:
-      radial-gradient(60% 60% at 50% 32%, oklch(0.74 0.1 62 / 26%), transparent 70%),
-      radial-gradient(52% 52% at 72% 82%, oklch(0.6 0.08 28 / 20%), transparent 72%);
+      radial-gradient(60% 60% at 50% 32%, oklch(0.74 0.14 296 / 24%), transparent 70%),
+      radial-gradient(52% 52% at 72% 82%, oklch(0.6 0.11 255 / 18%), transparent 72%);
   }
   .dark .glow-warm {
     background:
-      radial-gradient(60% 60% at 50% 32%, oklch(0.76 0.12 62 / 22%), transparent 70%),
-      radial-gradient(52% 52% at 72% 82%, oklch(0.55 0.1 30 / 22%), transparent 72%);
+      radial-gradient(60% 60% at 50% 32%, oklch(0.76 0.15 296 / 24%), transparent 70%),
+      radial-gradient(52% 52% at 72% 82%, oklch(0.58 0.12 325 / 20%), transparent 72%);
   }
 
   /* Text that carries a little light, for display headings. Kept gentle: a
@@ -282,10 +295,10 @@
     border-radius: inherit;
     background: conic-gradient(
       from 180deg,
-      oklch(0.78 0.1 62 / 45%),
-      oklch(0.66 0.1 26 / 35%),
-      oklch(0.7 0.06 200 / 25%),
-      oklch(0.78 0.1 62 / 45%)
+      oklch(0.78 0.14 296 / 45%),
+      oklch(0.66 0.13 325 / 35%),
+      oklch(0.7 0.11 245 / 28%),
+      oklch(0.78 0.14 296 / 45%)
     );
     filter: blur(14px);
     opacity: 0.45;
@@ -306,7 +319,7 @@
     }
   }
 
-  /* A hairline with a warm centre, used to separate editorial sections without
+  /* A hairline with a soft centre, used to separate editorial sections without
      a hard rule across the page. */
   .hairline {
     height: 1px;
@@ -361,12 +374,39 @@
     background: color-mix(in oklab, var(--primary) 45%, transparent);
   }
 
-  /* A quieter card than `.surface`: no shadow, just a hairline and warm paper.
+  /* A quieter card than `.surface`: no shadow, just a hairline of violet.
      Used for lists and supporting panels, so the loudest thing on screen stays
      the photographs. */
   .paper {
     background: color-mix(in oklab, var(--card) 70%, transparent);
     border: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Sparkles
+
+   The chat's ambient shimmer: small four-point stars scattered behind the
+   conversation, each twinkling on its own clock so the field never pulses in
+   unison. Pure decoration — the layer that holds them is pointer-events-none.
+   --------------------------------------------------------------------------- */
+@keyframes sparkle-twinkle {
+  0%,
+  100% {
+    opacity: 0.1;
+    transform: scale(0.5) rotate(0deg);
+  }
+  50% {
+    opacity: 0.95;
+    transform: scale(1) rotate(120deg);
+  }
+}
+@layer components {
+  .chat-sparkle {
+    opacity: 0.55;
+    color: color-mix(in oklab, var(--primary) 85%, transparent);
+    animation: sparkle-twinkle 4.6s ease-in-out infinite;
+    will-change: opacity, transform;
   }
 }
 
@@ -380,6 +420,7 @@
    --------------------------------------------------------------------------- */
 @media (prefers-reduced-motion: reduce) {
   .aura::before,
+  .chat-sparkle,
   .animate-ping,
   .animate-pulse,
   .animate-bounce {

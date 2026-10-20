@@ -22,10 +22,13 @@
     (function () {
       try {
         var saved = localStorage.getItem("felicia-theme");
-        var dark =
-          saved === "dark" ||
-          ((saved === null || saved === "undefined" || saved === "system") &&
-            window.matchMedia("(prefers-color-scheme: dark)").matches);
+        var prefersDark =
+          window.matchMedia("(prefers-color-scheme: dark)").matches;
+        var dark;
+        if (saved === "light") dark = false;
+        else if (saved === "dark") dark = true;
+        else if (saved === "system") dark = prefersDark;
+        else dark = true; // first visit: the app opens as dark violet glass
         if (dark) document.documentElement.classList.add("dark");
       } catch (e) {
         /* private mode: fall back to the light theme */

@@ -1,10 +1,9 @@
 /**
- * Theme preference — light, dark, or follow the device.
- *
- * Nomi follows the operating system's setting and lets you override it in
- * Settings; Felicia does the same. The initial class is applied by a blocking
- * script in `index.html` before first paint, so this hook only has to keep the
- * document in sync afterwards — no flash of the wrong theme.
+ * Theme preference — light, dark, or follow the device. With no saved choice
+ * the app opens dark, because it is designed as dark violet glass. The initial
+ * class is applied by a blocking script in `index.html` before first paint, so
+ * this hook only has to keep the document in sync afterwards — no flash of the
+ * wrong theme.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -16,8 +15,8 @@ export const THEME_KEY = "felicia-theme";
 export const THEME_OPTIONS: Array<{ value: Theme; label: string; hint: string }> =
   [
     { value: "system", label: "Match my device", hint: "Follows your system setting" },
-    { value: "light", label: "Violet light", hint: "The brand purple on deep violet" },
-    { value: "dark", label: "Ambient purple", hint: "Deep violet, softer on the eyes" },
+    { value: "light", label: "Violet light", hint: "Porcelain pages, deep violet accent" },
+    { value: "dark", label: "Ambient purple", hint: "Violet glass, easy on the eyes at night" },
   ];
 
 function systemPrefersDark(): boolean {
@@ -32,9 +31,12 @@ function readStored(): Theme {
   if (typeof window === "undefined") return "system";
   try {
     const raw = window.localStorage.getItem(THEME_KEY);
-    return raw === "light" || raw === "dark" ? raw : "system";
+    if (raw === "light" || raw === "dark") return raw;
+    if (raw === "system") return "system";
+    // First visit: the app is designed as dark violet glass, so open there.
+    return "dark";
   } catch {
-    return "system";
+    return "dark";
   }
 }
 

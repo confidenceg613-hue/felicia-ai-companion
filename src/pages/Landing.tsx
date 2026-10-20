@@ -283,7 +283,7 @@ export default function Landing() {
           >
             <div className="aura relative mx-auto w-full max-w-sm rounded-[2.25rem]">
               <div className="glow-warm absolute -inset-4 rounded-[2.5rem] blur-3xl" />
-              <div className="relative overflow-hidden rounded-[1.75rem] border border-foreground/10 bg-card p-1.5 shadow-[0_40px_80px_-45px_rgba(30,20,12,0.55)] ring-1 ring-foreground/5">
+              <div className="relative overflow-hidden rounded-[1.75rem] border border-foreground/10 bg-card p-1.5 shadow-[0_40px_80px_-45px_rgba(24,14,44,0.55)] ring-1 ring-foreground/5">
                 <img
                   src={PORTRAIT.fullUrl}
                   alt={PORTRAIT.about}
