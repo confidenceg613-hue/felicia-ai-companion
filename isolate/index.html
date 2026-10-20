@@ -22,22 +22,25 @@
     (function () {
       try {
         var saved = localStorage.getItem("felicia-theme");
-        var dark =
-          saved === "dark" ||
-          ((saved === null || saved === "undefined" || saved === "system") &&
-            window.matchMedia("(prefers-color-scheme: dark)").matches);
+        var prefersDark =
+          window.matchMedia("(prefers-color-scheme: dark)").matches;
+        var dark;
+        if (saved === "light") dark = false;
+        else if (saved === "dark") dark = true;
+        else if (saved === "system") dark = prefersDark;
+        else dark = true; // first visit: the app opens as dark violet glass
         if (dark) document.documentElement.classList.add("dark");
       } catch (e) {
         /* private mode: fall back to the light theme */
       }
     })();
   </script>
-  <script type="module" crossorigin src="/assets/index-DVtBbyX8.js"></script>
+  <script type="module" crossorigin src="/assets/index-B0K1-EUY.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/react-vendor-fik7D5hW.js">
   <link rel="modulepreload" crossorigin href="/assets/framer-motion-B7-9Wm2e.js">
-  <link rel="modulepreload" crossorigin href="/assets/radix-ui-CnsYiAHh.js">
-  <link rel="modulepreload" crossorigin href="/assets/charts-C9hTGNC-.js">
-  <link rel="stylesheet" crossorigin href="/assets/index-CE2GHeYO.css">
+  <link rel="modulepreload" crossorigin href="/assets/radix-ui-DP1BOkok.js">
+  <link rel="modulepreload" crossorigin href="/assets/charts-0N6Fj5X6.js">
+  <link rel="stylesheet" crossorigin href="/assets/index-wODy6M-n.css">
 </head>
 
 
