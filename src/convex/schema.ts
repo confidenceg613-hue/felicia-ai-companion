@@ -45,6 +45,10 @@ const schema = defineSchema(
       // these so the conversation renders the image alone, the way a shared
       // picture appears in a real chat.
       imageStorageId: v.optional(v.id("_storage")),
+      // What Qwen-VL saw in that photo, kept so she still remembers the picture
+      // after the message scrolls out of the recent window — and so it is only
+      // read by the vision model once.
+      imageDescription: v.optional(v.string()),
     })
       .index("by_user", ["userId"])
       // "On this day" reads one calendar day out of past years — a bounded

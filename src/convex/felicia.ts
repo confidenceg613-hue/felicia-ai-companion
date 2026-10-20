@@ -852,6 +852,8 @@ export const saveMessage = internalMutation({
     role: v.union(v.literal("user"), v.literal("felicia")),
     content: v.string(),
     imageStorageId: v.optional(v.id("_storage")),
+    /** What Qwen-VL saw in an attached photo, once it has been read. */
+    imageDescription: v.optional(v.string()),
   },
   returns: v.id("messages"),
   handler: async (ctx: AnyCtx, args: AnyArgs) => {
@@ -860,6 +862,7 @@ export const saveMessage = internalMutation({
       role: args.role,
       content: args.content,
       imageStorageId: args.imageStorageId,
+      imageDescription: args.imageDescription,
       createdAt: Date.now(),
     });
   },
@@ -1740,13 +1743,20 @@ export const sendMessage = action<{ ctx: AnyCtx; args: { text: string } }>({
             startedAt,
           }),
         },
-        ...spoke.map((message: { role: unknown; content: unknown; imageStorageId?: unknown }) => ({
+        ...spoke.map((message: { role: unknown; content: unknown; imageStorageId?: unknown; imageDescription?: unknown }) => ({
           role: message.role === "user" ? "user" : "assistant",
-          // A photo the user shared carries no text, so stand it in with a
-          // marker the model can respond to instead of an empty turn.
+          // A photo the user shared carries no text, so stand it in with what
+          // Qwen-VL saw in it — otherwise she is answering an empty turn and
+          // can only thank them for a picture she cannot describe.
           content: clip(
             (message.content as string) ||
-              (message.imageStorageId ? "[they sent a photo]" : "[...]"),
+              (message.imageStorageId
+                ? `[they sent you a photo. what you saw in it: ${
+                    typeof message.imageDescription === "string"
+                      ? message.imageDescription
+                      : "a picture you could not make out"
+                  }]`
+                : "[...]"),
           ),
         })),
       ],
@@ -2025,10 +2035,11 @@ export const startCall = action<{ ctx: AnyCtx; args: {} }>({
 /**
  * Store a photo the user picked and let Felicia react to it.
  *
- * The model behind her is text-only, so she responds to the fact that a photo
- * arrived rather than to its contents — she says so naturally instead of
- * pretending to have seen it. The image itself is saved to Convex storage and
- * rendered in the conversation.
+ * She actually looks at it: the photo is described by Qwen3-VL first, and her
+ * reply is written against that description, so she can answer about the room,
+ * the light, the outfit or the expression in it. The description is saved on
+ * the message — later turns still know what was in the picture, and the vision
+ * model only ever reads each photo once.
  */
 export const sendUserPhoto = action<{ ctx: AnyCtx; args: { data: Uint8Array; mimeType: string } }>({
   args: { data: v.bytes(), mimeType: v.string() },
@@ -2056,12 +2067,27 @@ export const sendUserPhoto = action<{ ctx: AnyCtx; args: { data: Uint8Array; mim
       }),
     );
 
+    // Her eyes first. Qwen3-VL reads the photo before she answers, so the reply
+    // is about what is actually in the frame rather than about the fact that a
+    // picture arrived. The read is stored on the message, which means it is
+    // done once and is still there when the photo scrolls out of the window.
+    const imageUrl = await ctx.storage.getUrl(storageId);
+    const seen = imageUrl
+      ? await ctx.runAction(internal.vision.describe, {
+          url: imageUrl,
+          hint: "The person she is talking to just sent her this photo.",
+        })
+      : { text: null as string | null };
+
     await ctx.runMutation(internal.felicia.saveMessage, {
       userId,
       role: "user",
       content: "",
       imageStorageId: storageId,
-    });    const notes = await ctx.runQuery(internal.felicia.notesFor, { userId });
+      imageDescription: seen.text ?? undefined,
+    });
+
+    const notes = await ctx.runQuery(internal.felicia.notesFor, { userId });
     const memories = await ctx.runQuery(internal.felicia.topMemories, {
       userId,
     });
@@ -2087,11 +2113,17 @@ export const sendUserPhoto = action<{ ctx: AnyCtx; args: { data: Uint8Array; mim
         },
         {
           role: "user",
-          content:
-            "[[note to self: they have just sent you a photo of themselves. " +
-            "React to the fact that a photo arrived — one or two sentences, as " +
-            "yourself, no narration. You cannot see the image, so talk about " +
-            "having received it rather than describing its contents.]]",
+          content: seen.text
+            ? "[[note to self: they have just sent you this photo. What you can " +
+              "see in it: " +
+              seen.text +
+              " React to something specific that is actually in it — one or two " +
+              "sentences, as yourself, no narration and no lists.]]"
+            : "[[note to self: they have just sent you a photo of themselves. " +
+              "React to the fact that a photo arrived — one or two sentences, " +
+              "as yourself, no narration. You could not make the image out this " +
+              "time, so talk about having received it rather than describing " +
+              "its contents.]]",
         },
       ],
     });
