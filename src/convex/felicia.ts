@@ -2143,6 +2143,113 @@ export const sendUserPhoto = action<{ ctx: AnyCtx; args: { data: Uint8Array; mim
 });
 
 // ---------------------------------------------------------------------------
+// Her eyes, applied to photos she was sent before she could see
+// ---------------------------------------------------------------------------
+
+/**
+ * Photos that arrived with no description.
+ *
+ * Everything sent after her vision was wired up is described on arrival, so
+ * this only ever finds the older ones. It reads a bounded slice of the user's
+ * recent messages and returns just the unread pictures in it. Only the tail of
+ * the conversation is read, so a long archive can never turn this into a scan.
+ */
+export const photosMissingVision = internalQuery({
+  args: { userId: v.id("users"), limit: v.number() },
+  handler: async (ctx: AnyCtx, { userId, limit }: AnyArgs) => {
+    const rows = await ctx.db
+      .query("messages")
+      .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) => q.eq("userId", userId))
+      .order("desc")
+      .take(Math.min(Math.max(limit, 1), 40) * 6);
+
+    return (rows as Array<{
+      _id: Id<"messages">;
+      imageStorageId?: Id<"_storage">;
+      imageDescription?: string;
+    }>)
+      .filter((message) => message.imageStorageId && !message.imageDescription)
+      .slice(0, Math.min(Math.max(limit, 1), 40))
+      .map((message) => ({
+        _id: message._id,
+        imageStorageId: message.imageStorageId as Id<"_storage">,
+      }));
+  },
+});
+
+/** Keep what her eyes found, so the picture is only read once. */
+export const setImageDescription = internalMutation({
+  args: { messageId: v.id("messages"), description: v.string() },
+  returns: v.null(),
+  handler: async (ctx: AnyCtx, { messageId, description }: AnyArgs) => {
+    await ctx.db.patch(messageId, { imageDescription: description });
+    return null;
+  },
+});
+
+/**
+ * Read the pictures she was sent before she could see, a few at a time.
+ *
+ * Deliberately small: each picture is one vision call, so this takes a handful
+ * per run and the caller can simply run it again for the next batch.
+ */
+export const describeMissingPhotos = internalAction({
+  args: { userId: v.id("users"), limit: v.optional(v.number()) },
+  returns: v.object({ described: v.number(), attempted: v.number() }),
+  handler: async (
+    ctx: AnyCtx,
+    { userId, limit }: { userId: Id<"users">; limit?: number },
+  ): Promise<{ described: number; attempted: number }> => {
+    const rows = (await ctx.runQuery(internal.felicia.photosMissingVision, {
+      userId,
+      limit: Math.min(Math.max(limit ?? 10, 1), 20),
+    })) as Array<{ _id: Id<"messages">; imageStorageId: Id<"_storage"> }>;
+
+    let described = 0;
+    for (const row of rows) {
+      const url = await ctx.storage.getUrl(row.imageStorageId);
+      if (!url) continue;
+
+      const seen = await ctx.runAction(internal.vision.describe, {
+        url,
+        hint: "A photo the person sent her earlier in this conversation.",
+      });
+      if (!seen.text) continue;
+
+      await ctx.runMutation(internal.felicia.setImageDescription, {
+        messageId: row._id,
+        description: seen.text,
+      });
+      described += 1;
+    }
+
+    return { described, attempted: rows.length };
+  },
+});
+
+/**
+ * Backfill, for the signed-in user.
+ *
+ * Names no message ids and takes no image URLs, so it can only ever work on
+ * photos in this user's own conversation.
+ */
+export const backfillPhotoVision = action({
+  args: { limit: v.optional(v.number()) },
+  returns: v.object({ described: v.number(), attempted: v.number() }),
+  handler: async (
+    ctx: AnyCtx,
+    { limit }: { limit?: number },
+  ): Promise<{ described: number; attempted: number }> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Sign in first.");
+    return await ctx.runAction(internal.felicia.describeMissingPhotos, {
+      userId,
+      limit,
+    });
+  },
+});
+
+// ---------------------------------------------------------------------------
 // Mind map
 // ---------------------------------------------------------------------------
 

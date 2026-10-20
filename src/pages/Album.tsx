@@ -40,7 +40,7 @@ import {
   Sparkles,
   Star,
 } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -76,6 +76,7 @@ export default function Album() {
   const navigate = useNavigate();
   const photos = useQuery(api.felicia.photos);
   const generatePhoto = useAction(api.felicia.generatePhoto);
+  const backfillPhotoVision = useAction(api.felicia.backfillPhotoVision);
   const profile = useQuery(api.feliciaAppearance.profile);
   const setProfilePhoto = useMutation(api.feliciaAppearance.setProfilePhoto);
 
@@ -93,8 +94,20 @@ export default function Album() {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [cursor, setCursor] = useState(0);
 
+  const backfillStarted = useRef(false);
+
   const allPhotos = photos ?? [];
   const ready = photos !== undefined;
+
+  // Her eyes, applied to the photos that were sent before she could see: on
+  // opening the album she reads the older ones a few at a time, in the
+  // background. Nothing to read returns instantly, and a failure here must
+  // never interrupt the album, so it stays silent either way.
+  useEffect(() => {
+    if (!ready || backfillStarted.current) return;
+    backfillStarted.current = true;
+    void backfillPhotoVision({ limit: 10 }).catch(() => undefined);
+  }, [backfillPhotoVision, ready]);
 
   const hidden = new Set<string>();
   if (hiddenCount !== null) {
