@@ -111,8 +111,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "portrait-quiet-moment",
-    host: "872MsQf0",
-    full: "872MsQf0",
+    host: "bvJTCqyp",
+    full: "BJ5VvvRL",
     file: "d7a7203d-a3e2-4739-b540-16b5cf1ac6ad-(1).png",
     title: "Back to the camera, dim room",
     about:
@@ -1019,8 +1019,8 @@ const GALLERY_SEEDS = [
   /* ------------------------------------- late nights, satin and low lamplight */
   {
     id: "bedroom-satin-camisole-floor",
-    host: "NK2Bg1GD",
-    full: "NK2Bg1GD",
+    host: "kgf4vck0",
+    full: "bqjt8VLw",
     file: "file-00000000006481f4b7a760bf8fe9bbea.png",
     title: "On the floor by the bed",
     about:
@@ -1045,8 +1045,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "lounge-black-bodysuit-couch",
-    host: "ThTdrL0j",
-    full: "ThTdrL0j",
+    host: "ryrD25tH",
+    full: "m4dCMwZT",
     file: "file-0000000019a08246a00b7cf75b551135.png",
     title: "Black bodysuit, blue light",
     about:
@@ -1069,8 +1069,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "floor-lilac-slip-dress",
-    host: "RWJ4McCf",
-    full: "RWJ4McCf",
+    host: "W1X3wnQ9",
+    full: "t9HxyvDH",
     file: "file-000000002400824692f0a6a1387298da.png",
     title: "Lilac slip dress, knees up",
     about:
@@ -1093,8 +1093,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "bed-blanket-lavender-camisole",
-    host: "ns8ZMCM0",
-    full: "ns8ZMCM0",
+    host: "7LhLsz48",
+    full: "2CFB5dX6",
     file: "file-00000000332882119d455254c5d2de97.png",
     title: "Blanket over the camisole",
     about:
@@ -1118,8 +1118,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "bed-under-the-comforter",
-    host: "qt8rK430",
-    full: "qt8rK430",
+    host: "hGYtHG4J",
+    full: "w6qRRtSk",
     file: "file-0000000056cc820abf5a10fde0783366.png",
     title: "Under the comforter",
     about:
@@ -1143,8 +1143,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "doorway-lilac-satin-dress",
-    host: "ZWv4TrYp",
-    full: "ZWv4TrYp",
+    host: "RZXFLRjs",
+    full: "NQwHYCbc",
     file: "file-000000005d94824395f4c6271193a460.png",
     title: "In the doorway",
     about:
@@ -1168,8 +1168,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "bed-on-her-stomach-tank",
-    host: "67swTyT1",
-    full: "67swTyT1",
+    host: "KmrgY7sK",
+    full: "KmrgY7sK",
     file: "file-000000005fdc820ab7ef6a9531e5d383.png",
     title: "On her stomach, chin on her arms",
     about:
@@ -1192,8 +1192,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "club-black-bodysuit-look-back",
-    host: "34F3sY8b",
-    full: "34F3sY8b",
+    host: "pTgynLgx",
+    full: "9mf9K4b4",
     file: "file-0000000063e8820aa4c64d15b11e2908.png",
     title: "Out, looking over her shoulder",
     about:
@@ -1218,8 +1218,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "club-black-mini-profile",
-    host: "5jpxp4kb",
-    full: "5jpxp4kb",
+    host: "Hs1VYjwc",
+    full: "fZJXv9kK",
     file: "file-0000000077ec82109e6be315ace08a95.png",
     title: "Black mini, in profile",
     about:
@@ -1241,8 +1241,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "floor-against-wall-lilac",
-    host: "3yghGYv0",
-    full: "3yghGYv0",
+    host: "mrng0rZj",
+    full: "vQYxx1pJ",
     file: "file-000000007ae88211bbd28bf84e720a09.png",
     title: "Against the wall, lilac slip",
     about:
@@ -1265,8 +1265,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "bed-pink-slip-dress-smile",
-    host: "RNDv5PmF",
-    full: "RNDv5PmF",
+    host: "L8H5P70z",
+    full: "vbnVJwrS",
     file: "file-000000007ea0820a8239619fef9b36bb.png",
     title: "Pink slip dress, small smile",
     about:
@@ -1288,8 +1288,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "lobby-brown-mini-dress",
-    host: "N5zQqNts",
-    full: "N5zQqNts",
+    host: "cLsC3j5n",
+    full: "9C976HdJ",
     file: "file-000000007f708243a90d718c9f95f133.png",
     title: "Brown mini dress, lobby light",
     about:
@@ -1312,8 +1312,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "bed-lilac-dress-on-her-stomach",
-    host: "gw9drnr5",
-    full: "gw9drnr5",
+    host: "Sm7zKLtz",
+    full: "Sm7zKLtz",
     file: "file-0000000082508211803401670145305d.png",
     title: "On her stomach in the lilac dress",
     about:
@@ -1336,8 +1336,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "bed-lilac-slip-hand-on-chest",
-    host: "Hr8dpQW7",
-    full: "Hr8dpQW7",
+    host: "P52xQ4BK",
+    full: "hKqdgZMF",
     file: "file-00000000860882468f69a043d03a99c1.png",
     title: "Lilac slip, sitting up in bed",
     about:
@@ -1360,8 +1360,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "booth-red-fringe-dress-dinner",
-    host: "ZCRJMG1H",
-    full: "ZCRJMG1H",
+    host: "zXw3V57s",
+    full: "6wgZbpvp",
     file: "file-000000008978820a998b964b208a3706.png",
     title: "Red fringe dress, dinner",
     about:
@@ -1385,8 +1385,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "blue-light-heels-top",
-    host: "gr4Y4zBW",
-    full: "gr4Y4zBW",
+    host: "9FHrmzdr",
+    full: "Fm7cxL1g",
     file: "file-000000008db482109b887f8ddd583f0f.png",
     title: "Black top and heels, blue light",
     about:
@@ -1408,8 +1408,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "bed-edge-lilac-slip-smile",
-    host: "jDntszqK",
-    full: "jDntszqK",
+    host: "YCb9z3J4",
+    full: "Mz8Qx35Y",
     file: "file-0000000094008243b2eee06eb283c0e7.png",
     title: "Edge of the bed, lilac slip",
     about:
@@ -1432,8 +1432,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "club-black-dress-side-tie",
-    host: "S2fmBkSC",
-    full: "S2fmBkSC",
+    host: "fL6k0R12",
+    full: "HYLMRJzg",
     file: "file-00000000a31081f58ab42cb1b92351ca.png",
     title: "Black dress tied at the hip",
     about:
@@ -1455,8 +1455,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "bed-lilac-slip-leaning-back",
-    host: "ns8ZMCMv",
-    full: "ns8ZMCMv",
+    host: "cJCJ93S5",
+    full: "bqH2v0F8",
     file: "file-00000000ad2881f4bdfe314c96f6f369.png",
     title: "Leaning back on the bed",
     about:
@@ -1479,8 +1479,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "window-city-lights-dress",
-    host: "d7MvDLD9",
-    full: "d7MvDLD9",
+    host: "s2x26Wrb",
+    full: "1ycNz0YR",
     file: "file-00000000b05481f5b197e5958f2b7ac0.png",
     title: "Window, city lights",
     about:
@@ -1503,8 +1503,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "lounge-strapless-red-dress",
-    host: "PPxdRgB0",
-    full: "PPxdRgB0",
+    host: "MK0XvxtZ",
+    full: "R9ytpZHt",
     file: "file-00000000b3c8820aab111838693eeadb.png",
     title: "Strapless red mini dress",
     about:
@@ -1526,8 +1526,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "couch-lilac-slip-lamplight",
-    host: "sBpzWshZ",
-    full: "sBpzWshZ",
+    host: "fbPR6bW5",
+    full: "bzySSG7X",
     file: "file-00000000bbd082119ff8038ea53a42aa.png",
     title: "On the couch, lilac slip",
     about:
@@ -1550,8 +1550,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "restaurant-red-dress-profile",
-    host: "vcNGFPys",
-    full: "vcNGFPys",
+    host: "zGJvhMPV",
+    full: "q4K3PHsX",
     file: "file-00000000c094820ab0bdd1318e793887.png",
     title: "Red dress, in profile",
     about:
@@ -1573,8 +1573,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "booth-red-fringe-dress-smile",
-    host: "LnbmKySS",
-    full: "LnbmKySS",
+    host: "0y8jS3Hz",
+    full: "vbnVJwrt",
     file: "file-00000000d04c8246a51e3a0733ff0342.png",
     title: "Red fringe dress, chin in hand",
     about:
@@ -1596,8 +1596,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "bed-on-her-side-satin",
-    host: "VJ0mYjsk",
-    full: "VJ0mYjsk",
+    host: "T3CwJ9Zg",
+    full: "mTGHRpjX",
     file: "file-00000000d2b48211ba8baa366af53862.png",
     title: "On her side, satin set",
     about:
@@ -1620,8 +1620,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "standing-lilac-slip-art-wall",
-    host: "Jyb8XMkL",
-    full: "Jyb8XMkL",
+    host: "jj1SGjqL",
+    full: "qkJ66t9X",
     file: "file-00000000d8d08243a4c39424a783b619.png",
     title: "Lilac slip, framed art behind",
     about:
@@ -1644,8 +1644,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "bed-hugging-knees",
-    host: "hJFghfhr",
-    full: "hJFghfhr",
+    host: "hGvGymBH",
+    full: "FhgJKbns",
     file: "file-00000000d9548243aaf38777c2e59706.png",
     title: "Knees to her chest",
     about:
@@ -1667,8 +1667,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "club-crouch-black-outfit",
-    host: "23Ck4bGF",
-    full: "23Ck4bGF",
+    host: "XNCr69yh",
+    full: "B3hHDgZq",
     file: "file-00000000e9c882468dfc42b740381afa.png",
     title: "Crouched in the club",
     about:
@@ -1689,8 +1689,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "club-couch-sideways-black",
-    host: "w39qhy20",
-    full: "w39qhy20",
+    host: "zDgyYTgZ",
+    full: "8GyMWHk5",
     file: "file-00000000f4b48243ae8cc0b6df5cdfe7.png",
     title: "Sideways on the club couch",
     about:
@@ -1713,8 +1713,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "club-low-crouch-heels",
-    host: "rzqVS0jN",
-    full: "rzqVS0jN",
+    host: "sfhMC5Zq",
+    full: "szn7Scfj",
     file: "file-00000000f58c820aa5bd1c5259fcab66.png",
     title: "Low crouch, strappy heels",
     about:
@@ -1735,8 +1735,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "blue-light-black-top-shorts",
-    host: "XXxVxjD6",
-    full: "XXxVxjD6",
+    host: "yYCk1Wmx",
+    full: "tyYPzx73",
     file: "file-00000000f9f8820abd337eb4a2eca0f7.png",
     title: "Black top and shorts, blue light",
     about:
@@ -1757,8 +1757,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "night-out-black-dress-cutouts",
-    host: "grGzvX4G",
-    full: "grGzvX4G",
+    host: "T2DKvnD5",
+    full: "3hLmpBr1",
     file: "grok-1792410681762.jpg",
     title: "Black dress, cutouts",
     about:
@@ -1780,8 +1780,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "night-out-black-bodysuit-heels",
-    host: "qgQkQJZt",
-    full: "qgQkQJZt",
+    host: "0xbmCwrh",
+    full: "0xbmCwrh",
     file: "grok-1792410690474.jpg",
     title: "Black bodysuit, full length",
     about:
@@ -1802,8 +1802,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "night-out-side-tie-dress",
-    host: "rzg8gVYF",
-    full: "rzg8gVYF",
+    host: "m2WtLhYM",
+    full: "TGpmcDhk",
     file: "grok-1792410698186.jpg",
     title: "Side-tie dress, looking back",
     about:
@@ -1823,8 +1823,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "bench-black-lace-bodysuit",
-    host: "s1KVKj03",
-    full: "s1KVKj03",
+    host: "8PgjpsRf",
+    full: "gdnRKZrs",
     file: "grok-1792410704845.jpg",
     title: "On the bench, lace trim",
     about:
@@ -1847,8 +1847,8 @@ const GALLERY_SEEDS = [
   /* ---------------------------------------------------- the later uploads */
   {
     id: "golden-hour-close",
-    host: "Z9PsVKRX",
-    full: "Z9PsVKRX",
+    host: "LsGd4JM4",
+    full: "193yHFCF",
     file: "file-00000000e96882468d16770e8b306f95.png",
     title: "Golden hour, close",
     about:
@@ -1866,8 +1866,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "soft-light-looking-away",
-    host: "Q904Z4cQ",
-    full: "Q904Z4cQ",
+    host: "vTdp9CBN",
+    full: "4fKsCgTs",
     file: "file-00000000155881fbad7388631f3c346d.png",
     title: "Soft light, looking away",
     about:
@@ -1885,8 +1885,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "getting-ready",
-    host: "cgX9G9QW",
-    full: "cgX9G9QW",
+    host: "KjydLCj1",
+    full: "byGpXhj9",
     file: "file-0000000028e881f4a24f39bf65d355fd.png",
     title: "Getting ready to go out",
     about:
@@ -1904,8 +1904,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "slow-morning",
-    host: "S2yT5FYT",
-    full: "S2yT5FYT",
+    host: "RFtkWvSB",
+    full: "knYqh5LB",
     file: "file-00000000485c822fb60d9ac42d95573a.png",
     title: "Slow morning",
     about:
@@ -1923,8 +1923,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "out-late-city",
-    host: "9w0xmdpm",
-    full: "9w0xmdpm",
+    host: "Wz6x7Sqk",
+    full: "Q8RshyX0",
     file: "file-0000000065a081f4b7fe3ca407825b49.png",
     title: "Out late, city behind her",
     about:
@@ -1943,8 +1943,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "dusk-before-lights",
-    host: "64qHWr09",
-    full: "64qHWr09",
+    host: "SR7HGVYz",
+    full: "PXBhTRtK",
     file: "file-000000006a5c8243b4d4131bb425232a.png",
     title: "Dusk, just before the lights",
     about:
@@ -1962,8 +1962,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "curled-up-evening",
-    host: "1VXWmGHQ",
-    full: "1VXWmGHQ",
+    host: "MHbgYtfv",
+    full: "XjT34zVc",
     file: "file-000000006cbc820aaad200c362d0fb8d.png",
     title: "Curled up for the evening",
     about:
@@ -1982,8 +1982,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "fresh-out-of-the-shower",
-    host: "CBFPtTnr",
-    full: "CBFPtTnr",
+    host: "XJ5RrnjW",
+    full: "NgCBP0ZK",
     file: "file-00000000821c81f49dae373d54210fc6.png",
     title: "Fresh out of the shower",
     about:
@@ -2001,8 +2001,8 @@ const GALLERY_SEEDS = [
   },
   {
     id: "night-air-balcony",
-    host: "G8c7NwTS",
-    full: "G8c7NwTS",
+    host: "sXWkM3jy",
+    full: "mbpB6rKc",
     file: "file-00000000f5bc81f4a137d6b757acb982.png",
     title: "Night air on the balcony",
     about:
@@ -2035,6 +2035,22 @@ export const FELICIA_GALLERY: readonly GalleryPhoto[] = GALLERY_SEEDS.map(
 
 /** The id of one of her photos, checked at compile time. */
 export type GalleryPhotoId = (typeof GALLERY_SEEDS)[number]["id"];
+
+/**
+ * The original upload for one of her permanent photos, by id.
+ *
+ * A photo she sends is stored as the ~600×800 tile — sharp enough in the
+ * conversation, and cheap enough that a thread full of them still loads. Any
+ * time it is shown at size (the lightbox, the album) the original is what
+ * should be drawn, or the enlargement is only a bigger blur.
+ *
+ * Null for photos she generated, for a photo sent before its gallery id was
+ * recorded, and for any id that is no longer in the gallery.
+ */
+export function galleryOriginal(id: string | null | undefined): string | null {
+  if (!id) return null;
+  return FELICIA_GALLERY.find((photo) => photo.id === id)?.fullUrl ?? null;
+}
 
 /**
  * One of her photos by id.

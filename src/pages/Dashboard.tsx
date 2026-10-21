@@ -23,7 +23,7 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { useAuth } from "@/hooks/use-auth";
 import { useFeliciaAvatar } from "@/hooks/use-felicia-avatar";
 import { FELICIA } from "@/lib/felicia";
-import { FELICIA_GALLERY } from "@/lib/gallery";
+import { FELICIA_GALLERY, galleryOriginal } from "@/lib/gallery";
 import { DEVELOP_MS, preloadImage } from "@/lib/photo";
 import { cn } from "@/lib/utils";
 import { beginVoiceNote, playAudioUrl, speakWithBrowser } from "@/lib/voice";
@@ -116,6 +116,8 @@ type TimelineItem = {
   createdAt: number;
   content: string;
   imageUrl: string | null;
+  /** The original upload, for the lightbox. Falls back to `imageUrl`. */
+  fullUrl?: string | null;
   scene?: string;
   label?: string | null;
   messageId?: Id<"messages">;
@@ -133,6 +135,7 @@ type PhotoRow = {
   _id: unknown;
   createdAt: number;
   url?: string | null;
+  galleryId?: string | null;
   scene?: string | null;
   label?: string | null;
 };
@@ -308,6 +311,9 @@ export default function Dashboard() {
         createdAt: photo.createdAt,
         content: "",
         imageUrl: photo.url,
+        // Gallery photos are stored as the small tile, which is what the bubble
+        // should draw; opening one shows the original upload instead.
+        fullUrl: galleryOriginal(photo.galleryId) ?? photo.url,
         scene: photo.scene,
         label: photo.label,
       })),
@@ -987,7 +993,10 @@ export default function Dashboard() {
                       />
                       <button
                         type="button"
-                        onClick={() => setLightbox(item.imageUrl)}                        className="surface group w-fit max-w-[80%] overflow-hidden rounded-[1.35rem] rounded-bl-md text-left"
+                        onClick={() =>
+                          setLightbox(item.fullUrl ?? item.imageUrl)
+                        }
+                        className="surface group w-fit max-w-[80%] overflow-hidden rounded-[1.35rem] rounded-bl-md text-left"
                         title={item.scene}
                       >
                       {/* contain, not cover: a full-length photo is tall, and
@@ -1537,7 +1546,7 @@ export default function Dashboard() {
         open={lightbox !== null}
         onOpenChange={(open) => !open && setLightbox(null)}
       >
-        <DialogContent className="max-w-2xl border-border/60 bg-card p-3">
+        <DialogContent className="max-w-3xl border-border/60 bg-card p-3">
           <DialogHeader className="sr-only">
             <DialogTitle>Felicia's photo</DialogTitle>
             <DialogDescription>The photo Felicia sent you</DialogDescription>
@@ -1546,7 +1555,7 @@ export default function Dashboard() {
             <img
               src={lightbox}
               alt="Felicia"
-              className="max-h-[75vh] w-full rounded-xl object-contain"
+              className="mx-auto max-h-[78vh] w-auto max-w-full rounded-xl object-contain"
             />
           )}
         </DialogContent>

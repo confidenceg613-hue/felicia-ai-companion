@@ -22,7 +22,11 @@ import {
   FELICIA_OUTFITS,
   type FeliciaAppearance,
 } from "@/lib/felicia";
-import { FELICIA_GALLERY, type GalleryPhoto } from "@/lib/gallery";
+import {
+  FELICIA_GALLERY,
+  galleryOriginal,
+  type GalleryPhoto,
+} from "@/lib/gallery";
 import { DEVELOP_MS, preloadImage } from "@/lib/photo";
 import { sleep } from "@/lib/voice";
 import { useAction, useMutation, useQuery } from "convex/react";
@@ -486,7 +490,7 @@ export default function Album() {
                 </div>
               )}
 
-              {visible.map((photo: { _id: string; url?: string | null; createdAt: number; scene?: string | null }) => (
+              {visible.map((photo: { _id: string; url?: string | null; galleryId?: string | null; createdAt: number; scene?: string | null }) => (
                 <motion.button
                   key={photo._id}
                   type="button"
@@ -497,7 +501,10 @@ export default function Album() {
                   onClick={() =>
                     photo.url &&
                     setLightbox({
-                      url: photo.url,
+                      // The grid draws the small tile; opening it shows the
+                      // original upload, which is what the full-size frame
+                      // needs to stay sharp.
+                      url: galleryOriginal(photo.galleryId) ?? photo.url,
                       title: photo.scene ?? `${FELICIA.name}'s photo`,
                     })
                   }

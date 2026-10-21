@@ -310,11 +310,23 @@ type SentPhoto = {
  * caring which kind they are looking at.
  */
 async function resolvePhoto(ctx: AnyCtx, photo: SentPhoto) {
+  // A photo from her permanent gallery is drawn from the gallery's own current
+  // URLs, not from whatever was saved with the message. The row keeps the id;
+  // the links live in one place, so a picture sent back when only a small copy
+  // was on file is still sharp in the thread and in the lightbox.
+  const permanent = photo.galleryId
+    ? FELICIA_GALLERY.find((entry) => entry.id === photo.galleryId)
+    : undefined;
+  const url =
+    permanent?.url ??
+    photo.url ??
+    (photo.storageId ? await ctx.storage.getUrl(photo.storageId) : null);
+
   return {
     _id: photo._id,
-    url:
-      photo.url ??
-      (photo.storageId ? await ctx.storage.getUrl(photo.storageId) : null),
+    url,
+    // The original upload, for anything shown at size.
+    fullUrl: permanent?.fullUrl ?? url,
     galleryId: photo.galleryId ?? null,
     label: photo.label ?? null,
     scene: photo.scene,
