@@ -3,9 +3,6 @@ import { v } from "convex/values";
 import { mutation, type MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 
-/** Callback form this project's toolchain accept-checks for by_user ranges. */
-type UserIndexQ = { eq: (key: string, value: string) => unknown };
-
 /**
  * Bind a guest conversation to the account that just signed in.
  *
@@ -47,7 +44,7 @@ export const claimGuestConversation = mutation({
     // it stays under the guest id rather than being lost or half-moved.
     const messages = await ctx.db
       .query("messages")
-      .withIndex("by_user", (q: UserIndexQ) => q.eq("userId", fromUserId))
+      .withIndex("by_user", (q) => q.eq("userId", fromUserId))
       .take(200);
     for (const row of messages) {
       await ctx.db.patch(row._id, { userId: toUserId });
@@ -56,7 +53,7 @@ export const claimGuestConversation = mutation({
 
     const photos = await ctx.db
       .query("photos")
-      .withIndex("by_user", (q: UserIndexQ) => q.eq("userId", fromUserId))
+      .withIndex("by_user", (q) => q.eq("userId", fromUserId))
       .take(200);
     for (const row of photos) {
       await ctx.db.patch(row._id, { userId: toUserId });
@@ -65,7 +62,7 @@ export const claimGuestConversation = mutation({
 
     const memories = await ctx.db
       .query("memories")
-      .withIndex("by_user", (q: UserIndexQ) => q.eq("userId", fromUserId))
+      .withIndex("by_user", (q) => q.eq("userId", fromUserId))
       .take(200);
     for (const row of memories) {
       await ctx.db.patch(row._id, { userId: toUserId });
@@ -74,7 +71,7 @@ export const claimGuestConversation = mutation({
 
     const chapters = await ctx.db
       .query("chapters")
-      .withIndex("by_user", (q: UserIndexQ) => q.eq("userId", fromUserId))
+      .withIndex("by_user", (q) => q.eq("userId", fromUserId))
       .take(200);
     for (const row of chapters) {
       await ctx.db.patch(row._id, { userId: toUserId });
@@ -99,12 +96,12 @@ async function moveSharedNotes(
 ): Promise<void> {
   const guest = await ctx.db
     .query("sharedNotes")
-    .withIndex("by_user", (q: UserIndexQ) => q.eq("userId", fromUserId))
+    .withIndex("by_user", (q) => q.eq("userId", fromUserId))
     .unique();
   if (!guest) return;
   const own = await ctx.db
     .query("sharedNotes")
-    .withIndex("by_user", (q: UserIndexQ) => q.eq("userId", toUserId))
+    .withIndex("by_user", (q) => q.eq("userId", toUserId))
     .unique();
   if (own) return;
   await ctx.db.patch(guest._id, { userId: toUserId });
@@ -120,12 +117,12 @@ async function moveAppearance(
 ): Promise<void> {
   const guest = await ctx.db
     .query("feliciaAppearance")
-    .withIndex("by_user", (q: UserIndexQ) => q.eq("userId", fromUserId))
+    .withIndex("by_user", (q) => q.eq("userId", fromUserId))
     .unique();
   if (!guest) return;
   const own = await ctx.db
     .query("feliciaAppearance")
-    .withIndex("by_user", (q: UserIndexQ) => q.eq("userId", toUserId))
+    .withIndex("by_user", (q) => q.eq("userId", toUserId))
     .unique();
   if (own) return;
   await ctx.db.patch(guest._id, { userId: toUserId });

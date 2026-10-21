@@ -315,7 +315,7 @@ export default function Dashboard() {
   }
 
   const items: TimelineItem[] = [
-    ...list.map((message: { _id: unknown; role: "user" | "felicia"; createdAt: number; content: string; imageUrl: string | null }) => ({
+    ...list.map((message: { _id: Id<"messages">; role: "user" | "felicia"; createdAt: number; content: string; imageUrl: string | null }) => ({
       id: `m${message._id}`,
       kind: "message" as const,
       role: message.role,
@@ -332,12 +332,12 @@ export default function Dashboard() {
         role: "felicia" as const,
         createdAt: photo.createdAt,
         content: "",
-        imageUrl: photo.url,
+        imageUrl: photo.url ?? null,
         // Gallery photos are stored as the small tile, which is what the bubble
         // should draw; opening one shows the original upload instead.
-        fullUrl: galleryOriginal(photo.galleryId) ?? photo.url,
-        scene: photo.scene,
-        label: photo.label,
+        fullUrl: galleryOriginal(photo.galleryId ?? undefined) ?? photo.url ?? null,
+        scene: photo.scene ?? undefined,
+        label: photo.label ?? null,
       })),
   ].sort((a, b) => a.createdAt - b.createdAt);
 

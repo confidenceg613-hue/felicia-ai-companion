@@ -2094,7 +2094,7 @@ export const clearConversation = mutation({
  * nothing in the roll fits does she take a new picture, which is the slow path
  * the client is given a scene for.
  */
-export const sendMessage = action<{ ctx: AnyCtx; args: { text: string } }>({
+export const sendMessage = action({
   args: { text: v.string() },
   returns: v.object({
     reply: v.string(),
@@ -2316,7 +2316,7 @@ export const sendMessage = action<{ ctx: AnyCtx; args: { text: string } }>({
  * transient rejection is retried once with a plainer scene, so a single request
  * still only surfaces one error to the user.
  */
-export const generatePhoto = action<{ ctx: AnyCtx; args: { scene?: string } }>({
+export const generatePhoto = action({
   args: { scene: v.optional(v.string()) },
   returns: v.object({
     storageId: v.id("_storage"),
@@ -2409,7 +2409,7 @@ function isRetryablePhotoFailure(error: unknown): boolean {
  * Cached on the message itself, so replaying a line or re-entering a call costs
  * nothing after the first render.
  */
-export const speakMessage = action<{ ctx: AnyCtx; args: { messageId: Id<"messages"> } }>({
+export const speakMessage = action({
   args: { messageId: v.id("messages") },
   returns: v.object({ url: v.union(v.string(), v.null()) }),
   handler: async (
@@ -2451,7 +2451,7 @@ export const speakMessage = action<{ ctx: AnyCtx; args: { messageId: Id<"message
  * Her greeting is generated as herself and saved as a real message, so the
  * spoken call also reads back as a transcript in the chat.
  */
-export const startCall = action<{ ctx: AnyCtx; args: Record<string, never> }>({
+export const startCall = action({
   args: {},
   returns: v.object({
     messageId: v.id("messages"),
@@ -2523,7 +2523,7 @@ export const startCall = action<{ ctx: AnyCtx; args: Record<string, never> }>({
  * the message — later turns still know what was in the picture, and the vision
  * model only ever reads each photo once.
  */
-export const sendUserPhoto = action<{ ctx: AnyCtx; args: { data: Uint8Array; mimeType: string } }>({
+export const sendUserPhoto = action({
   args: { data: v.bytes(), mimeType: v.string() },
   returns: v.object({
     reply: v.string(),
@@ -2531,7 +2531,7 @@ export const sendUserPhoto = action<{ ctx: AnyCtx; args: { data: Uint8Array; mim
   }),
   handler: async (
     ctx: AnyCtx,
-    { data, mimeType }: { data: Uint8Array; mimeType: string },
+    { data, mimeType }: { data: ArrayBuffer; mimeType: string },
   ): Promise<{ reply: string; replyMessageId: Id<"messages"> }> => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Sign in to share a photo.");
@@ -2792,7 +2792,7 @@ function parseMemoryList(raw: string): Array<{
  * yields zero new memories rather than an error — a model that rambles should
  * not break the page.
  */
-export const captureMemories = action<{ ctx: AnyCtx; args: Record<string, never> }>({
+export const captureMemories = action({
   args: {},
   returns: v.object({ added: v.number(), total: v.number() }),
   handler: async (
