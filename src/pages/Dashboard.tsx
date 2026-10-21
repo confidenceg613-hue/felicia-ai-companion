@@ -25,6 +25,7 @@ import { useFeliciaAvatar } from "@/hooks/use-felicia-avatar";
 import { FELICIA } from "@/lib/felicia";
 import { FELICIA_GALLERY, galleryOriginal } from "@/lib/gallery";
 import { DEVELOP_MS, preloadImage } from "@/lib/photo";
+import { speakWithPiper, warmPiper } from "@/lib/piper";
 import { cn } from "@/lib/utils";
 import { beginVoiceNote, playAudioUrl, speakWithBrowser } from "@/lib/voice";
 import { useAction, usePaginatedQuery, useQuery } from "convex/react";
@@ -57,6 +58,25 @@ import { useNavigate } from "react-router";
 import { toast } from "sonner";
 
 const AUTO_VOICE_KEY = "felicia:auto-voice";
+
+/**
+ * The one-time Piper voice download is about 60 MB, so it says so out loud —
+ * one toast that counts up, then disappears when the model is in place.
+ */
+function reportVoiceWarmUp(loaded: number, total: number) {
+  const percent =
+    total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : null;
+  if (percent === 100) {
+    toast.dismiss("voice-warmup");
+    return;
+  }
+  toast.loading(
+    percent === null
+      ? "Getting her voice ready — first time only"
+      : `Getting her voice ready — ${percent}%`,
+    { id: "voice-warmup" },
+  );
+}
 
 function readAutoVoicePref(): boolean {
   try {
@@ -362,6 +382,8 @@ export default function Dashboard() {
   }
 
   async function handleStartCall() {
+    // A call is all voice: start her model loading while she picks up.
+    warmPiper(reportVoiceWarmUp);
     setGreeting(null);
     setCallError(null);
     setCallOpen(true);
@@ -381,9 +403,14 @@ export default function Dashboard() {
     speakingRef.current = messageId;
     setSpeakingId(messageId);
     try {
-      const { url } = await speakMessage({ messageId });
-      let played = false;
-      if (url) played = await playAudioUrl(url);
+      // Her Piper voice (en_US/sam/medium) first: it runs on this device, costs
+      // nothing, and needs no round trip. The server voice and then the browser
+      // voice are only there for devices that can't run Piper.
+      let played = await speakWithPiper(content, reportVoiceWarmUp);
+      if (!played) {
+        const { url } = await speakMessage({ messageId });
+        if (url) played = await playAudioUrl(url);
+      }
       if (!played) await speakWithBrowser(content);
     } catch (error) {
       toast.error(
@@ -398,15 +425,16 @@ export default function Dashboard() {
   }
 
   function toggleAutoVoice() {
-    setAutoVoice((value) => {
-      const next = !value;
-      try {
-        window.localStorage.setItem(AUTO_VOICE_KEY, next ? "1" : "0");
-      } catch {
-        // ignore
-      }
-      return next;
-    });
+    const next = !autoVoice;
+    setAutoVoice(next);
+    try {
+      window.localStorage.setItem(AUTO_VOICE_KEY, next ? "1" : "0");
+    } catch {
+      // ignore
+    }
+    // Turning voice on is the moment to fetch her model, not the middle of a
+    // reply the first time she speaks.
+    if (next) warmPiper(reportVoiceWarmUp);
   }
 
   async function handleSend(text: string) {

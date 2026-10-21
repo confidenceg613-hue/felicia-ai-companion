@@ -446,7 +446,8 @@ export default function Settings() {
 
           <p className="pb-4 text-center text-xs text-muted-foreground/70">
             {FELICIA.name} · a companion character, written warmly. Photos
-            generated live with Cloudflare image/voice or Groq chat.
+            generated live; her voice (Piper, en_US/sam/medium) runs on your own
+            device.
           </p>
         </div>
       </div>

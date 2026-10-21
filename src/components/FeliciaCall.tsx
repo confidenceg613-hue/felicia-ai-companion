@@ -6,6 +6,7 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { useFeliciaAvatar } from "@/hooks/use-felicia-avatar";
 import { FELICIA } from "@/lib/felicia";
 import { DEVELOP_MS, preloadImage } from "@/lib/photo";
+import { speakWithPiper } from "@/lib/piper";
 import {
   hasSpeechRecognition,
   listenOnce,
@@ -45,11 +46,12 @@ function formatDuration(seconds: number) {
 /**
  * A voice call with Felicia.
  *
- * Her side comes from Groq's Orpheus voice, falling back to Cloudflare's
- * text-to-speech; your side is transcribed on device by the browser. If both
- * are unavailable — for example when a model is blocked or a quota is spent —
- * she falls back to the device voice so the call still works rather than
- * failing silently.
+ * Her lines are spoken on this device by Piper (en_US/sam/medium), which is free
+ * and needs no key. The Groq / Cloudflare voices are the fallback when Piper
+ * can't run here, and the device voice is the last resort — so a call always has
+ * something to say, even with a spent quota or a blocked download.
+ *
+ * Your side is transcribed on device by the browser.
  */
 export interface CallGreeting {
   messageId: Id<"messages">;
@@ -122,12 +124,15 @@ export function FeliciaCall({
       setStatus("speaking");
       setLastLine(text);
 
-      let played = false;
-      try {
-        const { url } = await speakMessage({ messageId });
-        if (url) played = await playAudioUrl(url);
-      } catch {
-        played = false;
+      // Piper first — her real voice, on device, no cost.
+      let played = await speakWithPiper(text);
+      if (!played) {
+        try {
+          const { url } = await speakMessage({ messageId });
+          if (url) played = await playAudioUrl(url);
+        } catch {
+          played = false;
+        }
       }
 
       if (!active()) return;
@@ -136,7 +141,7 @@ export function FeliciaCall({
         if (!usedFallbackRef.current) {
           usedFallbackRef.current = true;
           setNote(
-            "Felicia's own voice isn't available right now, so she's using your device voice.",
+            "Her own voice isn't available right now, so she's using your device voice.",
           );
         }
         await speakWithBrowser(text);
