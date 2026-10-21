@@ -14,13 +14,13 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useFeliciaAvatar } from "@/hooks/use-felicia-avatar";
 import {
-  DEFAULT_LIPS,
-  hasLips,
+  defaultFace,
+  hasFace,
   readCameraPicture,
-  readLips,
+  readFace,
   saveCameraPicture,
-  saveLips,
-  type Lips,
+  saveFace,
+  type Face,
 } from "@/lib/feliciaCamera";
 import { FELICIA } from "@/lib/felicia";
 import { FELICIA_GALLERY } from "@/lib/gallery";
@@ -131,16 +131,18 @@ export function FeliciaCall({
   const [typed, setTyped] = useState("");
   const [micSupported] = useState(() => hasSpeechRecognition());
 
-  // Her camera: which picture she is on, and where her lips sit on it.
+  // Her camera: which picture she is on, and where her face sits on it.
   const [feedId, setFeedId] = useState(
     () => readCameraPicture() ?? FELICIA_GALLERY[0].id,
   );
-  const [lips, setLips] = useState<Lips>(() => readLips(feedId));
+  const [face, setFace] = useState<Face>(() => readFace(feedId));
   const [cameraOn, setCameraOn] = useState(true);
   const [pictureOpen, setPictureOpen] = useState(false);
   const [stage, setStage] = useState<"pick" | "align">("pick");
   const [pendingId, setPendingId] = useState<string | null>(null);
-  const [pendingLips, setPendingLips] = useState<Lips>(DEFAULT_LIPS);
+  const [pendingFace, setPendingFace] = useState<Face>(defaultFace());
+  /** Which point of her face the next tap on the picture places. */
+  const [activePoint, setActivePoint] = useState<"mouth" | "eyes">("mouth");
 
   /**
    * Monotonic run id.
@@ -167,21 +169,23 @@ export function FeliciaCall({
   }, []);
 
   /**
-   * The first video call opens on "tap her lips".
+   * The first video call opens on "tap her face".
    *
-   * Her mouth is the one thing that has to be placed by hand — it only looks
-   * like talking when it is on her lips — and doing it once on the way in is
-   * better than discovering a shadow on her chin mid-sentence.
+   * Her mouth and eyes are the two things that have to be placed by hand — a
+   * moving mouth looks like talking only when it is on her lips, and blinking
+   * only works on her eyes — so it is done once, on the way in, instead of
+   * discovering a shadow on her chin mid-sentence.
    */
-  const lipsAskedRef = useRef(false);
+  const faceAskedRef = useRef(false);
   useEffect(() => {
-    if (!video || lipsAskedRef.current || hasLips(feedId)) return;
-    lipsAskedRef.current = true;
+    if (!video || faceAskedRef.current || hasFace(feedId)) return;
+    faceAskedRef.current = true;
     setPendingId(feedId);
-    setPendingLips(lips);
+    setPendingFace(face);
+    setActivePoint("mouth");
     setStage("align");
     setPictureOpen(true);
-  }, [video, feedId, lips]);
+  }, [video, feedId, face]);
 
   /** Speak one of her lines in her own voice, falling back to the device voice. */
   const say = useCallback(
@@ -410,21 +414,22 @@ export function FeliciaCall({
 
   function choosePicture(id: string) {
     setPendingId(id);
-    setPendingLips(readLips(id));
+    setPendingFace(readFace(id));
+    setActivePoint("mouth");
     setStage("align");
   }
 
   /**
-   * Where her lips are, from a tap on the picture.
+   * Where the tapped feature is on the picture.
    *
    * The preview is the same 3:4 crop as her camera feed, so the percentage of
    * the box that was tapped is the percentage of the picture — no conversion
-   * to do, and the mouth lands where it was put at any screen size.
+   * to do, and the mouth and eyes land where they were put at any screen size.
    */
-  function tapLips(event: React.MouseEvent<HTMLDivElement>) {
+  function tapPoint(event: React.MouseEvent<HTMLDivElement>) {
     const rect = event.currentTarget.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
-    setPendingLips({
+    const point = {
       x: Math.min(
         100,
         Math.max(0, ((event.clientX - rect.left) / rect.width) * 100),
@@ -433,15 +438,16 @@ export function FeliciaCall({
         100,
         Math.max(0, ((event.clientY - rect.top) / rect.height) * 100),
       ),
-    });
+    };
+    setPendingFace((current) => ({ ...current, [activePoint]: point }));
   }
 
   function usePicture() {
     if (!pendingId) return;
     saveCameraPicture(pendingId);
-    saveLips(pendingId, pendingLips);
+    saveFace(pendingId, pendingFace);
     setFeedId(pendingId);
-    setLips(pendingLips);
+    setFace(pendingFace);
     setStage("pick");
     setPendingId(null);
     setPictureOpen(false);
@@ -455,7 +461,7 @@ export function FeliciaCall({
           <FeliciaVideoFeed
             url={feedPhoto.fullUrl}
             speaking={talking}
-            lips={lips}
+            face={face}
             className="absolute inset-0 bg-black"
           />
 
@@ -613,7 +619,9 @@ export function FeliciaCall({
               <DialogDescription>
                 {stage === "pick"
                   ? "Pick the picture she appears in on the call."
-                  : "Tap her lips, so they move while she talks."}
+                  : activePoint === "mouth"
+                    ? "Tap her lips, so they move while she talks."
+                    : "Now tap between her eyes, so she can blink."}
               </DialogDescription>
             </DialogHeader>
 
@@ -648,10 +656,36 @@ export function FeliciaCall({
               </div>
             ) : (
               <div>
+                <div className="mb-2 flex items-center gap-1.5">
+                  {(
+                    [
+                      ["mouth", "Her lips"],
+                      ["eyes", "Her eyes"],
+                    ] as const
+                  ).map(([point, label]) => (
+                    <button
+                      key={point}
+                      type="button"
+                      onClick={() => setActivePoint(point)}
+                      className={cn(
+                        "rounded-full border px-2.5 py-1 text-[11px] transition-colors",
+                        activePoint === point
+                          ? "border-primary bg-primary/15 text-primary"
+                          : "border-border/60 text-muted-foreground hover:bg-muted",
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                  <span className="ml-auto text-[10px] text-muted-foreground/70">
+                    tap the picture
+                  </span>
+                </div>
+
                 <div
                   role="button"
                   tabIndex={0}
-                  onClick={tapLips}
+                  onClick={tapPoint}
                   className="relative cursor-crosshair overflow-hidden rounded-2xl"
                 >
                   {pendingPhoto && (
@@ -661,17 +695,33 @@ export function FeliciaCall({
                       className="aspect-[3/4] w-full object-cover"
                     />
                   )}
-                  <motion.span
-                    className="pointer-events-none absolute flex size-6 items-center justify-center rounded-full border-2 border-white bg-primary/70 shadow-lg"
-                    style={{
-                      left: `${pendingLips.x}%`,
-                      top: `${pendingLips.y}%`,
-                      x: "-50%",
-                      y: "-50%",
-                    }}
-                    animate={{ scale: [1, 1.15, 1] }}
-                    transition={{ duration: 1.6, repeat: Infinity }}
-                  />
+                  {(["mouth", "eyes"] as const).map((point) => {
+                    const placed = pendingFace[point];
+                    const active = activePoint === point;
+                    return (
+                      <motion.span
+                        key={point}
+                        className={cn(
+                          "pointer-events-none absolute flex size-5 items-center justify-center rounded-full border-2 shadow-lg",
+                          active
+                            ? "border-white bg-primary/80"
+                            : "border-white/70 bg-black/45",
+                        )}
+                        style={{
+                          left: `${placed.x}%`,
+                          top: `${placed.y}%`,
+                          x: "-50%",
+                          y: "-50%",
+                        }}
+                        animate={active ? { scale: [1, 1.18, 1] } : { scale: 1 }}
+                        transition={
+                          active
+                            ? { duration: 1.6, repeat: Infinity }
+                            : { duration: 0.2 }
+                        }
+                      />
+                    );
+                  })}
                 </div>
 
                 <div className="mt-3 flex items-center justify-between gap-2">
