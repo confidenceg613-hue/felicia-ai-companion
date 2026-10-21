@@ -16,8 +16,15 @@
  * Play a synthesised clip, resolving `true` only if it actually played through.
  * A blocked autoplay or a bad URL resolves `false` so the caller can fall back
  * to the device voice instead of sitting in silence.
+ *
+ * `onStart` fires the moment sound really begins — after any synthesis and
+ * buffering — which is what a video call needs to move her lips in time with
+ * her voice rather than while the model is still thinking.
  */
-export function playAudioUrl(url: string): Promise<boolean> {
+export function playAudioUrl(
+  url: string,
+  onStart?: () => void,
+): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
     const audio = new Audio(url);
     let settled = false;
@@ -31,8 +38,10 @@ export function playAudioUrl(url: string): Promise<boolean> {
     audio.onerror = () => finish(false);
 
     const started = audio.play();
-    if (started && typeof started.catch === "function") {
-      started.catch(() => finish(false));
+    if (started && typeof started.then === "function") {
+      started.then(() => onStart?.()).catch(() => finish(false));
+    } else {
+      onStart?.();
     }
 
     // Safety net: never leave the call waiting on an audio element that stalls.

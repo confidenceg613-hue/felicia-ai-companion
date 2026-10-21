@@ -248,6 +248,7 @@ function speechText(text: string): string {
 export async function speakWithPiper(
   text: string,
   onProgress?: VoiceProgress,
+  onStart?: () => void,
 ): Promise<boolean> {
   const spoken = speechText(text);
   if (!spoken || !piperSupported() || unavailable) return false;
@@ -257,7 +258,7 @@ export async function speakWithPiper(
     const wav = await session.predict(spoken);
     const url = URL.createObjectURL(wav);
     try {
-      return await playAudioUrl(url);
+      return await playAudioUrl(url, onStart);
     } finally {
       URL.revokeObjectURL(url);
     }

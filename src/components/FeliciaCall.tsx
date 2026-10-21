@@ -1,10 +1,30 @@
+import { FeliciaVideoFeed } from "@/components/FeliciaVideoFeed";
+import { SelfView } from "@/components/SelfView";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useFeliciaAvatar } from "@/hooks/use-felicia-avatar";
+import {
+  DEFAULT_LIPS,
+  hasLips,
+  readCameraPicture,
+  readLips,
+  saveCameraPicture,
+  saveLips,
+  type Lips,
+} from "@/lib/feliciaCamera";
 import { FELICIA } from "@/lib/felicia";
+import { FELICIA_GALLERY } from "@/lib/gallery";
+import { cn } from "@/lib/utils";
 import { DEVELOP_MS, preloadImage } from "@/lib/photo";
 import { speakWithPiper } from "@/lib/piper";
 import {
@@ -18,7 +38,17 @@ import {
 } from "@/lib/voice";
 import { useAction } from "convex/react";
 import { motion } from "framer-motion";
-import { Loader2, Mic, MicOff, PhoneOff, Send } from "lucide-react";
+import {
+  Check,
+  Images,
+  Loader2,
+  Mic,
+  MicOff,
+  PhoneOff,
+  Send,
+  Video,
+  VideoOff,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -62,6 +92,7 @@ export function FeliciaCall({
   greeting,
   initialNote,
   onClose,
+  video = false,
 }: {
   /**
    * Felicia's opening line, fetched by the caller on click.
@@ -74,6 +105,14 @@ export function FeliciaCall({
   /** Explains why there's no greeting, e.g. the neuron budget is spent. */
   initialNote?: string | null;
   onClose: () => void;
+  /**
+   * Camera call instead of a voice call.
+   *
+   * Her side is her picture, brought to life (breathing, drifting, lips moving
+   * while she speaks); your side is this device's camera. The conversation is
+   * exactly the same one either way.
+   */
+  video?: boolean;
 }) {
   const sendMessage = useAction(api.felicia.sendMessage);
   const generatePhoto = useAction(api.felicia.generatePhoto);
@@ -86,9 +125,22 @@ export function FeliciaCall({
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [muted, setMuted] = useState(false);
+  /** True only while her voice is actually audible — drives the lips. */
+  const [talking, setTalking] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [typed, setTyped] = useState("");
   const [micSupported] = useState(() => hasSpeechRecognition());
+
+  // Her camera: which picture she is on, and where her lips sit on it.
+  const [feedId, setFeedId] = useState(
+    () => readCameraPicture() ?? FELICIA_GALLERY[0].id,
+  );
+  const [lips, setLips] = useState<Lips>(() => readLips(feedId));
+  const [cameraOn, setCameraOn] = useState(true);
+  const [pictureOpen, setPictureOpen] = useState(false);
+  const [stage, setStage] = useState<"pick" | "align">("pick");
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [pendingLips, setPendingLips] = useState<Lips>(DEFAULT_LIPS);
 
   /**
    * Monotonic run id.
@@ -114,6 +166,23 @@ export function FeliciaCall({
     return () => clearInterval(id);
   }, []);
 
+  /**
+   * The first video call opens on "tap her lips".
+   *
+   * Her mouth is the one thing that has to be placed by hand — it only looks
+   * like talking when it is on her lips — and doing it once on the way in is
+   * better than discovering a shadow on her chin mid-sentence.
+   */
+  const lipsAskedRef = useRef(false);
+  useEffect(() => {
+    if (!video || lipsAskedRef.current || hasLips(feedId)) return;
+    lipsAskedRef.current = true;
+    setPendingId(feedId);
+    setPendingLips(lips);
+    setStage("align");
+    setPictureOpen(true);
+  }, [video, feedId, lips]);
+
   /** Speak one of her lines in her own voice, falling back to the device voice. */
   const say = useCallback(
     async (
@@ -124,18 +193,23 @@ export function FeliciaCall({
       setStatus("speaking");
       setLastLine(text);
 
-      // Piper first — her real voice, on device, no cost.
-      let played = await speakWithPiper(text);
+      // Piper first — her real voice, on device, no cost. The mouth starts when
+      // the sound does, not while the voice is still being rendered.
+      const startTalking = () => setTalking(true);
+      let played = await speakWithPiper(text, undefined, startTalking);
       if (!played) {
         try {
           const { url } = await speakMessage({ messageId });
-          if (url) played = await playAudioUrl(url);
+          if (url) played = await playAudioUrl(url, startTalking);
         } catch {
           played = false;
         }
       }
 
-      if (!active()) return;
+      if (!active()) {
+        setTalking(false);
+        return;
+      }
 
       if (!played) {
         if (!usedFallbackRef.current) {
@@ -144,8 +218,10 @@ export function FeliciaCall({
             "Her own voice isn't available right now, so she's using your device voice.",
           );
         }
+        setTalking(true);
         await speakWithBrowser(text);
       }
+      setTalking(false);
     },
     [speakMessage],
   );
@@ -318,6 +394,315 @@ export function FeliciaCall({
   }
 
   const canType = status === "idle";
+
+  /** The picture she is on, and the one being chosen in the picker. */
+  const feedPhoto =
+    FELICIA_GALLERY.find((photo) => photo.id === feedId) ?? FELICIA_GALLERY[0];
+  const pendingPhoto = pendingId
+    ? (FELICIA_GALLERY.find((photo) => photo.id === pendingId) ?? null)
+    : null;
+
+  function openPictures() {
+    setPendingId(null);
+    setStage("pick");
+    setPictureOpen(true);
+  }
+
+  function choosePicture(id: string) {
+    setPendingId(id);
+    setPendingLips(readLips(id));
+    setStage("align");
+  }
+
+  /**
+   * Where her lips are, from a tap on the picture.
+   *
+   * The preview is the same 3:4 crop as her camera feed, so the percentage of
+   * the box that was tapped is the percentage of the picture — no conversion
+   * to do, and the mouth lands where it was put at any screen size.
+   */
+  function tapLips(event: React.MouseEvent<HTMLDivElement>) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    setPendingLips({
+      x: Math.min(
+        100,
+        Math.max(0, ((event.clientX - rect.left) / rect.width) * 100),
+      ),
+      y: Math.min(
+        100,
+        Math.max(0, ((event.clientY - rect.top) / rect.height) * 100),
+      ),
+    });
+  }
+
+  function usePicture() {
+    if (!pendingId) return;
+    saveCameraPicture(pendingId);
+    saveLips(pendingId, pendingLips);
+    setFeedId(pendingId);
+    setLips(pendingLips);
+    setStage("pick");
+    setPendingId(null);
+    setPictureOpen(false);
+  }
+
+  if (video) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col bg-background">
+        {/* Her camera — everything above your own face. */}
+        <div className="relative min-h-0 flex-1 overflow-hidden">
+          <FeliciaVideoFeed
+            url={feedPhoto.fullUrl}
+            speaking={talking}
+            lips={lips}
+            className="absolute inset-0 bg-black"
+          />
+
+          <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-4">
+            <Badge
+              variant="outline"
+              className="gap-2 rounded-full border-white/25 bg-black/35 px-3 py-1 text-white backdrop-blur-md"
+            >
+              <span className="relative flex size-1.5">
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-white/70" />
+                <span className="relative inline-flex size-1.5 rounded-full bg-white" />
+              </span>
+              live
+            </Badge>
+            <span className="rounded-full border border-white/20 bg-black/35 px-3 py-1 font-mono text-xs text-white/90 backdrop-blur-md">
+              {formatDuration(elapsed)}
+            </span>
+          </div>
+
+          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/35 to-transparent px-4 pt-16 pb-4 text-white">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="font-display text-xl tracking-tight">
+                {FELICIA.fullName}
+              </h2>
+              <button
+                type="button"
+                onClick={openPictures}
+                className="flex items-center gap-1.5 rounded-full border border-white/25 bg-black/35 px-2.5 py-1 text-[11px] text-white/85 backdrop-blur-md transition-colors hover:bg-black/55"
+              >
+                <Images className="size-3.5" />
+                picture
+              </button>
+            </div>
+            <p className="text-[11px] text-white/65">{STATUS_LABEL[status]}</p>
+            {(interim || lastLine) && (
+              <p className="mt-1 line-clamp-2 text-sm leading-snug text-white/90">
+                {interim ? `“${interim}”` : lastLine}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Your face, below hers. */}
+        <div className="shrink-0 px-3 pt-2 pb-[env(safe-area-inset-bottom)]">
+          <div className="mx-auto w-full max-w-md">
+            <SelfView
+              enabled={cameraOn}
+              className="h-[20vh] w-full sm:h-[22vh]"
+            />
+
+            {note && (
+              <p className="mt-2 rounded-2xl border border-border/60 bg-card/80 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+                {note}
+              </p>
+            )}
+
+            <form onSubmit={handleTyped} className="mt-2 flex items-center gap-2">
+              <Input
+                value={typed}
+                onChange={(event) => setTyped(event.target.value)}
+                placeholder={canType ? "Type to her…" : "Listening…"}
+                disabled={!canType}
+                className="surface h-8 rounded-full border-0 bg-card/70 shadow-none backdrop-blur-md focus-visible:ring-2 focus-visible:ring-ring/50"
+              />
+              <Button
+                type="submit"
+                size="icon"
+                className="lift-primary size-9 shrink-0 rounded-full transition-transform hover:scale-105 disabled:opacity-40 disabled:hover:scale-100"
+                disabled={!canType || !typed.trim()}
+              >
+                {status === "thinking" ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Send className="size-4" />
+                )}
+              </Button>
+            </form>
+
+            <div className="mt-2 flex items-center justify-center gap-2.5 pb-3">
+              <Button
+                type="button"
+                variant={cameraOn ? "outline" : "secondary"}
+                size="icon"
+                className="surface size-11 rounded-full border-border/60 bg-card/70 backdrop-blur-md hover:bg-card"
+                onClick={() => setCameraOn((value) => !value)}
+                aria-label={cameraOn ? "Turn your camera off" : "Turn your camera on"}
+                title={cameraOn ? "Camera off" : "Camera on"}
+              >
+                {cameraOn ? (
+                  <Video className="size-4" />
+                ) : (
+                  <VideoOff className="size-4" />
+                )}
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="surface size-11 rounded-full border-border/60 bg-card/70 backdrop-blur-md hover:bg-card"
+                onClick={openPictures}
+                aria-label="Change her picture"
+                title="Change her picture"
+              >
+                <Images className="size-4" />
+              </Button>
+
+              <Button
+                type="button"
+                variant={muted ? "secondary" : "outline"}
+                size="icon"
+                className="surface size-11 rounded-full border-border/60 bg-card/70 backdrop-blur-md hover:bg-card"
+                onClick={() => setMuted((value) => !value)}
+                disabled={!micSupported}
+                aria-label={muted ? "Unmute" : "Mute"}
+                title={muted ? "Unmute" : "Mute"}
+              >
+                {muted ? (
+                  <MicOff className="size-4" />
+                ) : (
+                  <Mic className="size-4" />
+                )}
+              </Button>
+
+              <Button
+                type="button"
+                variant="destructive"
+                size="icon"
+                className="size-11 rounded-full shadow-[0_14px_30px_-14px_oklch(0.55_0.2_300/90%)] transition-transform hover:scale-105"
+                onClick={handleHangUp}
+                aria-label="End call"
+                title="End call"
+              >
+                <PhoneOff className="size-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <Dialog
+          open={pictureOpen}
+          onOpenChange={(open) => {
+            setPictureOpen(open);
+            if (!open) {
+              setStage("pick");
+              setPendingId(null);
+            }
+          }}
+        >
+          <DialogContent className="max-h-[88vh] max-w-lg overflow-y-auto border-border/60 bg-card">
+            <DialogHeader>
+              <DialogTitle className="font-display text-xl">
+                Her camera
+              </DialogTitle>
+              <DialogDescription>
+                {stage === "pick"
+                  ? "Pick the picture she appears in on the call."
+                  : "Tap her lips, so they move while she talks."}
+              </DialogDescription>
+            </DialogHeader>
+
+            {stage === "pick" ? (
+              <div className="grid max-h-[58vh] grid-cols-3 gap-2 overflow-y-auto pr-1 sm:grid-cols-4">
+                {FELICIA_GALLERY.map((photo) => (
+                  <button
+                    key={photo.id}
+                    type="button"
+                    onClick={() => choosePicture(photo.id)}
+                    className={cn(
+                      "relative overflow-hidden rounded-xl border transition-transform hover:scale-[1.02]",
+                      photo.id === feedId
+                        ? "border-primary ring-2 ring-primary/50"
+                        : "border-border/50",
+                    )}
+                    title={photo.title}
+                  >
+                    <img
+                      src={photo.url}
+                      alt={photo.title}
+                      loading="lazy"
+                      className="aspect-[3/4] w-full object-cover"
+                    />
+                    {photo.id === feedId && (
+                      <span className="absolute inset-0 flex items-center justify-center bg-black/30">
+                        <Check className="size-5 text-white" />
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={tapLips}
+                  className="relative cursor-crosshair overflow-hidden rounded-2xl"
+                >
+                  {pendingPhoto && (
+                    <img
+                      src={pendingPhoto.url}
+                      alt={pendingPhoto.title}
+                      className="aspect-[3/4] w-full object-cover"
+                    />
+                  )}
+                  <motion.span
+                    className="pointer-events-none absolute flex size-6 items-center justify-center rounded-full border-2 border-white bg-primary/70 shadow-lg"
+                    style={{
+                      left: `${pendingLips.x}%`,
+                      top: `${pendingLips.y}%`,
+                      x: "-50%",
+                      y: "-50%",
+                    }}
+                    animate={{ scale: [1, 1.15, 1] }}
+                    transition={{ duration: 1.6, repeat: Infinity }}
+                  />
+                </div>
+
+                <div className="mt-3 flex items-center justify-between gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setStage("pick");
+                      setPendingId(null);
+                    }}
+                  >
+                    Back
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="gap-1.5 rounded-full"
+                    onClick={usePicture}
+                  >
+                    <Check className="size-3.5" />
+                    Use this picture
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background">

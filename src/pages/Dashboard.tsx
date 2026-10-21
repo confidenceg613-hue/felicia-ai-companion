@@ -44,6 +44,7 @@ import {
   Send,
   Sparkle,
   Sparkles,
+  Video,
   Volume2,
   VolumeX,
   Brain,
@@ -185,6 +186,7 @@ export default function Dashboard() {
   const [hiddenCount, setHiddenCount] = useState<number | null>(null);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [callOpen, setCallOpen] = useState(false);
+  const [callVideo, setCallVideo] = useState(false);
   const [greeting, setGreeting] = useState<CallGreeting | null>(null);
   const [callError, setCallError] = useState<string | null>(null);
   const [speakingId, setSpeakingId] = useState<string | null>(null);
@@ -381,11 +383,12 @@ export default function Dashboard() {
     }
   }
 
-  async function handleStartCall() {
+  async function handleStartCall(video = false) {
     // A call is all voice: start her model loading while she picks up.
     warmPiper(reportVoiceWarmUp);
     setGreeting(null);
     setCallError(null);
+    setCallVideo(video);
     setCallOpen(true);
     try {
       setGreeting(await startCall({}));
@@ -657,11 +660,20 @@ export default function Dashboard() {
             <Button
               variant="ghost"
               size="icon"
-              className="rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary"
-              onClick={() => void handleStartCall()}
+              className="max-sm:hidden rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary"
+              onClick={() => void handleStartCall(false)}
               title="Call Felicia"
             >
               <Phone className="size-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary"
+              onClick={() => void handleStartCall(true)}
+              title="Video call Felicia"
+            >
+              <Video className="size-4" />
             </Button>
             {/* On a phone the name is what matters: the two secondary actions
                 move into the ⋯ menu so the header never squeezes her name down
@@ -696,6 +708,15 @@ export default function Dashboard() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>Felicia</DropdownMenuLabel>
+                {/* The voice call icon moves in here on a phone, where the
+                    header only has room for one call button. */}
+                <DropdownMenuItem
+                  className="sm:hidden"
+                  onSelect={() => void handleStartCall(false)}
+                >
+                  <Phone className="size-4" />
+                  Voice call
+                </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => setInfoOpen(true)}>
                   <Info className="size-4" />
                   About her
@@ -1771,6 +1792,7 @@ export default function Dashboard() {
         <FeliciaCall
           greeting={greeting}
           initialNote={callError}
+          video={callVideo}
           onClose={() => setCallOpen(false)}
         />
       )}
