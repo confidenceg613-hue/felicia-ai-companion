@@ -2,15 +2,16 @@
  * Felicia's voice, spoken on the device by Piper — `en_US/sam/medium`.
  *
  * Piper is a free local text-to-speech engine: the voice model is downloaded
- * once (about 60 MB), kept in the browser's origin-private file system, and then
- * every line is phonemised and run through onnxruntime-web. Nothing is uploaded
- * and nothing is billed per word.
+ * once (about 63 MB), kept in the browser's origin-private file system, and then
+ * every line is phonemised and run through onnxruntime-web. Only the model is
+ * cached for good — the WASM engines come from a public CDN on each cold load —
+ * but no audio or text ever leaves the device and nothing is billed per word.
  *
  * The public piper-tts-web build only knows the voices it ships paths for, and
  * `sam` is not one of them, so this module registers sam's path in the library's
  * registry and seeds the two model files into the very cache the library reads
  * from (it keys cached files by file name). After that the library loads sam
- * like any other voice and never touches the network again.
+ * like any other voice and never downloads the model again.
  */
 
 import { playAudioUrl } from "@/lib/voice";
