@@ -1,3 +1,13 @@
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -15,6 +25,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import { FELICIA } from "@/lib/felicia";
 import {
   FELICIA_APPEARANCE_DEFAULT,
@@ -37,11 +48,14 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  Film,
   Images,
   Loader2,
   Palette,
+  Play,
   Sparkles,
   Star,
+  Trash2,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
@@ -69,7 +83,20 @@ type LightboxPhoto = {
   title: string;
   /** Set when the picture is one of her permanent gallery photos. */
   galleryId?: string;
+  /** Play it in a player instead of drawing it as a still. */
+  video?: boolean;
 };
+
+/** One video the user added to her gallery. */
+type GalleryVideo = {
+  _id: string;
+  title: string;
+  url: string;
+  createdAt: number;
+};
+
+/** Kept in step with MAX_VIDEO_BYTES in convex/videos.ts. */
+const MAX_VIDEO_MB = 120;
 
 interface QueuedPhotoWithId extends QueueItem {
   id?: string;
@@ -83,7 +110,15 @@ export default function Album() {
   const profile = useQuery(api.feliciaAppearance.profile);
   const setProfilePhoto = useMutation(api.feliciaAppearance.setProfilePhoto);
 
+  const videoRows = useQuery(api.videos.list);
+  const generateVideoUploadUrl = useMutation(api.videos.generateUploadUrl);
+  const saveVideo = useMutation(api.videos.save);
+  const removeVideo = useMutation(api.videos.remove);
+
   const [lightbox, setLightbox] = useState<LightboxPhoto | null>(null);
+  const [uploadingVideo, setUploadingVideo] = useState(false);
+  const [videoToRemove, setVideoToRemove] = useState<GalleryVideo | null>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
   const [hiddenCount, setHiddenCount] = useState<number | null>(null);
   const [developing, setDeveloping] = useState(false);
 
@@ -213,6 +248,7 @@ export default function Album() {
   const lastPhoto = allPhotos[0];
   /** Which gallery photo is her profile picture right now, if any. */
   const avatarGalleryId = profile?.avatarGalleryId ?? null;
+  const videos = (videoRows ?? []) as GalleryVideo[];
 
   async function chooseAsProfile(photo: GalleryPhoto) {
     try {
@@ -223,6 +259,74 @@ export default function Album() {
         error instanceof Error
           ? error.message
           : "Couldn't set her profile picture.",
+      );
+    }
+  }
+
+  /**
+   * Put a video from this device into her gallery.
+   *
+   * Three steps, the Convex way: ask for a one-hour upload URL, POST the file
+   * straight to it, then hand the storage id to the mutation that files it in
+   * the album. The type and size are checked here first so a wrong pick costs
+   * nothing, and again on the server so it is actually enforced.
+   */
+  async function addVideo(file: File) {
+    if (!file.type.startsWith("video/")) {
+      toast.error("That file isn't a video. Pick an MP4, MOV or WebM.");
+      return;
+    }
+    if (file.size > MAX_VIDEO_MB * 1024 * 1024) {
+      toast.error(
+        `That video is ${Math.round(file.size / 1024 / 1024)} MB — keep it under ${MAX_VIDEO_MB} MB.`,
+      );
+      return;
+    }
+
+    setUploadingVideo(true);
+    const toastId = toast.loading("Adding your video to her gallery…");
+    try {
+      const postUrl = await generateVideoUploadUrl({});
+      const response = await fetch(postUrl, {
+        method: "POST",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      if (!response.ok) throw new Error("The upload failed. Try again.");
+
+      const { storageId } = (await response.json()) as {
+        storageId: Id<"_storage">;
+      };
+      const title =
+        file.name
+          .replace(/\.[^.]+$/, "")
+          .replace(/[_-]+/g, " ")
+          .trim()
+          .slice(0, 80) || "Her video";
+
+      await saveVideo({ storageId, title });
+      toast.success("She has it in her gallery now.", { id: toastId });
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "That video didn't upload.",
+        { id: toastId },
+      );
+    } finally {
+      setUploadingVideo(false);
+      if (videoInputRef.current) videoInputRef.current.value = "";
+    }
+  }
+
+  async function confirmRemoveVideo() {
+    const video = videoToRemove;
+    if (!video) return;
+    setVideoToRemove(null);
+    try {
+      await removeVideo({ id: video._id as Id<"galleryVideos"> });
+      toast.success("Removed from her gallery.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Couldn't remove that video.",
       );
     }
   }
@@ -310,6 +414,8 @@ export default function Album() {
 
             <span className="text-xs text-muted-foreground">
               {allPhotos.length + FELICIA_GALLERY.length} photos
+              {videos.length > 0 &&
+                ` · ${videos.length} video${videos.length === 1 ? "" : "s"}`}
             </span>
 
             <Button
@@ -341,12 +447,41 @@ export default function Album() {
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   Kept permanently in the app — these never leave. Tap the star
                   on any of them to make it her profile picture, or just ask her
-                  in the chat and she sends the one that fits.
+                  in the chat and she sends the one that fits. Videos you add
+                  live here too.
                 </p>
               </div>
-              <span className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-[10px] tracking-widest text-primary uppercase">
-                {FELICIA_GALLERY.length} permanent
-              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  ref={videoInputRef}
+                  type="file"
+                  accept="video/*"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) void addVideo(file);
+                  }}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2 rounded-full"
+                  disabled={uploadingVideo}
+                  onClick={() => videoInputRef.current?.click()}
+                >
+                  {uploadingVideo ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Film className="size-3.5" />
+                  )}
+                  Add video
+                </Button>
+                <span className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-[10px] tracking-widest text-primary uppercase">
+                  {FELICIA_GALLERY.length} permanent
+                  {videos.length > 0 && ` · ${videos.length} video`}
+                  {videos.length > 1 && "s"}
+                </span>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">
@@ -420,6 +555,57 @@ export default function Album() {
                   </motion.div>
                 );
               })}
+
+              {videos.map((video) => (
+                <motion.div
+                  key={video._id}
+                  initial={{ opacity: 0, scale: 0.96 }}
+                  whileHover={{ y: -4 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.3 }}
+                  className="group relative overflow-hidden rounded-2xl surface transition-shadow duration-300 hover:shadow-[0_26px_55px_-34px_var(--foreground)]"
+                >
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setLightbox({
+                        url: video.url,
+                        title: video.title,
+                        video: true,
+                      })
+                    }
+                    className="block w-full text-left"
+                    title={video.title}
+                  >
+                    <video
+                      src={video.url}
+                      muted
+                      playsInline
+                      preload="metadata"
+                      className="pointer-events-none aspect-[2/3] w-full bg-black object-cover transition-transform duration-500 group-hover:scale-105"
+                    />
+                    <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                      <span className="flex size-12 items-center justify-center rounded-full border border-white/30 bg-black/45 text-white backdrop-blur-md transition-transform duration-300 group-hover:scale-110">
+                        <Play className="size-5 fill-current" />
+                      </span>
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setVideoToRemove(video)}
+                    title="Remove from her gallery"
+                    aria-label={`Remove ${video.title} from her gallery`}
+                    className="absolute top-2 right-2 flex size-8 items-center justify-center rounded-full border border-white/25 bg-black/40 text-white/85 backdrop-blur-md transition-colors hover:bg-black/60 hover:text-white"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+
+                  <span className="pointer-events-none absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/85 via-black/40 to-transparent px-3 pt-10 pb-3 text-[11px] font-medium text-white/90">
+                    {video.title}
+                  </span>
+                </motion.div>
+              ))}
             </div>
           </section>
 
@@ -529,7 +715,8 @@ export default function Album() {
           {ready && (
             <p className="mt-8 text-center text-xs text-muted-foreground">
               {FELICIA_GALLERY.length} gallery photos are part of the app; new
-              ones she sends are kept in your account only.
+              ones she sends and any videos you add are kept in your account
+              only.
             </p>
           )}
         </div>
@@ -542,15 +729,32 @@ export default function Album() {
         <DialogContent className="max-w-3xl overflow-hidden border-border/60 bg-card/95 p-3 backdrop-blur-xl">
           <DialogHeader className="sr-only">
             <DialogTitle>{lightbox?.title ?? `${FELICIA.name}'s photo`}</DialogTitle>
-            <DialogDescription>A photo of Felicia</DialogDescription>
+            <DialogDescription>
+              {lightbox?.video ? "A video in her gallery" : "A photo of Felicia"}
+            </DialogDescription>
           </DialogHeader>
-          {lightbox && (
-            <img
-              src={lightbox.url}
-              alt={lightbox.title}
-              className="max-h-[72vh] w-full rounded-2xl object-contain"
-            />
-          )}
+          {lightbox &&
+            (lightbox.video ? (
+              <video
+                src={lightbox.url}
+                controls
+                autoPlay
+                loop
+                playsInline
+                onError={() =>
+                  toast.error(
+                    "This browser can't play that file. An MP4 (H.264) always will.",
+                  )
+                }
+                className="max-h-[72vh] w-full rounded-2xl bg-black object-contain"
+              />
+            ) : (
+              <img
+                src={lightbox.url}
+                alt={lightbox.title}
+                className="max-h-[72vh] w-full rounded-2xl object-contain"
+              />
+            ))}
           {lightbox && (
             <div className="flex flex-wrap items-center justify-between gap-2 px-1 pt-1 pb-1">
               <p className="text-xs text-muted-foreground">{lightbox.title}</p>
@@ -580,6 +784,27 @@ export default function Album() {
           )}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={videoToRemove !== null}
+        onOpenChange={(open) => !open && setVideoToRemove(null)}
+      >
+        <AlertDialogContent className="border-border/60 bg-card">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove this video?</AlertDialogTitle>
+            <AlertDialogDescription>
+              "{videoToRemove?.title}" comes out of her gallery, and the file is
+              deleted with it. You can always add it again from your device.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep it</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void confirmRemoveVideo()}>
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={appearOpen} onOpenChange={setAppearOpen}>
         <DialogContent className="max-w-lg border-border/60 bg-card max-h-[90vh] overflow-y-auto">

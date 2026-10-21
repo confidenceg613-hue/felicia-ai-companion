@@ -78,6 +78,16 @@ const schema = defineSchema(
       createdAt: v.number(),
     }).index("by_user", ["userId"]),
 
+    // Videos the user adds to her gallery. The clip itself lives in Convex
+    // storage; this row is what puts it in the album, with a title to show
+    // under it.
+    galleryVideos: defineTable({
+      userId: v.id("users"),
+      storageId: v.id("_storage"),
+      title: v.string(),
+      createdAt: v.number(),
+    }).index("by_user", ["userId"]),
+
     // Felicia's mind map: things she knows, each filed under a category so the
     // graph can colour and cluster them. She builds these from conversation and
     // you can add or edit them yourself.
