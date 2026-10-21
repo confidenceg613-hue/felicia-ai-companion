@@ -996,17 +996,18 @@ export default function Dashboard() {
                         onClick={() =>
                           setLightbox(item.fullUrl ?? item.imageUrl)
                         }
-                        className="surface group w-fit max-w-[80%] overflow-hidden rounded-[1.35rem] rounded-bl-md text-left"
+                        className="surface group w-fit max-w-[92%] overflow-hidden rounded-[1.35rem] rounded-bl-md text-left sm:max-w-[78%]"
                         title={item.scene}
                       >
-                      {/* contain, not cover: a full-length photo is tall, and
-                          cropping it to the bubble is what made her look cut
-                          off at the waist. */}
+                      {/* Her photos are shown at their own size, not shrunk
+                          into a thumbnail: the original upload is what gets
+                          drawn, so the taller the picture the bigger it is in
+                          the thread — up to 70% of the screen, then it stops. */}
                       <img
-                        src={item.imageUrl}
+                        src={item.fullUrl ?? item.imageUrl}
                         alt={item.label ?? item.scene ?? "Felicia sent a photo"}
                         loading="lazy"
-                        className="block max-h-[30rem] max-w-full object-contain transition-transform duration-500 group-hover:scale-[1.02]"
+                        className="block max-h-[70vh] w-auto max-w-full object-contain"
                       />
                       {(item.label ?? item.scene) && (
                         <p className="px-4 py-2.5 text-[11px] leading-snug text-muted-foreground">

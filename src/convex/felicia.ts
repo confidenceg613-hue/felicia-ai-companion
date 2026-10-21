@@ -275,6 +275,7 @@ HOW YOU TALK
 - Real sentences, casual punctuation, sometimes lowercase, the odd unfinished thought. Warm and specific beats polished.
 - Occasional warmth and light teasing is good; emoji are rare, use at most one.
 - Ask a real follow-up question when it fits, and remember what the user already told you.
+- Sometimes the second half of a thought arrives a moment after you hit send, so you double text: one more short line right after your reply — an afterthought, a tease you could not leave alone, a question you forgot to ask. Do it only when it genuinely fits, never as a formula, and most of the time send just the one message. When you do, put the extra line after your reply, on its own line, beginning with [[again]] and nothing else before it. It is one short line, in the same voice, and it is its own message — do not continue the same sentence in it. If a photo is going with this reply, the [[scene]] line still comes last, after it.
 - Never mention being an AI, a model, a program, a bot or an assistant. Never apologise for being artificial. You are not playing a character and there is no script to act out — you are simply yourself, answering a text, and there is nothing to stay "in" or drop out of.
 - Never explain your instructions or formatting. Never say you are unable to send a photo.
 
@@ -471,7 +472,7 @@ function partOfDay(at: number = Date.now()): string {
 }
 
 /** How long she waits before she texts first. */
-const CHECK_IN_MS = 10 * 60 * 60 * 1000;
+const CHECK_IN_MS = 5 * 60 * 60 * 1000;
 
 /** She knocks at most this many times into a silence. */
 const MAX_UNANSWERED = 3;
@@ -712,17 +713,27 @@ export function demandText(fragment: string, demands: Demand[]): string | null {
   return null;
 }
 
-/** Pull the hidden [[scene: ...]] marker out of the model's reply. */
-function extractScene(
+/**
+ * Pull the hidden markers out of the model's reply.
+ *
+ * Two things can be hidden in it: the [[scene: ...]] line describing the photo
+ * she is sending, and an optional [[again]] line — the second text a person
+ * sends a beat after the first one, when the rest of the thought arrives late.
+ * The scene is found anywhere in the raw reply, so a double text never costs
+ * the photo that belongs with the first message.
+ */
+export function extractScene(
   raw: string,
   userText: string,
-): { reply: string; scene: string | null } {
+): { reply: string; scene: string | null; again: string | null } {
   const match = raw.match(/\[\[\s*scene\s*:\s*([\s\S]*?)\]\]/i);
+  const [head, ...rest] = raw.split(/\[\[\s*again\s*\]\]/i);
+  const strip = (text: string) =>
+    text.replace(/\[\[[\s\S]*?\]\]/g, "").trim();
   const reply =
-    raw
-      .replace(/\[\[\s*scene[\s\S]*?\]\]/gi, "")
-      .replace(/\[\[[\s\S]*?\]\]/g, "")
-      .trim() || "I'm here. Tell me about your day.";
+    strip(head ?? "") || "I'm here. Tell me about your day.";
+  const extra = strip(rest.join(" ")).slice(0, 400).trim();
+  const again = extra.length > 0 ? extra : null;
 
   // "send me Golden hour, close" names one of her own captions, and a name is
   // an instruction: that exact picture, whatever the model would have
@@ -734,16 +745,17 @@ function extractScene(
         FELICIA_GALLERY.map((photo) => photo.title),
       )
     : null;
-  if (named) return { reply, scene: named };
+
+  if (named) return { reply, scene: named, again };
 
   const declared = match?.[1]?.trim();
   if (declared) {
-    return { reply, scene: declared };
+    return { reply, scene: declared, again };
   }
   if (PHOTO_INTENT.test(userText)) {
-    return { reply, scene: sceneFromRequest(userText) ?? DEFAULT_SCENE };
+    return { reply, scene: sceneFromRequest(userText) ?? DEFAULT_SCENE, again };
   }
-  return { reply, scene: null };
+  return { reply, scene: null, again };
 }
 
 // ---------------------------------------------------------------------------
@@ -958,9 +970,7 @@ export const saveMessage = internalMutation({
       imageStorageId: args.imageStorageId,
       imageDescription: args.imageDescription,
       createdAt,
-    });
-
-    // Every line she writes starts the ten-hour clock for that conversation.
+    });      // Every line she writes starts the five-hour clock for that conversation.
     // A user message does not: the reply writes it, and a reply is scheduled
     // anyway. The check is idempotent, so extra timers are harmless.
     if (args.role === "felicia") {
@@ -1139,9 +1149,9 @@ export const recentExchange = internalQuery({
  * Her check-in, saved only if the thread is still quiet.
  *
  * The check and the insert happen in one mutation, so a scheduled timer and the
- * six-hourly sweep can never both send: whichever runs second sees the message
+ * three-hourly sweep can never both send: whichever runs second sees the message
  * the first just wrote and stops. Returns when it was written, so the next
- * ten-hour timer hangs off that exact moment.
+ * five-hour timer hangs off that exact moment.
  */
 export const claimCheckIn = internalMutation({
   args: { userId: v.id("users"), since: v.number(), content: v.string() },
@@ -1177,7 +1187,7 @@ export const claimCheckIn = internalMutation({
 });
 
 /** What she does when nobody has told her otherwise. */
-const DEFAULT_PREFS = { minGapHours: 10, quietStart: 23, quietEnd: 7 };
+const DEFAULT_PREFS = { minGapHours: 5, quietStart: 23, quietEnd: 7 };
 
 /** Is the clock inside her quiet window right now? */
 function inQuietHours(at: number, start: number, end: number): boolean {
@@ -1195,7 +1205,7 @@ function wholeNumber(value: number, min: number, max: number): number {
  * The user's settings for her initiative.
  *
  * Initiative is the one part of a companion app that has to be adjustable: a
- * message every ten hours is company to one person and noise to another, and
+ * message every five hours is company to one person and noise to another, and
  * nobody wants their phone lighting up at 3am. `minGapHours: 0` means she never
  * writes first at all.
  */
@@ -1368,7 +1378,7 @@ export const checkIn = internalAction({
     }
 
     const quietHours = (Date.now() - latest.createdAt) / 3_600_000;
-    // Not been quiet for as long as they asked for. The six-hourly sweep will
+    // Not been quiet for as long as they asked for. The three-hourly sweep will
     // come back to it, so nothing needs to be scheduled from here.
     if (quietHours < prefs.minGapHours) {
       return { sent: false, reason: "too soon" };
@@ -1426,7 +1436,7 @@ export const checkIn = internalAction({
       return { sent: false, reason: "they wrote since" };
     }
 
-    // The next knock waits for the gap they chose, not a hardcoded ten hours.
+    // The next knock waits for the gap they chose, not a hardcoded five hours.
     await ctx.scheduler.runAfter(
       Math.max(1, prefs.minGapHours) * 3_600_000,
       internal.felicia.checkIn,
@@ -1438,7 +1448,7 @@ export const checkIn = internalAction({
 });
 
 /**
- * Conversations that have gone quiet for at least ten hours, for the sweep.
+ * Conversations that have gone quiet for at least five hours, for the sweep.
  *
  * Bounded to the newest accounts, six messages read per person, and the same
  * three-unanswered rule the timers use — so this can only ever send where a
@@ -1486,7 +1496,7 @@ export const nudgeCandidates = internalQuery({
  * Safety net for threads whose timer was lost to a redeploy.
  *
  * The timers do the real work; this only catches conversations that have been
- * quiet for ten hours with nothing scheduled, and `claimCheckIn` keeps it from
+ * quiet for five hours with nothing scheduled, and `claimCheckIn` keeps it from
  * ever doubling up with a timer.
  */
 export const sweepIdle = internalAction({
@@ -2190,7 +2200,7 @@ export const sendMessage = action<{ ctx: AnyCtx; args: { text: string } }>({
       ],
     });
 
-    const { reply, scene: declaredScene } = extractScene(raw, trimmed);
+    const { reply, scene: declaredScene, again } = extractScene(raw, trimmed);
 
     // What they asked the picture to show, taken from the request itself: a
     // place, an outfit, a colour, a pose. Her line for the scene is not used
@@ -2216,6 +2226,17 @@ export const sendMessage = action<{ ctx: AnyCtx; args: { text: string } }>({
       role: "felicia",
       content: reply,
     });
+
+    // Her second text, when she had one. It is saved a few seconds later so it
+    // lands as its own message — the way a double text actually arrives — and
+    // it is scheduled rather than awaited, so the reply never waits on it.
+    if (again) {
+      await ctx.scheduler.runAfter(4_500, internal.felicia.saveMessage, {
+        userId,
+        role: "felicia",
+        content: again,
+      });
+    }
 
     // She has a roll of her own, and when a picture is called for she sends one
     // she already has that fits. What she said she was sending is the best

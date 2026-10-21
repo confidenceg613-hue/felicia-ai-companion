@@ -118,7 +118,7 @@ const schema = defineSchema(
       .index("by_user_to", ["userId", "toCreatedAt"]),
 
     // How she is allowed to reach out. One row per user; anything missing falls
-    // back to the defaults in felicia.ts (texts first every ten hours, silent
+    // back to the defaults in felicia.ts (texts first every five hours, silent
     // between 23:00 and 07:00 Lagos time).
     companionPrefs: defineTable({
       userId: v.id("users"),

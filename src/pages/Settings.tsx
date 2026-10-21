@@ -39,13 +39,13 @@ export default function Settings() {
   const prefs = useQuery(api.felicia.prefs);
   const savePrefs = useMutation(api.felicia.savePrefs);
 
-  const gap = prefs?.minGapHours ?? 10;
+  const gap = prefs?.minGapHours ?? 5;
   const quietStart = prefs?.quietStart ?? 23;
   const quietEnd = prefs?.quietEnd ?? 7;
 
   const GAPS = [
     { value: 0, label: "Never", hint: "You start every conversation." },
-    { value: 10, label: "Every 10 hours", hint: "A check-in when a thread goes quiet." },
+    { value: 5, label: "Every 5 hours", hint: "A check-in when a thread goes quiet." },
     { value: 24, label: "Once a day", hint: "At most one message a day." },
   ];
 
@@ -63,7 +63,7 @@ export default function Settings() {
           ? "She'll wait for you to write first."
           : hours === 24
             ? "She'll reach out once a day at most."
-            : "She'll reach out every 10 hours of quiet.",
+            : `She'll reach out every ${hours} hours of quiet.`,
       );
     } catch (error) {
       toast.error(
