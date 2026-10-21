@@ -23,6 +23,7 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { useAuth } from "@/hooks/use-auth";
 import { useFeliciaAvatar } from "@/hooks/use-felicia-avatar";
 import { FELICIA } from "@/lib/felicia";
+import { FELICIA_GALLERY } from "@/lib/gallery";
 import { DEVELOP_MS, preloadImage } from "@/lib/photo";
 import { cn } from "@/lib/utils";
 import { beginVoiceNote, playAudioUrl, speakWithBrowser } from "@/lib/voice";
@@ -178,6 +179,13 @@ export default function Dashboard() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sendingPhoto, setSendingPhoto] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  /**
+   * Her captions, one tap away from the composer. Typing "send me <caption>"
+   * works too, but nobody remembers the wording of a title they scrolled past
+   * once, so the list is searchable and the exact wording is filled in for you.
+   */
+  const [rollOpen, setRollOpen] = useState(false);
+  const [rollTerm, setRollTerm] = useState("");
   /** The id of the reply that should shimmer when it arrives. */
   const [sparkleBurstId, setSparkleBurstId] = useState<string | null>(null);
   /**
@@ -552,6 +560,22 @@ export default function Dashboard() {
   }
 
   const selectedPhoto = staged.find((item) => item.id === selectedId);
+
+  /** Her titles, narrowed by whatever is typed in the roll dialog. */
+  const rollQuery = rollTerm.trim().toLowerCase();
+  const rollMatches = FELICIA_GALLERY.filter(
+    (photo) =>
+      rollQuery.length === 0 ||
+      photo.title.toLowerCase().includes(rollQuery) ||
+      photo.tags.some((tag) => tag.includes(rollQuery)),
+  );
+
+  /** Ask her for one of her own pictures by its caption. */
+  function askForTitle(title: string) {
+    setRollOpen(false);
+    setRollTerm("");
+    void handleSend(`send me ${title}`);
+  }
 
   return (
     <>
@@ -1279,6 +1303,18 @@ export default function Dashboard() {
                     <Paperclip className="size-3.5" />
                   </Button>
 
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 shrink-0 rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                    title="Ask for one of her pictures"
+                    disabled={composing}
+                    onClick={() => setRollOpen(true)}
+                  >
+                    <Images className="size-3.5" />
+                  </Button>
+
                   <Textarea
                     value={draft}
                     onChange={(event) => setDraft(event.target.value)}
@@ -1412,6 +1448,87 @@ export default function Dashboard() {
           >
             Edit Shared Notes
           </Button>
+        </DialogContent>
+      </Dialog>
+
+      {/* her roll — every caption she has, searchable, one tap to ask for it */}
+      <Dialog
+        open={rollOpen}
+        onOpenChange={(open) => {
+          setRollOpen(open);
+          if (!open) setRollTerm("");
+        }}
+      >
+        <DialogContent className="max-w-md gap-0 overflow-hidden border-border/60 bg-card/95 p-0 backdrop-blur-xl">
+          <DialogHeader className="border-b border-border/50 px-5 py-4">
+            <DialogTitle className="font-display text-xl tracking-tight">
+              Her pictures
+            </DialogTitle>
+            <DialogDescription>
+              Tap a title and she sends that exact photo.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex items-center gap-2 border-b border-border/50 px-4 py-2">
+            <Search className="size-4 shrink-0 text-muted-foreground" />
+            <Input
+              autoFocus
+              value={rollTerm}
+              onChange={(event) => setRollTerm(event.target.value)}
+              placeholder="Search her titles…"
+              className="h-8 flex-1 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+            />
+            {rollTerm.length > 0 && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7 shrink-0"
+                title="Clear"
+                onClick={() => setRollTerm("")}
+              >
+                <X className="size-3.5" />
+              </Button>
+            )}
+          </div>
+
+          <div className="max-h-[52vh] overflow-y-auto p-2">
+            {rollMatches.length === 0 ? (
+              <p className="px-2 py-6 text-center text-xs text-muted-foreground/70">
+                Nothing she has is called “{rollTerm.trim()}”.
+              </p>
+            ) : (
+              rollMatches.map((photo) => (
+                <button
+                  key={photo.id}
+                  type="button"
+                  onClick={() => askForTitle(photo.title)}
+                  className="flex w-full items-center gap-3 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-primary/10"
+                >
+                  <img
+                    src={photo.url}
+                    alt=""
+                    loading="lazy"
+                    className="size-10 shrink-0 rounded-lg border border-border/40 object-cover"
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13px] text-foreground">
+                      {photo.title}
+                    </span>
+                    <span className="block truncate text-[10px] text-muted-foreground/70">
+                      {photo.tags.slice(0, 3).join(" · ")}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-[10px] text-primary">
+                    ask
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+
+          <p className="border-t border-border/50 px-5 py-2.5 text-[10px] text-muted-foreground/70">
+            {FELICIA_GALLERY.length} pictures · tap one to send “send me …”
+          </p>
         </DialogContent>
       </Dialog>
 

@@ -8,9 +8,11 @@ import {
 import { FELICIA_GALLERY } from "../lib/gallery";
 import {
   bestPhoto,
+  photoByTitle,
   photoFits,
   requestDemands,
   textFits,
+  titleNamedIn,
   type Demand,
   type GalleryCandidate,
   type GalleryMatch,
@@ -609,6 +611,14 @@ const PHOTO_INTENT =
   /\b(photo|photos|picture|pictures|pics?|selfie|selfies|snap|snaps|polaroid)\b/i;
 
 /**
+ * A message that asks to be shown something at all — the bar a caption has to
+ * clear before it counts as a request. Without it, "I'm getting ready to go
+ * out" would name a picture and be answered with one they never asked for.
+ */
+const ASKS_TO_SEE =
+  /\b(photo|photos|picture|pictures|pics?|selfie|selfies|snap|snaps|polaroid|send|show|see)\b/i;
+
+/**
  * A request for her whole figure rather than her face.
  *
  * Her roll is shot as portraits, so picking from it here is what kept answering
@@ -701,6 +711,18 @@ function extractScene(
       .replace(/\[\[\s*scene[\s\S]*?\]\]/gi, "")
       .replace(/\[\[[\s\S]*?\]\]/g, "")
       .trim() || "I'm here. Tell me about your day.";
+
+  // "send me Golden hour, close" names one of her own captions, and a name is
+  // an instruction: that exact picture, whatever the model would have
+  // improvised instead. The scene is set to the caption so the roll lookup
+  // below can find it without guessing.
+  const named = ASKS_TO_SEE.test(userText)
+    ? titleNamedIn(
+        userText,
+        FELICIA_GALLERY.map((photo) => photo.title),
+      )
+    : null;
+  if (named) return { reply, scene: named };
 
   const declared = match?.[1]?.trim();
   if (declared) {
@@ -2198,10 +2220,17 @@ export const sendMessage = action<{ ctx: AnyCtx; args: { text: string } }>({
     // nothing in it survives she takes a new photo instead of sending one that
     // only resembles the ask.
     let picked: GalleryMatch | null = null;
-    if (scene && !wantsFullBody && !wantsFresh) {
+    if (scene && !wantsFullBody) {
       const roll = await herPhotoRoll(ctx, userId);
+      // A caption she has been asked for by name outranks both the score and
+      // "take a new one": the user pointed at a specific picture.
+      const named = ASKS_TO_SEE.test(trimmed) ? photoByTitle(trimmed, roll) : null;
       const fitting = roll.filter((candidate) => photoFits(candidate, demands));
-      picked = bestPhoto([scene, trimmed, reply], fitting);
+      picked = named
+        ? { candidate: named, score: Number.MAX_SAFE_INTEGER }
+        : wantsFresh
+          ? null
+          : bestPhoto([scene, trimmed, reply], fitting);
     }
 
     if (picked) {

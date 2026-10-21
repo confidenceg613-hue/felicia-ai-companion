@@ -43,6 +43,48 @@ export type GalleryMatch = {
   score: number;
 };
 
+/**
+ * Fold a caption or a message into the same shape — lowercase words, single
+ * spaces — so one can be found inside the other however it was typed.
+ */
+export function foldText(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+/**
+ * The caption named outright in `text`, if there is one.
+ *
+ * "send me Golden hour, close" is not a description to be matched against — it
+ * is the name of one of her pictures, and a name is an instruction. Everything
+ * else (the score below, the demands) exists to guess what an ordinary request
+ * is pointing at; this is the case where the guessing is already done.
+ */
+export function titleNamedIn(
+  text: string,
+  titles: readonly string[],
+): string | null {
+  const said = ` ${foldText(text)} `;
+  if (said.trim().length === 0) return null;
+  for (const title of titles) {
+    const folded = foldText(title);
+    if (folded && said.includes(` ${folded} `)) return title;
+  }
+  return null;
+}
+
+/** The photo from her roll whose caption was named outright, or null. */
+export function photoByTitle(
+  text: string,
+  candidates: readonly GalleryCandidate[],
+): GalleryCandidate | null {
+  const title = titleNamedIn(
+    text,
+    candidates.map((candidate) => candidate.label),
+  );
+  if (title === null) return null;
+  return candidates.find((candidate) => candidate.label === title) ?? null;
+}
+
 /** How well one photo fits, and how it got there. */
 type PhotoScore = {
   total: number;
