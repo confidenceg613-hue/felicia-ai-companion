@@ -17,20 +17,16 @@ import {
   type GalleryCandidate,
   type GalleryMatch,
 } from "../lib/galleryMatch";
-import { hasMatureProvider, veniceApiKey } from "./config";
-
-function isVeniceConfigured(): boolean {
-  return Boolean(veniceApiKey());
-}
+import { isVeniceConfigured } from "./config";
 import { isIntimate, isRefusal, isRefusalMessage } from "./mature";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { paginationOptsValidator } from "convex/server";
 
-// Her words come from Groq, and her photos from Venice and nowhere else. Both
-// are real Convex actions (`groq.ts`, `images.ts`) rather than the placeholder
-// action names this file used to pass to ctx.runAction, which is what made her
-// chat look connected but never reply.
+// Her words, her voice, her memories and her photos all come from Venice, the
+// only provider this app talks to. They are real Convex actions (`venice.ts`,
+// `images.ts`) rather than the placeholder action names this file used to pass
+// to ctx.runAction, which is what made her chat look connected but never reply.
 import {
   action,
   internalAction,
@@ -62,10 +58,9 @@ const MAX_MESSAGE_LENGTH = 2000;
  * window rather than the last couple of exchanges — and the conversation itself
  * is stored in full either way; this only bounds what is sent to the model.
  *
- * The bound is deliberately tight because every reply pays for it. Groq's free
- * tier allows 200,000 tokens a day for the whole project, so pasting fifty
- * messages plus her persona prompt into each request is what exhausts the day's
- * budget after a handful of exchanges.
+ * The bound is deliberately tight because every reply pays for it — Venice
+ * bills per token, and pasting fifty messages plus her persona prompt into each
+ * request is what drains a balance after a handful of exchanges.
  */
 const HISTORY_LIMIT = 24;
 
@@ -608,9 +603,8 @@ function buildImagePrompt(scene: string, look: string = FELICIA_LOOK): string {
 }
 
 /**
- * Cloudflare's prompt classifier rejects harmless prompts at random rather than
- * on particular words, so a rejection is worth retrying rather than reporting.
- * Venice answers a safety rejection the same way, with an error body instead.
+ * Venice answers a safety rejection with an error body rather than an
+ * exception, so the scene is retried plainer rather than reported as a fault.
  */
 function isFilterError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
@@ -766,25 +760,23 @@ export function extractScene(
 /**
  * Which of Felicia's backends are present on this deployment.
  *
- * Chat needs Groq. Photos need Venice. Voice needs Groq's Orpheus or
- * Cloudflare Workers AI.
+ * Everything — chat, the memories she writes, her voice, her eyes and her
+ * photos — runs on the one Venice key, so a single flag covers all of it.
  *
  * Environment variables are per-deployment, so a key added while working in
- * the preview is not on the published deployment. Reporting each backend
- * separately is what makes that visible instead of showing a single generic
- * "not connected" banner that cannot say which one is missing.
+ * the preview is not on the published deployment. Reporting it is what makes
+ * that visible instead of showing a generic "not connected" banner that
+ * cannot say what is missing.
  */
 export const connectorStatus = query({
   args: {},
   handler: async () => ({
-    // Chat and voice are now both Venice-only on this deployment.
     configured: isVeniceConfigured(),
     chatBackend: "venice",
     chatConfigured: isVeniceConfigured(),
     voiceConfigured: isVeniceConfigured(),
-    // Photos still come from Venice's image endpoints.
-    imageConfigured: hasMatureProvider(),
-    imageFallbackConfigured: hasMatureProvider(),
+    imageConfigured: isVeniceConfigured(),
+    imageFallbackConfigured: isVeniceConfigured(),
   }),
 });export const messages = query({
   args: {},
@@ -1401,7 +1393,7 @@ export const checkIn = internalAction({
 
     let line = "";
     try {
-      const raw = await ctx.runAction(internal.groq.chat, {
+      const raw = await ctx.runAction(internal.venice.chat, {
         messages: [
           {
             role: "system",
@@ -2171,7 +2163,7 @@ export const sendMessage = action({
     );
 
     // This deployment only talks to Venice for Felicia's words.
-    const raw = await ctx.runAction(internal.groq.chat, {
+    const raw = await ctx.runAction(internal.venice.chat, {
       intimate: isIntimate(trimmed, spoke),
       messages: [
         {
@@ -2429,10 +2421,10 @@ export const speakMessage = action({
       return { url: await ctx.storage.getUrl(info.audioStorageId) };
     }
 
-    // Her voice is rendered by Groq. When it can't be — no key, or the audio
+    // Her voice is rendered by Venice. When it can't be — no key, or the audio
     // endpoint refusing — this reports no url and the client reads the line with
     // the browser's own voice, which is better than a silent reply.
-    const audioStorageId = await ctx.runAction(internal.groq.speak, {
+    const audioStorageId = await ctx.runAction(internal.venice.speak, {
       text: info.content,
     });
     if (!audioStorageId) return { url: null };
@@ -2476,7 +2468,7 @@ export const startCall = action({
       userId,
     });
 
-    const raw = await ctx.runAction(internal.groq.chat, {
+    const raw = await ctx.runAction(internal.venice.chat, {
       intimate: false,
       messages: [
         {
@@ -2582,7 +2574,7 @@ export const sendUserPhoto = action({
       userId,
     });
 
-    const raw = await ctx.runAction(internal.groq.chat, {
+    const raw = await ctx.runAction(internal.venice.chat, {
       intimate: false,
       messages: [
         {
@@ -2851,7 +2843,7 @@ export const captureMemories = action({
       .filter((line: string) => !line.endsWith(": [...]"))
       .join("\n");
 
-    const raw = await ctx.runAction(internal.groq.chat, {
+    const raw = await ctx.runAction(internal.venice.chat, {
       intimate: false,
       messages: [
         {
@@ -2983,7 +2975,7 @@ export const writeChapter = internalAction({
       .join("\n")
       .slice(0, CHAPTER_TRANSCRIPT_CHARS);
 
-    const raw = await ctx.runAction(internal.groq.chat, {
+    const raw = await ctx.runAction(internal.venice.chat, {
       intimate: false,
       messages: [
         {

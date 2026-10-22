@@ -2,21 +2,19 @@
 
 import { internalAction } from "./_generated/server";
 import { v } from "convex/values";
-import { aiDashScopeApiKey, veniceApiKey } from "./config";
+import { veniceApiKey } from "./config";
 
 /**
  * Her eyes.
  *
  * Everything Felicia is shown — the pictures in her own gallery, the ones she
- * sends, and the ones the user shares — goes through Qwen's vision model before
- * she talks about it, so she reacts to what is actually in the frame instead of
- * to the fact that a picture arrived.
+ * sends, and the ones the user shares — goes through a vision model before she
+ * talks about it, so she reacts to what is actually in the frame instead of to
+ * the fact that a picture arrived.
  *
- * Qwen-VL is reached on whichever account this deployment already has. Venice
- * hosts `qwen3-vl-235b-a22b`, which is the same model the chat backend is
- * already billed against, and Alibaba's own DashScope endpoint is used first
- * whenever `DASHSCOPE_API_KEY` is present. Both speak the OpenAI chat format, so
- * the request body is identical and only the base URL, key and model id differ.
+ * Venice hosts `qwen3-vl-235b-a22b`, so her eyes are billed to the same key as
+ * her words, her voice and her photos. The endpoint speaks the OpenAI chat
+ * format, so the request body is the one any OpenAI client would send.
  */
 type VisionProvider = {
   name: string;
@@ -36,34 +34,6 @@ const VISION_PROMPT =
 /** Every vision backend this deployment can actually reach, best first. */
 function providers(): VisionProvider[] {
   const list: VisionProvider[] = [];
-
-  // The deployment's own AI gateway, which needs no extra account and already
-  // serves Qwen3-VL (`qwen/qwen3-vl-235b-a22b-instruct`). This is the default
-  // pair of eyes; the direct Qwen accounts below are only used if it is absent.
-  const gateway = process.env.VLY_INTEGRATION_KEY;
-  if (gateway) {
-    list.push({
-      name: "gateway",
-      url: "https://integrations.vly.ai/v1/llm/chat/completions",
-      key: gateway,
-      models: ["alibaba/qwen3-vl-instruct"],
-    });
-  }
-
-  const dashscope = aiDashScopeApiKey();
-  if (dashscope) {
-    list.push({
-      name: "dashscope",
-      url: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions",
-      key: dashscope,
-      models: [
-        "qwen3-vl-plus",
-        "qwen-vl-max-latest",
-        "qwen-vl-plus",
-        "qwen2.5-vl-72b-instruct",
-      ],
-    });
-  }
 
   const venice = veniceApiKey();
   if (venice) {
@@ -121,8 +91,7 @@ export async function describeImage(
     return {
       text: null,
       model: null,
-      error:
-        "No vision key on this deployment — add DASHSCOPE_API_KEY or VENICE_API_KEY.",
+      error: "No vision key on this deployment — add the Venice key in the Keys tab.",
     };
   }
 

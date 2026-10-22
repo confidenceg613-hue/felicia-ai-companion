@@ -26,7 +26,6 @@ import { FELICIA } from "@/lib/felicia";
 import { FELICIA_GALLERY } from "@/lib/gallery";
 import { cn } from "@/lib/utils";
 import { DEVELOP_MS, preloadImage } from "@/lib/photo";
-import { speakWithPiper } from "@/lib/piper";
 import {
   hasSpeechRecognition,
   listenOnce,
@@ -76,10 +75,9 @@ function formatDuration(seconds: number) {
 /**
  * A voice call with Felicia.
  *
- * Her lines are spoken on this device by Piper (en_US/sam/medium), which is free
- * and needs no key. The Groq / Cloudflare voices are the fallback when Piper
- * can't run here, and the device voice is the last resort — so a call always has
- * something to say, even with a spent quota or a blocked download.
+ * Her lines are rendered by Venice's text-to-speech and streamed back as audio —
+ * the same key as her chat. The device voice is the last resort, so a call
+ * always has something to say even when Venice can't be reached.
  *
  * Your side is transcribed on device by the browser.
  */
@@ -197,17 +195,15 @@ export function FeliciaCall({
       setStatus("speaking");
       setLastLine(text);
 
-      // Piper first — her real voice, on device, no cost. The mouth starts when
-      // the sound does, not while the voice is still being rendered.
+      // Venice renders her line — her real voice, the same key as her chat. The
+      // mouth starts when the sound does, not while it is still being rendered.
       const startTalking = () => setTalking(true);
-      let played = await speakWithPiper(text, undefined, startTalking);
-      if (!played) {
-        try {
-          const { url } = await speakMessage({ messageId });
-          if (url) played = await playAudioUrl(url, startTalking);
-        } catch {
-          played = false;
-        }
+      let played = false;
+      try {
+        const { url } = await speakMessage({ messageId });
+        if (url) played = await playAudioUrl(url, startTalking);
+      } catch {
+        played = false;
       }
 
       if (!active()) {

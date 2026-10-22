@@ -3,7 +3,7 @@
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { internalAction } from "./_generated/server";
-import { aiDashScopeApiKey, veniceApiKey } from "./config";
+import { veniceApiKey } from "./config";
 
 /**
  * Telling a retry from a cause worth reporting.
@@ -21,12 +21,14 @@ const QV_ASPECT_RATIO = "2:3";
 /**
  * Her photographers, in order of preference.
  *
- * qwen-image-3-pro is asked for first: it holds a description together — body,
- * hair, outfit and room all come back the way the prompt asked. lustify-v8 and
- * venice-sd35 sit behind it in case the first is ever retired or rate-limited.
+ * All three are Venice image models reached with the same key as her words and
+ * her voice. qwen-image-3-pro is asked for first: it holds a description
+ * together — body, hair, outfit and room all come back the way the prompt
+ * asked. lustify-v8 and venice-sd35 sit behind it in case the first is ever
+ * retired or rate-limited.
  *
- * The two families frame themselves differently, which is not optional: Qwen
- * Image wants an aspect ratio and answers png, and the SDXL family takes
+ * The two families frame themselves differently, which is not optional: the
+ * Qwen family wants an aspect ratio and answers png, and the SDXL family takes
  * pixels, steps and a style preset. Sending one family the other's sizing is
  * the mistake that 400s a request that had nothing else wrong with it.
  */
@@ -59,121 +61,20 @@ export const generate = internalAction({
     const trimmed = prompt.trim();
     if (!trimmed) throw new Error("A photo needs a scene to describe.");
 
-    const key = aiDashScopeApiKey();
-    if (key) {
-      try {
-        return { storageId: await viaQwen(key, trimmed, ctx) };
-      } catch (error) {
-        // A transient rejection becomes a retry hint; a key problem is kept.
-        if (!isRetryablePhotoFailure(error)) throw error;
-      }
+    const key = veniceApiKey();
+    if (!key) {
+      throw new Error(
+        "Her photos are taken by Venice, the same key as her chat — add it in " +
+          "this project's Keys settings and she starts shooting again.",
+      );
     }
 
-    const venice = veniceApiKey();
-    if (venice) {
-      try {
-        return { storageId: await viaVenice(venice, trimmed, ctx) };
-      } catch (error) {
-        if (!isRetryablePhotoFailure(error)) throw error;
-      }
-    }
-
-    throw new Error(
-      "Her photos are taken by Alibaba's Qwen Image (free for the first 10) " +
-        "or Venice. Neither is set up on this deployment — add the key in the " +
-        "Keys tab, or top up Venice, and she starts shooting again.",
-    );
+    return { storageId: await viaVenice(key, trimmed, ctx) };
   },
 });
 
 /**
- * One round trip to Alibaba Qwen Image, stored as a Convex file.
- *
- * `safe_mode` and `hide_watermark` are accepted here even though Qwen ignores
- * them, so the request body is identical except for the model-specific
- * sizing. The 1K resolution tier keeps the first 10 images cheap; 2K is
- * available later if the free quota runs out.
- */
-async function viaQwen(
-  key: string,
-  prompt: string,
-  ctx: StorageCtx,
-): Promise<Id<"_storage">> {
-  const failures: string[] = [];
-
-  for (const model of VENICE_IMAGE_MODELS) {
-    const response = await fetch(
-      "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/images/generations",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${key}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: model.id,
-          prompt,
-          // Qwen's family rejects width/height with a 400 and wants an aspect
-          // ratio plus its own resolution tier; it answers with a png.
-          aspect_ratio: model.aspectRatio ? QV_ASPECT_RATIO : undefined,
-          resolution: model.aspectRatio ? "1K" : undefined,
-          response_format: "png",
-          output_format: "png",
-          negative_prompt: VENICE_NEGATIVE,
-          // Qwen accepts `safe_mode` and `hide_watermark` as harmless hints,
-          // so keep the same personal-photo flags as her Venice shoots.
-          safe_mode: false,
-          hide_watermark: true,
-        }),
-      },
-    );
-
-    if (!response.ok) {
-      const detail = (await response.text()).slice(0, 300);
-      failures.push(`${model.id} (${response.status}) ${detail}`);
-
-      // An empty balance or a rejected key is the same for every model, so it
-      // is reported straight away rather than retried against a dead account.
-      if (response.status === 401 || response.status === 402) {
-        throw new Error(
-          response.status === 402
-            ? "Alibaba's free Qwen Image trial is out of quota — add a key to " +
-              "any Qwen Image plan in the Keys tab, and she takes photos again."
-            : `Alibaba rejected the API key — re-add it in this project's Keys ` +
-              `settings. ${detail}`,
-        );
-      }
-      continue;
-    }
-
-    const payload = (await response.json()) as {
-      output?: { kind: string; images?: Array<{ base64?: string }> };
-      error?: { message: string };
-    };
-
-    if (payload.output?.kind === "success" && payload.output.images?.[0]?.base64) {
-      const base64 = payload.output.images[0].base64;
-      if (base64) {
-        return await storeBase64(stripDataUrl(base64), ctx, "image/png");
-      }
-    }
-
-    if (payload.error?.message) {
-      failures.push(`${model.id}: ${payload.error.message}`);
-    } else {
-      failures.push(
-        `${model.id}: finished with no image (${JSON.stringify(payload).slice(0, 200)})`,
-      );
-    }
-  }
-
-  throw new Error(
-    `Alibaba couldn't take that photo. ${failures.join(" · ")} — add a key to any Qwen Image plan in the project's Keys settings`,
-  );
-}
-
-/**
- * One round trip to Venice, stored as a Convex file (second photographer).
+ * One round trip to Venice, stored as a Convex file.
  */
 async function viaVenice(
   key: string,
@@ -195,8 +96,8 @@ async function viaVenice(
         negative_prompt: VENICE_NEGATIVE,
         safe_mode: false,
         hide_watermark: true,
-        // Qwen asks for a ratio and its own resolution tier, and answers png;
-        // the SDXL-family models take pixels, steps and a style preset.
+        // The Qwen family asks for a ratio and its own resolution tier, and
+        // answers png; the SDXL family takes pixels, steps and a style preset.
         ...(model.aspectRatio
           ? {
               aspect_ratio: QV_ASPECT_RATIO,
@@ -240,7 +141,11 @@ async function viaVenice(
       failures.push(`${model.id}: finished with no image`);
       continue;
     }
-    return await storeBase64(stripDataUrl(base64), ctx, model.aspectRatio ? "image/png" : "image/webp");
+    return await storeBase64(
+      stripDataUrl(base64),
+      ctx,
+      model.aspectRatio ? "image/png" : "image/webp",
+    );
   }
 
   throw new Error(

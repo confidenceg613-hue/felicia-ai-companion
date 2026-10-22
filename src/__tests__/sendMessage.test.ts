@@ -1,5 +1,5 @@
 // Development harness for `sendMessage` — the whole read, decide and store path
-// of one message, with Groq and the database mocked out. Excluded from the
+// of one message, with Venice and the database mocked out. Excluded from the
 // app's tsc/vite builds. Run it with:
 //   bun test src/__tests__/sendMessage.test.ts
 //
@@ -216,7 +216,7 @@ function makeBag(): Bag {
       },
       async runAction(name, args) {
         const called = refName(name);
-        if (!called.endsWith("groq:chat")) {
+        if (!called.endsWith("venice:chat")) {
           throw new Error(`unmocked runAction: ${called}`);
         }
         const messages_ =
