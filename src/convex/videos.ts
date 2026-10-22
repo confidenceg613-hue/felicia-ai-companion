@@ -9,6 +9,7 @@
 
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
+import { FELICIA_APPEARANCE_DEFAULT } from "../lib/felicia";
 import { internalMutation, mutation, query } from "./_generated/server";
 
 // The rest of this codebase types the Convex context loosely, so these follow
@@ -194,6 +195,99 @@ export const saveImported = internalMutation({
       title,
       createdAt: Date.now(),
     });
+    return null;
+  },
+});
+
+/**
+ * The clip her camera plays by itself.
+ *
+ * Her camera feed used to be a still picture, brought to life in the browser.
+ * When a gallery video is chosen here, that clip plays in its place — looping,
+ * muted, the way a webcam feed would. Null means "use the picture instead",
+ * which is what a fresh account gets.
+ *
+ * The row is stored beside her appearance and is per account, so two people
+ * signed into the same deployment each see the video they picked.
+ */
+export const hero = query({
+  args: {},
+  handler: async (ctx: AnyCtx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return null;
+
+    const row = (await ctx.db
+      .query("feliciaAppearance")
+      .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) =>
+        q.eq("userId", userId),
+      )
+      .unique()) as { heroVideoId?: string } | null;
+    if (!row?.heroVideoId) return null;
+
+    const video = (await ctx.db.get(row.heroVideoId)) as {
+      userId: string;
+      title: string;
+      storageId: string;
+    } | null;
+    // A video removed from the gallery leaves a stale id behind; that is not an
+    // error, it just means she goes back to her picture.
+    if (!video || video.userId !== userId) return null;
+
+    const url = await ctx.storage.getUrl(video.storageId);
+    if (!url) return null;
+
+    return { _id: row.heroVideoId, title: video.title, url };
+  },
+});
+
+/** Choose which gallery video auto-plays on her camera. */
+export const setHero = mutation({
+  args: { id: v.id("galleryVideos") },
+  handler: async (ctx: AnyCtx, { id }: { id: string }) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Sign in to change her gallery.");
+
+    const video = (await ctx.db.get(id)) as { userId: string } | null;
+    if (!video || video.userId !== userId) {
+      throw new Error("That video isn't in your gallery.");
+    }
+
+    const existing = await ctx.db
+      .query("feliciaAppearance")
+      .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) =>
+        q.eq("userId", userId),
+      )
+      .unique();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, { heroVideoId: id });
+    } else {
+      await ctx.db.insert("feliciaAppearance", {
+        userId,
+        appearance: FELICIA_APPEARANCE_DEFAULT,
+        heroVideoId: id,
+      });
+    }
+    return null;
+  },
+});
+
+/** Go back to her picture instead of a clip. */
+export const clearHero = mutation({
+  args: {},
+  handler: async (ctx: AnyCtx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Sign in to change her gallery.");
+
+    const existing = await ctx.db
+      .query("feliciaAppearance")
+      .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) =>
+        q.eq("userId", userId),
+      )
+      .unique();
+    if (!existing) return null;
+
+    await ctx.db.patch(existing._id, { heroVideoId: undefined });
     return null;
   },
 });

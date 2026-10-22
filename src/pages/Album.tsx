@@ -117,6 +117,9 @@ export default function Album() {
   const generateVideoUploadUrl = useMutation(api.videos.generateUploadUrl);
   const saveVideo = useMutation(api.videos.save);
   const removeVideo = useMutation(api.videos.remove);
+  const heroVideo = useQuery(api.videos.hero);
+  const setHeroVideo = useMutation(api.videos.setHero);
+  const clearHeroVideo = useMutation(api.videos.clearHero);
 
   const [lightbox, setLightbox] = useState<LightboxPhoto | null>(null);
   const [uploadingVideo, setUploadingVideo] = useState(false);
@@ -349,6 +352,31 @@ export default function Album() {
       );
     } finally {
       setImporting(false);
+    }
+  }
+
+  /**
+   * Choose the clip her camera plays by itself.
+   *
+   * One clip at a time: tapping the one already playing puts her back on the
+   * still picture her camera used before videos existed.
+   */
+  async function chooseHeroVideo(video: GalleryVideo) {
+    const active = heroVideo?._id === video._id;
+    try {
+      if (active) {
+        await clearHeroVideo({});
+        toast.success("Her camera uses a picture again.");
+      } else {
+        await setHeroVideo({ id: video._id as Id<"galleryVideos"> });
+        toast.success(`“${video.title}” now plays on her camera.`);
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Couldn't change her camera.",
+      );
     }
   }
 
@@ -627,6 +655,10 @@ export default function Album() {
                       muted
                       playsInline
                       preload="metadata"
+                      /* The clip her camera plays runs here too, so the choice
+                         is visible in the gallery itself. */
+                      autoPlay={heroVideo?._id === video._id}
+                      loop={heroVideo?._id === video._id}
                       className="pointer-events-none aspect-[2/3] w-full bg-black object-cover transition-transform duration-500 group-hover:scale-105"
                     />
                     <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
@@ -634,6 +666,37 @@ export default function Album() {
                         <Play className="size-5 fill-current" />
                       </span>
                     </span>
+                  </button>
+
+                  {/* Her camera is one clip or her picture — so this is a
+                      choice, not a queue. Tapping the playing clip turns it
+                      off again. */}
+                  <button
+                    type="button"
+                    onClick={() => void chooseHeroVideo(video)}
+                    title={
+                      heroVideo?._id === video._id
+                        ? "Her camera plays this clip — tap to use her picture again"
+                        : "Auto-play this clip on her camera feed"
+                    }
+                    aria-label={
+                      heroVideo?._id === video._id
+                        ? `Her camera plays ${video.title}`
+                        : `Auto-play ${video.title} on her camera feed`
+                    }
+                    className={cn(
+                      "absolute top-2 left-2 flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium backdrop-blur-md transition-colors",
+                      heroVideo?._id === video._id
+                        ? "border-primary/50 bg-primary text-primary-foreground"
+                        : "border-white/25 bg-black/40 text-white/85 hover:bg-black/60 hover:text-white",
+                    )}
+                  >
+                    {heroVideo?._id === video._id ? (
+                      <Check className="size-3" />
+                    ) : (
+                      <Play className="size-3 fill-current" />
+                    )}
+                    {heroVideo?._id === video._id ? "On camera" : "Auto-play"}
                   </button>
 
                   <button

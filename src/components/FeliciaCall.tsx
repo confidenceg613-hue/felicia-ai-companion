@@ -35,7 +35,7 @@ import {
   speakWithBrowser,
   stopBrowserSpeech,
 } from "@/lib/voice";
-import { useAction } from "convex/react";
+import { useAction, useQuery } from "convex/react";
 import { motion } from "framer-motion";
 import {
   Check,
@@ -116,6 +116,16 @@ export function FeliciaCall({
   const generatePhoto = useAction(api.felicia.generatePhoto);
   const speakMessage = useAction(api.felicia.speakMessage);
   const avatarUrl = useFeliciaAvatar();
+  /**
+   * The clip her camera is set to play by itself, chosen in the album.
+   *
+   * `undefined` while that choice is still loading, `null` when she is on a
+   * still picture. A clip replaces the animated portrait entirely — there is
+   * nothing to mouth-sync when the frames already move.
+   */
+  const heroVideo = useQuery(api.videos.hero);
+  /** True once a picture is picked mid-call, so it wins over the clip. */
+  const [pictureOverride, setPictureOverride] = useState(false);
 
   const [status, setStatus] = useState<CallStatus>("connecting");
   const [interim, setInterim] = useState("");
@@ -176,14 +186,17 @@ export function FeliciaCall({
    */
   const faceAskedRef = useRef(false);
   useEffect(() => {
-    if (!video || faceAskedRef.current || hasFace(feedId)) return;
+    // Only ask where her face is when the feed is actually her picture; a clip
+    // already moves on its own and needs none of it.
+    if (!video || heroVideo !== null || faceAskedRef.current || hasFace(feedId))
+      return;
     faceAskedRef.current = true;
     setPendingId(feedId);
     setPendingFace(face);
     setActivePoint("mouth");
     setStage("align");
     setPictureOpen(true);
-  }, [video, feedId, face]);
+  }, [video, feedId, face, heroVideo]);
 
   /** Speak one of her lines in her own voice, falling back to the device voice. */
   const say = useCallback(
@@ -447,6 +460,9 @@ export function FeliciaCall({
     setStage("pick");
     setPendingId(null);
     setPictureOpen(false);
+    // Picking a picture mid-call is a deliberate "just her photo, please", so
+    // it overrides the clip for the rest of this call.
+    setPictureOverride(true);
   }
 
   if (video) {
@@ -454,12 +470,24 @@ export function FeliciaCall({
       <div className="fixed inset-0 z-50 flex flex-col bg-background">
         {/* Her camera — everything above your own face. */}
         <div className="relative min-h-0 flex-1 overflow-hidden">
-          <FeliciaVideoFeed
-            url={feedPhoto.fullUrl}
-            speaking={talking}
-            face={face}
-            className="absolute inset-0 bg-black"
-          />
+          {heroVideo && !pictureOverride ? (
+            <video
+              key={heroVideo._id}
+              src={heroVideo.url}
+              autoPlay
+              muted
+              loop
+              playsInline
+              className="absolute inset-0 size-full bg-black object-contain"
+            />
+          ) : (
+            <FeliciaVideoFeed
+              url={feedPhoto.fullUrl}
+              speaking={talking}
+              face={face}
+              className="absolute inset-0 bg-black"
+            />
+          )}
 
           <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-4">
             <Badge

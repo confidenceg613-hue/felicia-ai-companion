@@ -150,6 +150,9 @@ const schema = defineSchema(
         backgroundKey: v.string(),
         overrideScene: v.optional(v.union(v.string(), v.null())),
       }),
+      // Which gallery video plays by itself on her camera feed. Absent means
+      // her camera uses a still picture, the app's original behaviour.
+      heroVideoId: v.optional(v.id("galleryVideos")),
     }).index("by_user", ["userId"]),
   },
   {
