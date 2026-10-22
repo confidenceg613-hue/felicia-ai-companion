@@ -11,6 +11,7 @@
 import type * as accounts from "../accounts.js";
 import type * as auth from "../auth.js";
 import type * as auth_emailOtp from "../auth/emailOtp.js";
+import type * as authProviders from "../authProviders.js";
 import type * as config from "../config.js";
 import type * as crons from "../crons.js";
 import type * as felicia from "../felicia.js";
@@ -35,6 +36,7 @@ declare const fullApi: ApiFromModules<{
   accounts: typeof accounts;
   auth: typeof auth;
   "auth/emailOtp": typeof auth_emailOtp;
+  authProviders: typeof authProviders;
   config: typeof config;
   crons: typeof crons;
   felicia: typeof felicia;

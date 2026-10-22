@@ -21,14 +21,18 @@ import { GUEST_MERGE_KEY } from "@/lib/upgrade";
 import logo from "@/assets/logo.svg";
 import { ArrowRight, Loader2, Mail, UserX } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 
 interface AuthProps {
   redirectAfterAuth?: string;
 }
+
+// Set just before leaving for Google, cleared when we get back. It has to live
+// in sessionStorage because the OAuth round trip is a full page navigation.
+const GOOGLE_PENDING_KEY = "felicia:google-signin";
 
 function resolveRedirectAfterAuth(
   returnTo: string | null,
@@ -52,6 +56,10 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   // so the auto-redirect below must not bounce us back before the code arrives.
   const upgradeMode = searchParams.get("upgrade") === "1";
   const claimGuest = useMutation(api.accounts.claimGuestConversation);
+  // Only offer Google once its credentials exist on the deployment, so the
+  // button can never be a dead end.
+  const providers = useQuery(api.authProviders.enabled);
+  const googleReady = providers?.google === true;
   const [step, setStep] = useState<"signIn" | { email: string }>("signIn");
   const [otp, setOtp] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -64,6 +72,98 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       navigate(redirect);
     }
   }, [authLoading, isAuthenticated, navigate, redirect, upgradeMode]);
+
+  /**
+   * Move the guest conversation to the account that just signed in. Nothing is
+   * ever deleted: a failure leaves the history under the guest id and says so,
+   * rather than blocking the sign-in.
+   */
+  const carryGuestOver = async () => {
+    const fromUserId = sessionStorage.getItem(GUEST_MERGE_KEY);
+    if (!fromUserId) return;
+    try {
+      await claimGuest({ fromUserId: fromUserId as Id<"users"> });
+      toast.success("Your conversation is now permanent.");
+    } catch (carryError) {
+      console.warn("Could not carry the guest conversation over:", carryError);
+      toast.error(
+        "Signed in — but the conversation couldn't be carried over this time.",
+      );
+    } finally {
+      sessionStorage.removeItem(GUEST_MERGE_KEY);
+    }
+  };
+
+  // Google sends the browser off-site and back, so its carry-over can't run in
+  // the click handler. The pending flag set at click time survives the round
+  // trip and lands us here once the new session is live.
+  useEffect(() => {
+    if (!upgradeMode || authLoading || !isAuthenticated) return;
+    if (sessionStorage.getItem(GOOGLE_PENDING_KEY) !== "1") return;
+    sessionStorage.removeItem(GOOGLE_PENDING_KEY);
+    void carryGuestOver().finally(() => navigate(redirect));
+    // carryGuestOver is re-created each render; the flag above makes re-runs
+    // harmless no-ops.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [upgradeMode, authLoading, isAuthenticated, navigate, redirect]);
+
+  const handleGoogleSignIn = async () => {
+    setIsLoading(true);
+    setError(null);
+    const params = new URLSearchParams({ returnTo: redirect });
+    if (sessionStorage.getItem(GUEST_MERGE_KEY)) {
+      // There is a guest conversation to keep, so come back to this card in
+      // upgrade mode instead of heading straight for the app.
+      params.set("upgrade", "1");
+      sessionStorage.setItem(GOOGLE_PENDING_KEY, "1");
+    }
+
+    // Google won't render its consent screen inside an iframe, and the preview
+    // lives in one. Hand the flow to a full tab of the same app: same origin,
+    // so the session it creates is the one this preview uses, and the consent
+    // screen loads where Google allows it.
+    if (window.self !== window.top) {
+      const tab = window.open(`/auth?${params.toString()}&google=1`, "_blank");
+      if (tab) {
+        toast("Finishing Google sign-in in a new tab.");
+        setIsLoading(false);
+        return;
+      }
+    }
+
+    try {
+      // Absolute, because the deployment's SITE_URL is its .convex.site origin,
+      // not the address of the app itself.
+      await signIn("google", {
+        redirectTo: `${window.location.origin}/auth?${params.toString()}`,
+      });
+    } catch (error) {
+      console.error("Google sign-in error:", error);
+      sessionStorage.removeItem(GOOGLE_PENDING_KEY);
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Google sign-in failed. Please try again.",
+      );
+      setIsLoading(false);
+    }
+  };
+
+  // ?google=1 is how the preview hands the flow to a full tab. That tab starts
+  // the consent screen itself, so the whole sign-in is still one click. The
+  // OAuth callback never carries this param, so it can't re-trigger on return.
+  const googleAutoStarted = useRef(false);
+  useEffect(() => {
+    if (searchParams.get("google") !== "1") return;
+    if (authLoading || isAuthenticated || !googleReady) return;
+    if (googleAutoStarted.current) return;
+    googleAutoStarted.current = true;
+    void handleGoogleSignIn();
+    // handleGoogleSignIn is re-created each render; the ref above makes this
+    // run exactly once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, authLoading, isAuthenticated, googleReady]);
+
   const handleEmailSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsLoading(true);
@@ -93,23 +193,8 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       await signIn("email-otp", formData);
 
       // Upgrade: the session is now the email account — pull the guest
-      // conversation across before landing on it. A carry-over failure never
-      // blocks the sign-in (nothing is deleted; it just stays under the guest
-      // id), but the user is told plainly rather than left guessing.
-      const fromUserId = sessionStorage.getItem(GUEST_MERGE_KEY);
-      if (upgradeMode && fromUserId) {
-        try {
-          await claimGuest({ fromUserId: fromUserId as Id<"users"> });
-          toast.success("Your conversation is now permanent.");
-        } catch (carryError) {
-          console.warn("Could not carry the guest conversation over:", carryError);
-          toast.error(
-            "Signed in — but the conversation couldn't be carried over this time.",
-          );
-        } finally {
-          sessionStorage.removeItem(GUEST_MERGE_KEY);
-        }
-      }
+      // conversation across before landing on it.
+      if (upgradeMode) await carryGuestOver();
 
       navigate(redirect);
     } catch (error) {
@@ -176,13 +261,37 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                 </CardTitle>
                 <CardDescription>
                   {upgradeMode
-                    ? "Tie everything you and Felicia have said to your email — it survives sign-out, and it follows you to any device."
-                    : "Enter your email to log in or sign up. Everything you and Felicia say is kept on your account, so signing out and back in later picks the conversation up exactly where it stopped."}
+                    ? "Tie everything you and Felicia have said to your account — it survives sign-out, and it follows you to any device."
+                    : "Sign in with Google or your email. Everything you and Felicia say is kept on your account, so signing out and back in later picks the conversation up exactly where it stopped."}
                 </CardDescription>
               </CardHeader>
               <form onSubmit={handleEmailSubmit}>
                 <CardContent>
-                  
+                  {googleReady && (
+                    <div className="mb-4">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full rounded-full"
+                        onClick={handleGoogleSignIn}
+                        disabled={isLoading}
+                      >
+                        <GoogleMark className="mr-2 h-4 w-4" />
+                        Continue with Google
+                      </Button>
+                      <div className="relative mt-4">
+                        <div className="absolute inset-0 flex items-center">
+                          <span className="w-full border-t" />
+                        </div>
+                        <div className="relative flex justify-center text-xs uppercase">
+                          <span className="bg-card px-2 text-muted-foreground">
+                            Or
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="relative flex items-center gap-2">
                     <div className="relative flex-1">
                       <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -354,6 +463,19 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
         </div>
       </div>
     </div>
+  );
+}
+
+function GoogleMark({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z" />
+    </svg>
   );
 }
 
