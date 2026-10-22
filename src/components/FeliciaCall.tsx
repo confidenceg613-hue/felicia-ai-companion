@@ -468,7 +468,7 @@ export function FeliciaCall({
   if (video) {
     return (
       <div className="fixed inset-0 z-50 flex flex-col bg-background">
-        {/* Her camera — everything above your own face. */}
+        {/* Her camera, with your own small feed floating over it. */}
         <div className="relative min-h-0 flex-1 overflow-hidden">
           {heroVideo && !pictureOverride ? (
             <video
@@ -488,6 +488,16 @@ export function FeliciaCall({
               className="absolute inset-0 bg-black"
             />
           )}
+
+          {/* Your own camera, small and out of the way at the top left — the
+              way a real call shows your feed, rather than a second full tile
+              stacked under hers. */}
+          <div className="absolute left-3 top-16 z-20 w-[24vw] max-w-[104px] sm:w-[104px]">
+            <SelfView
+              enabled={cameraOn}
+              className="aspect-[3/4] w-full rounded-2xl border-white/30 shadow-[0_12px_30px_-14px_rgba(0,0,0,0.9)]"
+            />
+          </div>
 
           <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-4">
             <Badge
@@ -528,14 +538,9 @@ export function FeliciaCall({
           </div>
         </div>
 
-        {/* Your face, below hers. */}
+        {/* Your side of the call: the note and the typed fallback. */}
         <div className="shrink-0 px-3 pt-2 pb-[env(safe-area-inset-bottom)]">
           <div className="mx-auto w-full max-w-md">
-            <SelfView
-              enabled={cameraOn}
-              className="h-[20vh] w-full sm:h-[22vh]"
-            />
-
             {note && (
               <p className="mt-2 rounded-2xl border border-border/60 bg-card/80 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
                 {note}

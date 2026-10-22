@@ -2,26 +2,36 @@
 
 import { internalAction } from "./_generated/server";
 import { v } from "convex/values";
-import { veniceApiKey } from "./config";
+import { cloudflareAccountId, cloudflareToken } from "./config";
 
 /**
- * Her eyes.
+ * Her eyes, on Cloudflare Workers AI.
  *
  * Everything Felicia is shown — the pictures in her own gallery, the ones she
  * sends, and the ones the user shares — goes through a vision model before she
  * talks about it, so she reacts to what is actually in the frame instead of to
  * the fact that a picture arrived.
  *
- * Venice hosts `qwen3-vl-235b-a22b`, so her eyes are billed to the same key as
- * her words, her voice and her photos. The endpoint speaks the OpenAI chat
- * format, so the request body is the one any OpenAI client would send.
+ * Workers AI takes the image as raw bytes rather than a URL, so the picture is
+ * downloaded here first and posted inline. The key is the same Cloudflare
+ * account the rest of this project already has, and it needs no per-image
+ * billing beyond the account's Workers AI allowance.
  */
-type VisionProvider = {
-  name: string;
-  url: string;
-  key: string;
-  models: string[];
-};
+
+/**
+ * The vision models to try, best first.
+ *
+ * `llama-3.2-11b-vision-instruct` writes full, specific descriptions; LLaVA
+ * answers with a short caption, which is still enough for her to react to and
+ * is there in case Meta's model is ever retired.
+ */
+const VISION_MODELS = [
+  "@cf/meta/llama-3.2-11b-vision-instruct",
+  "@cf/llava-hf/llava-1.5-7b-hf",
+];
+
+/** Workers AI rejects a single upload that is too large; keep one image sane. */
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
 const VISION_PROMPT =
   "Describe this photograph precisely and plainly, in 2 to 4 sentences. " +
@@ -30,25 +40,6 @@ const VISION_PROMPT =
   "colours, the lighting, and the mood. If there is text in the image, quote " +
   "the important parts. Do not invent people or events that are not visible " +
   "and do not speculate about who anyone is. No preamble, just the description.";
-
-/** Every vision backend this deployment can actually reach, best first. */
-function providers(): VisionProvider[] {
-  const list: VisionProvider[] = [];
-
-  const venice = veniceApiKey();
-  if (venice) {
-    list.push({
-      name: "venice",
-      url: "https://api.venice.ai/api/v1/chat/completions",
-      key: venice,
-      // Qwen3-VL on Venice. The smaller Qwen vision model behind the encrypted
-      // endpoint is the fallback if the big one is ever pulled from the catalog.
-      models: ["qwen3-vl-235b-a22b", "e2ee-qwen3-vl-30b-a3b-p"],
-    });
-  }
-
-  return list;
-}
 
 export type VisionResult = {
   /** Her plain-language description, or null when nothing could be read. */
@@ -59,24 +50,15 @@ export type VisionResult = {
   error: string | null;
 };
 
-type ChatContent =
-  | string
-  | Array<{ type?: string; text?: string }>
-  | null
-  | undefined;
-
-/** Read the assistant's text whether it came back as a string or as parts. */
-function messageText(content: ChatContent): string {
-  if (typeof content === "string") return content.trim();
-  if (!Array.isArray(content)) return "";
-  return content
-    .map((part) => (typeof part?.text === "string" ? part.text : ""))
-    .join(" ")
-    .trim();
-}
+/** The two shapes Workers AI returns text in, depending on the model. */
+type CloudflareResult = {
+  result?: { response?: string; description?: string };
+  success?: boolean;
+  errors?: Array<{ message?: string }>;
+};
 
 /**
- * One description, with the provider/model ladder and no exceptions.
+ * One description, with the model ladder and no exceptions.
  *
  * A missing key or an unreachable model is reported in the result rather than
  * thrown: chat has to keep working even when her eyes do not, so every caller
@@ -86,64 +68,99 @@ export async function describeImage(
   url: string,
   hint?: string,
 ): Promise<VisionResult> {
-  const backends = providers();
-  if (backends.length === 0) {
+  const token = cloudflareToken();
+  const account = cloudflareAccountId();
+  if (!token || !account) {
     return {
       text: null,
       model: null,
-      error: "No vision key on this deployment — add the Venice key in the Keys tab.",
+      error:
+        "No Cloudflare key on this deployment — add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in the Keys tab.",
+    };
+  }
+
+  let bytes: number[];
+  try {
+    const image = await fetch(url);
+    if (!image.ok) {
+      return {
+        text: null,
+        model: null,
+        error: `Couldn't download the picture (${image.status}).`,
+      };
+    }
+    const buffer = await image.arrayBuffer();
+    if (buffer.byteLength === 0) {
+      return { text: null, model: null, error: "The picture was empty." };
+    }
+    if (buffer.byteLength > MAX_IMAGE_BYTES) {
+      return {
+        text: null,
+        model: null,
+        error: "The picture is too large for the vision model.",
+      };
+    }
+    bytes = Array.from(new Uint8Array(buffer));
+  } catch (error) {
+    return {
+      text: null,
+      model: null,
+      error: error instanceof Error ? error.message : String(error),
     };
   }
 
   const prompt = hint ? `${VISION_PROMPT}\n\nContext: ${hint}` : VISION_PROMPT;
   const failures: string[] = [];
 
-  for (const backend of backends) {
-    for (const model of backend.models) {
-      try {
-        const response = await fetch(backend.url, {
+  for (const model of VISION_MODELS) {
+    try {
+      const response = await fetch(
+        `https://api.cloudflare.com/client/v4/accounts/${account}/ai/run/${model}`,
+        {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${backend.key}`,
+            Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model,
-            messages: [
-              {
-                role: "user",
-                content: [
-                  { type: "text", text: prompt },
-                  { type: "image_url", image_url: { url } },
-                ],
-              },
-            ],
+            prompt,
+            image: bytes,
             max_tokens: 320,
-            temperature: 0.2,
           }),
-        });
+        },
+      );
 
-        if (!response.ok) {
-          const detail = (await response.text()).slice(0, 240);
-          failures.push(`${model} (${response.status}) ${detail}`);
-          // A rejected key is the same for every model on that backend, and a
-          // missing / unreadable image is the same for every backend.
-          if (response.status === 401 || response.status === 403) break;
-          continue;
-        }
+      const raw = await response.text();
 
-        const payload = (await response.json()) as {
-          choices?: Array<{ message?: { content?: ChatContent } }>;
-        };
-        const text = messageText(payload.choices?.[0]?.message?.content);
-        if (text) return { text, model, error: null };
-
-        failures.push(`${model}: empty description`);
-      } catch (error) {
-        failures.push(
-          `${model}: ${error instanceof Error ? error.message : String(error)}`,
-        );
+      if (!response.ok) {
+        failures.push(`${model} (${response.status}) ${raw.slice(0, 200)}`);
+        // A rejected key is the same for every model.
+        if (response.status === 401 || response.status === 403) break;
+        continue;
       }
+
+      let payload: CloudflareResult;
+      try {
+        payload = JSON.parse(raw) as CloudflareResult;
+      } catch {
+        failures.push(`${model}: unreadable response`);
+        continue;
+      }
+
+      const text = (
+        payload.result?.response ??
+        payload.result?.description ??
+        ""
+      ).trim();
+      if (text) return { text, model, error: null };
+
+      failures.push(
+        `${model}: ${payload.errors?.[0]?.message ?? "empty description"}`,
+      );
+    } catch (error) {
+      failures.push(
+        `${model}: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
@@ -172,9 +189,9 @@ export const describe = internalAction({
 /**
  * A batch read, used when her gallery is checked against the vision model.
  *
- * Runs a few at a time rather than all at once: both backends rate-limit per
- * key, and a batch that trips the limiter halfway through is less useful than
- * one that finishes slowly.
+ * Runs a few at a time rather than all at once: Workers AI rate-limits per
+ * account, and a batch that trips the limiter halfway through is less useful
+ * than one that finishes slowly.
  */
 export const describeMany = internalAction({
   args: { urls: v.array(v.string()), hint: v.optional(v.string()) },

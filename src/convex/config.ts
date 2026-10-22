@@ -27,7 +27,39 @@ export function isGroqConfigured(): boolean {
   return Boolean(groqApiKey());
 }
 
-/** Venice: image generation and vision, newest key name first. */
+/**
+ * Cloudflare Workers AI: her eyes.
+ *
+ * The canonical names are `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
+ * Keys added through the Keys UI have also landed as `Cloudfare_API_KEY`,
+ * `CLOUDFLARE_API_KEY`, `CF_API_TOKEN` and plain `ACCOUNT_ID`, so all of those
+ * spellings are accepted — an unrecognised name looks exactly like a backend
+ * that was never configured.
+ */
+export function cloudflareToken(): string | null {
+  return (
+    process.env.CLOUDFLARE_API_TOKEN ??
+    process.env.CF_API_TOKEN ??
+    process.env.Cloudfare_API_KEY ??
+    process.env.CLOUDFLARE_API_KEY ??
+    null
+  );
+}
+
+export function cloudflareAccountId(): string | null {
+  return (
+    process.env.CLOUDFLARE_ACCOUNT_ID ??
+    process.env.CF_ACCOUNT_ID ??
+    process.env.ACCOUNT_ID ??
+    null
+  );
+}
+
+export function isCloudflareConfigured(): boolean {
+  return Boolean(cloudflareToken() && cloudflareAccountId());
+}
+
+/** Venice: image generation, newest key name first. */
 export function veniceApiKey(): string | null {
   return (
     process.env.VENICE_API_KEY2 ??
