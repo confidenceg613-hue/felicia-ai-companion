@@ -134,6 +134,38 @@ function videoContentType(file: File): string | null {
   return VIDEO_TYPES[extension] ?? null;
 }
 
+/** Her gallery takes clips up to ten minutes; convex/videos.ts enforces it. */
+const MAX_VIDEO_SECONDS = 600;
+
+/**
+ * Read a clip's length in the browser, before a byte is uploaded.
+ *
+ * The browser only knows a file's duration once it has parsed the container,
+ * so this loads the metadata off a throwaway object URL. Some formats (a
+ * handbraked .mkv, a screen recording) never report one — those come back as
+ * null and the clip goes up anyway, because "unknown" is not "too long".
+ */
+function readVideoDuration(file: File): Promise<number | null> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const probe = document.createElement("video");
+    const finish = (seconds: number | null) => {
+      URL.revokeObjectURL(url);
+      probe.removeAttribute("src");
+      resolve(seconds);
+    };
+    probe.preload = "metadata";
+    probe.onloadedmetadata = () => {
+      const seconds = probe.duration;
+      finish(Number.isFinite(seconds) && seconds > 0 ? seconds : null);
+    };
+    probe.onerror = () => finish(null);
+    // Give a slow parser a moment before writing the file off as unreadable.
+    window.setTimeout(() => finish(null), 8000);
+    probe.src = url;
+  });
+}
+
 function uploadWithProgress(
   url: string,
   file: File,
@@ -379,6 +411,18 @@ export default function Album() {
       return;
     }
 
+    // Read the length before uploading, so a fifteen-minute clip is refused
+    // in a second rather than after a long upload and a server rejection.
+    const duration = await readVideoDuration(file);
+    if (duration !== null && duration > MAX_VIDEO_SECONDS + 15) {
+      const minutes = Math.floor(duration / 60);
+      const seconds = Math.round(duration % 60);
+      toast.error(
+        `That clip runs ${minutes}:${String(seconds).padStart(2, "0")} — her gallery takes videos up to 10 minutes.`,
+      );
+      return;
+    }
+
     setUploadingVideo(true);
     const toastId = toast.loading("Adding your video to her gallery…");
     try {
@@ -396,7 +440,13 @@ export default function Album() {
           .trim()
           .slice(0, 80) || "Her video";
 
-      await saveVideo({ storageId: storageId as Id<"_storage">, title });
+      await saveVideo({
+        storageId: storageId as Id<"_storage">,
+        title,
+        // Unknown durations upload as before; the server only enforces what
+        // the browser actually measured.
+        durationSeconds: duration ?? undefined,
+      });
       toast.success("She has it in her gallery now.", { id: toastId });
     } catch (error) {
       toast.error(
@@ -608,6 +658,7 @@ export default function Album() {
                   size="sm"
                   className="gap-2 rounded-full"
                   disabled={uploadingVideo}
+                  title="Add a clip from this device — up to 10 minutes, under 1 GB"
                   onClick={() => videoInputRef.current?.click()}
                 >
                   {uploadingVideo ? (
@@ -616,6 +667,9 @@ export default function Album() {
                     <Film className="size-3.5" />
                   )}
                   Add video
+                  <span className="hidden text-[10px] tracking-wide text-muted-foreground sm:inline">
+                    · 10 min
+                  </span>
                 </Button>
                 <Button
                   variant="ghost"
