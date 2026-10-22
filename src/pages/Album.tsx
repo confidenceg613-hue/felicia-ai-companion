@@ -9,6 +9,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,11 +27,6 @@ import {
 } from "@/components/ui/dialog";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
-import {
-  Cloud,
-  Link,
-  Loader2,
-} from "lucide-react";
 import { FELICIA } from "@/lib/felicia";
 import {
   FELICIA_APPEARANCE_DEFAULT,
@@ -53,8 +49,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  Cloud,
   Film,
   Images,
+  Link,
   Loader2,
   Palette,
   Play,
@@ -127,10 +125,25 @@ export default function Album() {
   const [hiddenCount, setHiddenCount] = useState<number | null>(null);
   const [developing, setDeveloping] = useState(false);
 
-  const addPhotosFromLink = useAction(api.felicia.addPhotosFromLink);
+  const addFromLink = useAction(api.felicia.addFromLink);
+
+  const [popupOpen, setPopupOpen] = useState(false);
+  const [appearance, setAppearance] = useState<FeliciaAppearance>(
+    FELICIA_APPEARANCE_DEFAULT,
+  );
+  const [appearOpen, setAppearOpen] = useState(false);
+
+  const [queueOpen, setQueueOpen] = useState(false);
+  const [queue, setQueue] = useState<QueueItem[]>([]);
+  const [cursor, setCursor] = useState(0);
+
+  const [linkImportOpen, setLinkImportOpen] = useState(false);
   const [linkInput, setLinkInput] = useState(
     "https://photos.app.goo.gl/NzhhrykYjuoDiokU9",
   );
+  const [importing, setImporting] = useState(false);
+
+  const backfillStarted = useRef(false);
 
   const allPhotos = photos ?? [];
   const ready = photos !== undefined;
@@ -318,17 +331,17 @@ export default function Album() {
   async function importFromLink() {
     if (!linkInput.trim()) return;
     setImporting(true);
-    const toastId = toast.loading("Opening the album…");
+    const toastId = toast.loading("Opening the link…");
     try {
-      const { imported } = await addPhotosFromLink({ link: linkInput.trim() });
-      toast.success(
-        `Imported ${imported} photo${imported === 1 ? "" : "s"} from the link.`,
-        { id: toastId },
-      );
+      const { photos: addedPhotos, videos: addedVideos } = await addFromLink({
+        link: linkInput.trim(),
+      });
+      const what =
+        addedVideos > 0
+          ? `${addedVideos} video${addedVideos === 1 ? "" : "s"}`
+          : `${addedPhotos} photo${addedPhotos === 1 ? "" : "s"}`;
+      toast.success(`Added ${what} to her gallery.`, { id: toastId });
       setLinkImportOpen(false);
-      setLinkInput(
-        "https://photos.app.goo.gl/NzhhrykYjuoDiokU9",
-      );
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Couldn't import from that link.",
@@ -501,9 +514,9 @@ export default function Album() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="gap-1.5 rounded-full text-content"
+                  className="gap-1.5 rounded-full text-primary"
                   onClick={() => setLinkImportOpen(true)}
-                  title="Import photos from a public Google Photos link"
+                  title="Add a photo or video from a public Google Photos link"
                 >
                   <Link className="size-3.5" />
                   Add from link
@@ -1189,7 +1202,7 @@ export default function Album() {
                           </Button>
                         )}
 
-                        {!                      isActive && !isDone && (
+                        {!isActive && !isDone && (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -1203,7 +1216,7 @@ export default function Album() {
                             <Clock className="size-3" />
                             Move to front
                           </Button>
-                        )
+                        )}
                         {isDone && (
                           <Button
                             variant="ghost"
@@ -1220,24 +1233,6 @@ export default function Album() {
                             }}
                             title="View this photo"
                           >
-                            <Images className="size-4" />
-                          </Button>
-                        )}}                          {isDone && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="shrink-0 touch-none"
-                              disabled={!item.url}
-                              onClick={() => {
-                                if (item.url) {
-                                  setLightbox({
-                                    url: item.url,
-                                    title: item.scene,
-                                  });
-                                }
-                              }}
-                              title="View this photo"
-                            >
                             <Images className="size-4" />
                           </Button>
                         )}
@@ -1270,6 +1265,51 @@ export default function Album() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={linkImportOpen}
+        onOpenChange={(open) => {
+          if (!importing) setLinkImportOpen(open);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-display">Add from a link</DialogTitle>
+            <DialogDescription>
+              Paste a public Google Photos share link. A shared video is copied
+              straight into her gallery to play; a shared album's photos land
+              in her roll beside the rest of her pictures.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <Input
+              value={linkInput}
+              onChange={(event) => setLinkInput(event.target.value)}
+              placeholder="https://photos.app.goo.gl/…"
+              disabled={importing}
+              autoFocus
+            />
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              Anyone-with-the-link only — a private link can't be read. Single
+              items always come through; a full album usually only exposes the
+              photos Google embeds in the page.
+            </p>
+            <Button
+              className="w-full gap-2"
+              disabled={importing || !linkInput.trim()}
+              onClick={() => void importFromLink()}
+            >
+              {importing ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Cloud className="size-4" />
+              )}
+              {importing ? "Adding…" : "Add to her gallery"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

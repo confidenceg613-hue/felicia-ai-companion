@@ -2733,31 +2733,27 @@ export const backfillPhotoVision = action({
 });
 
 /**
- * Import photos from a public Google Photos share link into her roll.
+ * Bring a public Google Photos share link into her gallery.
  *
- * Uses Playwright to open the album page headless, reads the sized image
- * URLs it actually loads, downloads each into Convex storage, and records
- * each one as a photo she has sent this user — so it shows up in the album,
- * the lightbox, and the conversation like any other of her pictures.
- *
- * The default link is the shared album the user pointed at
- * (photos.app.goo.gl/NzhhrykYjuoDiokU9), and an explicit link can be passed
- * instead when a different album is wanted.
+ * A single shared video is downloaded and filed as one of her gallery videos;
+ * a shared album's photos are downloaded into her roll, so they show up in the
+ * album and the conversation like any other of her pictures. What the link
+ * holds decides which of the two happens.
  */
-export const addPhotosFromLink = action({
+export const addFromLink = action({
   args: { link: v.string() },
-  returns: v.object({ imported: v.number() }),
+  returns: v.object({ photos: v.number(), videos: v.number() }),
   handler: async (
     ctx: AnyCtx,
     { link }: { link: string },
-  ): Promise<{ imported: number }> => {
+  ): Promise<{ photos: number; videos: number }> => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Sign in first.");
 
-    return await ctx.runAction(internal.photos_import.addPhotosFromLink, {
+    return (await ctx.runAction(internal.photos_import.importFromLink, {
       link,
       userId,
-    }) as { imported: number };
+    })) as { photos: number; videos: number };
   },
 });
 

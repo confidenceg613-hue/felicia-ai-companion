@@ -9,7 +9,7 @@
 
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 
 // The rest of this codebase types the Convex context loosely, so these follow
 // the same convention rather than fighting the generated types.
@@ -133,6 +133,68 @@ export const save = mutation({
       url: await ctx.storage.getUrl(args.storageId),
       createdAt,
     };
+  },
+});
+
+/**
+ * File a video that was downloaded server-side (a Google Photos share link)
+ * rather than uploaded from the browser.
+ *
+ * The file is already in storage, so the checks here are the last chance to
+ * reject it: wrong type or too large, and the blob is deleted instead of
+ * being left behind.
+ */
+export const saveImported = internalMutation({
+  args: {
+    userId: v.id("users"),
+    storageId: v.id("_storage"),
+    title: v.string(),
+  },
+  handler: async (ctx: AnyCtx, args: AnyArgs) => {
+    const file = (await ctx.db.system.get(args.storageId)) as {
+      contentType?: string;
+      size: number;
+    } | null;
+    if (!file) throw new Error("That download didn't arrive. Try again.");
+
+    if (!file.contentType?.startsWith("video/")) {
+      await ctx.storage.delete(args.storageId);
+      throw new Error("That link didn't contain a video.");
+    }
+    if (file.size > MAX_VIDEO_BYTES) {
+      await ctx.storage.delete(args.storageId);
+      throw new Error("That video is over 120 MB — too big for her gallery.");
+    }
+
+    const existing = await ctx.db
+      .query("galleryVideos")
+      .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) =>
+        q.eq("userId", args.userId),
+      )
+      .take(VIDEO_LIMIT);
+    if (existing.length >= VIDEO_LIMIT) {
+      await ctx.storage.delete(args.storageId);
+      throw new Error(
+        `Her gallery holds ${VIDEO_LIMIT} videos. Remove one to add another.`,
+      );
+    }
+
+    const title = String(args.title).trim().slice(0, 80) || "Her video";
+    const duplicate = (existing as Array<{ title: string }>).some(
+      (row) => row.title === title,
+    );
+    if (duplicate) {
+      await ctx.storage.delete(args.storageId);
+      throw new Error("That one is already in her gallery.");
+    }
+
+    await ctx.db.insert("galleryVideos", {
+      userId: args.userId,
+      storageId: args.storageId,
+      title,
+      createdAt: Date.now(),
+    });
+    return null;
   },
 });
 
