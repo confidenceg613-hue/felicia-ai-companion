@@ -276,7 +276,9 @@ export default function Dashboard() {
   const missingKeys = connection
     ? [
         connection.configured === false &&
-          "the Venice key — it runs her chat, memory, voice and photos",
+          "GROQ_API_KEY — her chat, memory and voice",
+        connection.imageConfigured === false &&
+          "a Venice key — her photos and her eyes",
       ].filter((value): value is string => Boolean(value))
     : [];
 
@@ -382,8 +384,8 @@ export default function Dashboard() {
     speakingRef.current = messageId;
     setSpeakingId(messageId);
     try {
-      // Her real voice is Venice's text-to-speech, the same key as her chat.
-      // The device voice is only there for when that can't render a line.
+      // Her real voice is Groq's text-to-speech, the same key as her chat. The
+      // device voice is only there for when that can't render a line.
       let played = false;
       const { url } = await speakMessage({ messageId });
       if (url) played = await playAudioUrl(url);

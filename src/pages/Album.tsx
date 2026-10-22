@@ -99,7 +99,88 @@ type GalleryVideo = {
 };
 
 /** Kept in step with MAX_VIDEO_BYTES in convex/videos.ts. */
-const MAX_VIDEO_MB = 120;
+const MAX_VIDEO_MB = 1024;
+
+/**
+ * POST a file to a Convex upload URL, reporting progress.
+ *
+ * `fetch` cannot report upload progress, and a 1 GB clip over a home
+ * connection is exactly the case where a silent spinner reads as "broken".
+ * A Convex upload URL has a two-minute server-side timeout, so that is also
+ * reported in plain words instead of surfacing as a generic failure.
+ */
+const VIDEO_TYPES: Record<string, string> = {
+  mp4: "video/mp4",
+  m4v: "video/mp4",
+  mov: "video/quicktime",
+  webm: "video/webm",
+  ogv: "video/ogg",
+  mkv: "video/x-matroska",
+  avi: "video/x-msvideo",
+  "3gp": "video/3gpp",
+};
+
+/**
+ * The type to upload the file as.
+ *
+ * Some browsers and OS combinations report an empty `type` for a perfectly
+ * ordinary .mov or .mkv; posting it as `application/octet-stream` made the
+ * server reject it as "not a video" after a finished upload, which is exactly
+ * the kind of silent nothing the user then sees. The extension is the fallback.
+ */
+function videoContentType(file: File): string | null {
+  if (file.type.startsWith("video/")) return file.type;
+  const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
+  return VIDEO_TYPES[extension] ?? null;
+}
+
+function uploadWithProgress(
+  url: string,
+  file: File,
+  toastId: string | number,
+  contentType: string,
+): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open("POST", url);
+    request.setRequestHeader("Content-Type", contentType);
+    request.timeout = 120_000;
+
+    request.upload.onprogress = (event) => {
+      if (!event.lengthComputable) return;
+      const percent = Math.min(100, Math.round((event.loaded / event.total) * 100));
+      toast.loading(`Uploading her video — ${percent}%`, { id: toastId });
+    };
+
+    request.onload = () => {
+      if (request.status < 200 || request.status >= 300) {
+        reject(new Error(`The upload failed (${request.status}). Try again.`));
+        return;
+      }
+      try {
+        const body = JSON.parse(request.responseText) as {
+          storageId?: string;
+        };
+        if (!body.storageId) throw new Error("no storageId");
+        resolve(body.storageId);
+      } catch {
+        reject(new Error("The upload finished without a file id. Try again."));
+      }
+    };
+    request.onerror = () =>
+      reject(
+        new Error("The upload was interrupted — check your connection and try again."),
+      );
+    request.ontimeout = () =>
+      reject(
+        new Error(
+          "The upload timed out. Convex only allows two minutes per upload, so a very large clip needs a fast connection — or trim it.",
+        ),
+      );
+
+    request.send(file);
+  });
+}
 
 interface QueuedPhotoWithId extends QueueItem {
   id?: string;
@@ -286,13 +367,14 @@ export default function Album() {
    * nothing, and again on the server so it is actually enforced.
    */
   async function addVideo(file: File) {
-    if (!file.type.startsWith("video/")) {
+    const contentType = videoContentType(file);
+    if (!contentType) {
       toast.error("That file isn't a video. Pick an MP4, MOV or WebM.");
       return;
     }
     if (file.size > MAX_VIDEO_MB * 1024 * 1024) {
       toast.error(
-        `That video is ${Math.round(file.size / 1024 / 1024)} MB — keep it under ${MAX_VIDEO_MB} MB.`,
+        `That video is ${Math.round(file.size / 1024 / 1024)} MB — keep it under 1 GB.`,
       );
       return;
     }
@@ -301,16 +383,12 @@ export default function Album() {
     const toastId = toast.loading("Adding your video to her gallery…");
     try {
       const postUrl = await generateVideoUploadUrl({});
-      const response = await fetch(postUrl, {
-        method: "POST",
-        headers: { "Content-Type": file.type },
-        body: file,
-      });
-      if (!response.ok) throw new Error("The upload failed. Try again.");
-
-      const { storageId } = (await response.json()) as {
-        storageId: Id<"_storage">;
-      };
+      const storageId = await uploadWithProgress(
+        postUrl,
+        file,
+        toastId,
+        contentType,
+      );
       const title =
         file.name
           .replace(/\.[^.]+$/, "")
@@ -318,7 +396,7 @@ export default function Album() {
           .trim()
           .slice(0, 80) || "Her video";
 
-      await saveVideo({ storageId, title });
+      await saveVideo({ storageId: storageId as Id<"_storage">, title });
       toast.success("She has it in her gallery now.", { id: toastId });
     } catch (error) {
       toast.error(
@@ -651,7 +729,11 @@ export default function Album() {
                     title={video.title}
                   >
                     <video
-                      src={video.url}
+                      /* The `#t=0.1` fragment asks the browser for a frame a
+                         little way in, so the tile shows her picture instead of
+                         a black rectangle on browsers that don't paint the
+                         first frame on their own. */
+                      src={`${video.url}#t=0.1`}
                       muted
                       playsInline
                       preload="metadata"

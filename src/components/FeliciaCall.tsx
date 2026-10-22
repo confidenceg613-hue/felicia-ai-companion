@@ -75,9 +75,9 @@ function formatDuration(seconds: number) {
 /**
  * A voice call with Felicia.
  *
- * Her lines are rendered by Venice's text-to-speech and streamed back as audio —
+ * Her lines are rendered by Groq's text-to-speech and streamed back as audio —
  * the same key as her chat. The device voice is the last resort, so a call
- * always has something to say even when Venice can't be reached.
+ * always has something to say even when Groq can't be reached.
  *
  * Your side is transcribed on device by the browser.
  */
@@ -208,7 +208,7 @@ export function FeliciaCall({
       setStatus("speaking");
       setLastLine(text);
 
-      // Venice renders her line — her real voice, the same key as her chat. The
+      // Groq renders her line — her real voice, the same key as her chat. The
       // mouth starts when the sound does, not while it is still being rendered.
       const startTalking = () => setTalking(true);
       let played = false;

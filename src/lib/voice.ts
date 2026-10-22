@@ -3,7 +3,7 @@
  *
  * Two jobs live here:
  *  - playing audio that the server synthesised (her real voice), and
- *  - the on-device fallbacks, so a call still works when Venice can't render
+ *  - the on-device fallbacks, so a call still works when Groq can't render
  *    a line: the device's own speech synthesis for her, and the browser's
  *    speech recognition for you.
  */

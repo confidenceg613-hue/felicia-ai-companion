@@ -20,7 +20,7 @@ type AnyArgs = any;
 /** How many clips her gallery holds before one has to go. */
 const VIDEO_LIMIT = 24;
 /** Matches MAX_VIDEO_MB on the client; checked again after the upload lands. */
-const MAX_VIDEO_BYTES = 120 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 1024 * 1024 * 1024;
 
 /** Every video in her gallery, newest first, with a URL the browser can play. */
 export const list = query({
@@ -100,9 +100,7 @@ export const save = mutation({
 
     if (file.size > MAX_VIDEO_BYTES) {
       await ctx.storage.delete(args.storageId);
-      throw new Error(
-        "That video is over 120 MB. Trim it down or shoot a shorter clip.",
-      );
+      throw new Error("That video is over 1 GB. Trim it down to fit.");
     }
 
     const existing = await ctx.db
@@ -164,7 +162,7 @@ export const saveImported = internalMutation({
     }
     if (file.size > MAX_VIDEO_BYTES) {
       await ctx.storage.delete(args.storageId);
-      throw new Error("That video is over 120 MB — too big for her gallery.");
+      throw new Error("That video is over 1 GB — too big for her gallery.");
     }
 
     const existing = await ctx.db
