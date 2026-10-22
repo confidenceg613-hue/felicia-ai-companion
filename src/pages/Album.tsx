@@ -26,6 +26,11 @@ import {
 } from "@/components/ui/dialog";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import {
+  Cloud,
+  Link,
+  Loader2,
+} from "lucide-react";
 import { FELICIA } from "@/lib/felicia";
 import {
   FELICIA_APPEARANCE_DEFAULT,
@@ -122,17 +127,10 @@ export default function Album() {
   const [hiddenCount, setHiddenCount] = useState<number | null>(null);
   const [developing, setDeveloping] = useState(false);
 
-  const [popupOpen, setPopupOpen] = useState(false);
-  const [appearance, setAppearance] = useState<FeliciaAppearance>(
-    FELICIA_APPEARANCE_DEFAULT,
+  const addPhotosFromLink = useAction(api.felicia.addPhotosFromLink);
+  const [linkInput, setLinkInput] = useState(
+    "https://photos.app.goo.gl/NzhhrykYjuoDiokU9",
   );
-  const [appearOpen, setAppearOpen] = useState(false);
-
-  const [queueOpen, setQueueOpen] = useState(false);
-  const [queue, setQueue] = useState<QueueItem[]>([]);
-  const [cursor, setCursor] = useState(0);
-
-  const backfillStarted = useRef(false);
 
   const allPhotos = photos ?? [];
   const ready = photos !== undefined;
@@ -317,6 +315,30 @@ export default function Album() {
     }
   }
 
+  async function importFromLink() {
+    if (!linkInput.trim()) return;
+    setImporting(true);
+    const toastId = toast.loading("Opening the album…");
+    try {
+      const { imported } = await addPhotosFromLink({ link: linkInput.trim() });
+      toast.success(
+        `Imported ${imported} photo${imported === 1 ? "" : "s"} from the link.`,
+        { id: toastId },
+      );
+      setLinkImportOpen(false);
+      setLinkInput(
+        "https://photos.app.goo.gl/NzhhrykYjuoDiokU9",
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Couldn't import from that link.",
+        { id: toastId },
+      );
+    } finally {
+      setImporting(false);
+    }
+  }
+
   async function confirmRemoveVideo() {
     const video = videoToRemove;
     if (!video) return;
@@ -475,6 +497,16 @@ export default function Album() {
                     <Film className="size-3.5" />
                   )}
                   Add video
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5 rounded-full text-content"
+                  onClick={() => setLinkImportOpen(true)}
+                  title="Import photos from a public Google Photos link"
+                >
+                  <Link className="size-3.5" />
+                  Add from link
                 </Button>
                 <span className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-[10px] tracking-widest text-primary uppercase">
                   {FELICIA_GALLERY.length} permanent
@@ -1157,7 +1189,7 @@ export default function Album() {
                           </Button>
                         )}
 
-                        {!isActive && !isDone && (
+                        {!                      isActive && !isDone && (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -1171,7 +1203,26 @@ export default function Album() {
                             <Clock className="size-3" />
                             Move to front
                           </Button>
-                        )}                          {isDone && (
+                        )
+                        {isDone && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="shrink-0 touch-none"
+                            disabled={!item.url}
+                            onClick={() => {
+                              if (item.url) {
+                                setLightbox({
+                                  url: item.url,
+                                  title: item.scene,
+                                });
+                              }
+                            }}
+                            title="View this photo"
+                          >
+                            <Images className="size-4" />
+                          </Button>
+                        )}}                          {isDone && (
                             <Button
                               variant="ghost"
                               size="icon"
