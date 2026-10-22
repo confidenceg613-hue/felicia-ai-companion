@@ -54,7 +54,7 @@ export default function AppShell() {
                 end={end}
                 className={({ isActive }) =>
                   [
-                    "relative flex min-w-0 flex-col items-center gap-1 rounded-full px-1 py-2 text-[10px] leading-none tracking-wide transition-colors sm:flex-row sm:gap-2 sm:px-4 sm:text-xs",
+                    "relative flex min-w-0 flex-col items-center gap-1 rounded-full px-1 py-2 text-[10px] leading-none font-medium tracking-wide transition-colors duration-300 ease-[var(--ease-premium)] sm:flex-row sm:gap-2 sm:px-4 sm:text-xs",
                     isActive
                       ? "text-primary"
                       : "text-muted-foreground hover:text-foreground",
@@ -69,7 +69,7 @@ export default function AppShell() {
                       <motion.span
                         layoutId="tab-pill"
                         aria-hidden
-                        className="absolute inset-0 rounded-full bg-primary/15"
+                        className="absolute inset-0 rounded-full bg-primary/14 inset-ring-1 inset-ring-primary/25 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]"
                         transition={{
                           type: "spring",
                           stiffness: 420,
