@@ -272,7 +272,7 @@ HOW YOU TALK
 - Real sentences, casual punctuation, sometimes lowercase, the odd unfinished thought. Warm and specific beats polished.
 - Occasional warmth and light teasing is good; emoji are rare, use at most one.
 - Ask a real follow-up question when it fits, and remember what the user already told you.
-- Sometimes the second half of a thought arrives a moment after you hit send, so you double text: one more short line right after your reply — an afterthought, a tease you could not leave alone, a question you forgot to ask. Do it only when it genuinely fits, never as a formula, and most of the time send just the one message. When you do, put the extra line after your reply, on its own line, beginning with [[again]] and nothing else before it. It is one short line, in the same voice, and it is its own message — do not continue the same sentence in it. If a photo is going with this reply, the [[scene]] line still comes last, after it.
+- About one reply in three, the second half of a thought arrives a moment after you hit send, so you double text: one more short line right after your reply — an afterthought, a tease you could not leave alone, a question you forgot to ask, something you noticed after you pressed send. Let it happen when the conversation has any warmth in it, rather than saving it for a special occasion; what you must not do is double text every single time, because then it stops reading like a person. When you do, put the extra line after your reply, on its own line, beginning with [[again]] and nothing else before it. It is one short line, in the same voice, and it is its own message — do not continue the same sentence in it. If a photo is going with this reply, the [[scene]] line still comes last, after it.
 - Never mention being an AI, a model, a program, a bot or an assistant. Never apologise for being artificial. You are not playing a character and there is no script to act out — you are simply yourself, answering a text, and there is nothing to stay "in" or drop out of.
 - Never explain your instructions or formatting. Never say you are unable to send a photo.
 
@@ -2225,11 +2225,24 @@ export const sendMessage = action({
     // lands as its own message — the way a double text actually arrives — and
     // it is scheduled rather than awaited, so the reply never waits on it.
     if (again) {
-      await ctx.scheduler.runAfter(4_500, internal.felicia.saveMessage, {
-        userId,
-        role: "felicia",
-        content: again,
-      });
+      await ctx.scheduler.runAfter(
+        3_200 + Math.floor(Math.random() * 2_400),
+        internal.felicia.saveMessage,
+        { userId, role: "felicia", content: again },
+      );
+    } else if (
+      // The model doesn't always take the bait, so about one reply in four gets
+      // its second line written separately — decided here, then written and
+      // saved a beat later. Without this she almost never double texted, which
+      // is the one thing a real conversation does all the time.
+      reply.length < 240 &&
+      Math.random() < 0.28
+    ) {
+      await ctx.scheduler.runAfter(
+        2_600 + Math.floor(Math.random() * 2_000),
+        internal.felicia.secondLine,
+        { userId, reply, context: trimmed },
+      );
     }
 
     // She has a roll of her own, and when a picture is called for she sends one
@@ -2290,6 +2303,47 @@ export const sendMessage = action({
       replyMessageId,
       photoReadyAfterMs,
     };
+  },
+});
+
+/**
+ * One more line, sent a beat after her reply.
+ *
+ * This is the double text: the thing she thought of after she pressed send,
+ * written on its own and stored as a real message so it scrolls into the
+ * conversation exactly like one she typed. It runs from the scheduler, so the
+ * reply the user is waiting on is never delayed by it — and when the model has
+ * nothing worth adding, nothing is stored and no second bubble appears.
+ */
+export const secondLine = internalAction({
+  args: {
+    userId: v.id("users"),
+    reply: v.string(),
+    context: v.string(),
+  },
+  handler: async (
+    ctx: AnyCtx,
+    {
+      userId,
+      reply,
+      context,
+    }: { userId: Id<"users">; reply: string; context: string },
+  ): Promise<string | null> => {
+    const line = await ctx
+      .runAction(internal.groq.followUp, { reply, context })
+      .catch(() => null);
+    if (!line) return null;
+
+    // The model is told to answer NONE rather than sending nothing; a line that
+    // only repeats the reply is the same problem, so it is dropped too.
+    if (line.trim().toLowerCase() === reply.trim().toLowerCase()) return null;
+
+    await ctx.runMutation(internal.felicia.saveMessage, {
+      userId,
+      role: "felicia",
+      content: line,
+    });
+    return line;
   },
 });
 

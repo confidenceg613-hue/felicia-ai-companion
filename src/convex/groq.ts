@@ -283,6 +283,61 @@ function fromBase64(base64: string): Uint8Array {
  * or a rejected request — and the client reads the line with the device voice
  * instead of sitting in silence.
  */
+/**
+ * The one line she sends a beat after her reply.
+ *
+ * A double text is not the same thought continued — it is what she thought of
+ * after she pressed send, which is why it is written separately instead of
+ * split out of the first reply. Returns null when there is genuinely nothing
+ * to add, so a second message only ever appears when it sounds like a person.
+ */
+export const followUp = internalAction({
+  args: { reply: v.string(), context: v.string() },
+  handler: async (
+    _ctx: unknown,
+    { reply, context }: { reply: string; context: string },
+  ): Promise<string | null> => {
+    const key = groqApiKey();
+    if (!key) return null;
+
+    try {
+      const raw = await groqChat(
+        key,
+        GROQ_MODELS[0],
+        [
+          {
+            role: "system",
+            content:
+              "You are Felicia, a 28-year-old woman texting a man she is seeing. " +
+              "You have already sent the message below. Write the one short line " +
+              "you would send right after it: an afterthought, a tease you could " +
+              "not leave alone, a question you forgot, something you noticed " +
+              "after pressing send. 3 to 15 words, casual and in the same voice, " +
+              "no narration, no quotes, at most one emoji. Reply with that line " +
+              "and nothing else. If nothing natural comes to mind, reply exactly NONE.",
+          },
+          {
+            role: "user",
+            content: `Your message: ${reply}\nTheir message: ${context}`,
+          },
+        ],
+        1.0,
+      );
+
+      const line = raw
+        .replace(/^["'“”]+|["'“”]+$/g, "")
+        .replace(/\s+/g, " ")
+        .replace(/\[\[[\s\S]*?\]\]/g, "")
+        .trim();
+
+      if (!line || /^(none|nothing)\b/i.test(line)) return null;
+      return line.slice(0, 220);
+    } catch {
+      return null;
+    }
+  },
+});
+
 export const speak = internalAction({
   args: { text: v.string() },
   handler: async (
