@@ -8,6 +8,8 @@
  *    browser's speech recognition for you.
  */
 
+import { startLipSync, stopLipSync } from "@/lib/lipSync";
+
 // ---------------------------------------------------------------------------
 // Server-rendered audio
 // ---------------------------------------------------------------------------
@@ -20,17 +22,38 @@
  * `onStart` fires the moment sound really begins — after any synthesis and
  * buffering — which is what a video call needs to move her lips in time with
  * her voice rather than while the model is still thinking.
+ *
+ * While the line plays, the element is fed to the lip-sync analyser so her mouth
+ * follows the actual syllables. A tainted cross-origin file cannot be analysed,
+ * and an element is silent once it is routed that way, so a first attempt that
+ * fails is retried as plain playback — audible lips or none, she always speaks.
  */
 export function playAudioUrl(
   url: string,
   onStart?: () => void,
 ): Promise<boolean> {
+  return playOnce(url, onStart, true).then((played) => {
+    if (played) return true;
+    return playOnce(url, onStart, false);
+  });
+}
+
+function playOnce(
+  url: string,
+  onStart: (() => void) | undefined,
+  analyse: boolean,
+): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
-    const audio = new Audio(url);
+    const audio = new Audio();
+    if (analyse && /^https?:/i.test(url) && !url.startsWith(window.location.origin)) {
+      audio.crossOrigin = "anonymous";
+    }
+    audio.src = url;
     let settled = false;
     const finish = (played: boolean) => {
       if (settled) return;
       settled = true;
+      stopLipSync();
       resolve(played);
     };
 
@@ -39,8 +62,14 @@ export function playAudioUrl(
 
     const started = audio.play();
     if (started && typeof started.then === "function") {
-      started.then(() => onStart?.()).catch(() => finish(false));
+      started
+        .then(() => {
+          if (analyse) startLipSync(audio);
+          onStart?.();
+        })
+        .catch(() => finish(false));
     } else {
+      if (analyse) startLipSync(audio);
       onStart?.();
     }
 
