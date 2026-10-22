@@ -1,6 +1,7 @@
 import '@vly-ai/integrations';
 import { Toaster } from "@/components/ui/sonner";
 import { RequireAuth } from "@/components/RequireAuth";
+import { useAuth } from "@/hooks/use-auth";
 import AgeGate from "@/components/AgeGate";
 import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
@@ -8,7 +9,13 @@ import { ConvexReactClient } from "convex/react";
 import { MotionConfig } from "framer-motion";
 import React, { StrictMode, useEffect, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Route, Routes, useLocation } from "react-router";
+import {
+  BrowserRouter,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+} from "react-router";
 import "./index.css";
 
 // Lazy load route components for better code splitting
@@ -89,6 +96,21 @@ class RootErrorBoundary extends React.Component<
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
+/**
+ * The app's front door.
+ *
+ * "Meet Felicia" is for visitors who are not signed in. Once there is a
+ * session, opening the app goes straight into the chat — the landing page
+ * would only ever be a screen to click past on the way to the conversation.
+ * Signing out ends the session, so the landing page comes back on its own.
+ */
+function Home() {
+  const { isLoading, isAuthenticated } = useAuth();
+  if (isLoading) return <RouteLoading />;
+  if (isAuthenticated) return <Navigate to="/dashboard" replace />;
+  return <Landing />;
+}
+
 
 
 function RouteSyncer() {
@@ -129,7 +151,7 @@ createRoot(document.getElementById("root")!).render(
           <RouteSyncer />
           <Suspense fallback={<RouteLoading />}>
             <Routes>
-              <Route path="/" element={<Landing />} />
+              <Route path="/" element={<Home />} />
               <Route
                 path="/auth"
                 element={<AuthPage redirectAfterAuth="/dashboard" />}
