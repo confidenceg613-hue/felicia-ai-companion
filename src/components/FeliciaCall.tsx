@@ -44,6 +44,7 @@ import {
   Mic,
   MicOff,
   PhoneOff,
+  Play,
   Send,
   Video,
   VideoOff,
@@ -127,6 +128,33 @@ export function FeliciaCall({
   /** True once a picture is picked mid-call, so it wins over the clip. */
   const [pictureOverride, setPictureOverride] = useState(false);
 
+  const clipVideoRef = useRef<HTMLVideoElement>(null);
+  /**
+   * Where the clip is: still buffering, running, or waiting on a tap. Stored
+   * against the clip's id and derived back during render, so swapping clips
+   * resets to "loading" on its own — no effect has to write state to notice
+   * that a different video is on screen.
+   *
+   * `autoPlay` alone proved not enough: an iframe can forbid autoplay outright
+   * and some browsers decide before React has set `muted`, and both used to
+   * leave a silent black rectangle with no way out.
+   */
+  const [clipPhaseAt, setClipPhaseAt] = useState<{
+    id: string;
+    phase: "loading" | "playing" | "blocked";
+  } | null>(null);
+  const [brokenClipId, setBrokenClipId] = useState<string | null>(null);
+  /** The clip actually on screen — a failed one drops back to her picture. */
+  const clip =
+    heroVideo && !pictureOverride && brokenClipId !== heroVideo._id
+      ? heroVideo
+      : null;
+  const clipPhase =
+    clip && clipPhaseAt?.id === clip._id ? clipPhaseAt.phase : "loading";
+  const setClipPhase = (phase: "loading" | "playing" | "blocked") => {
+    if (clip) setClipPhaseAt({ id: clip._id, phase });
+  };
+
   const [status, setStatus] = useState<CallStatus>("connecting");
   const [interim, setInterim] = useState("");
   const [lastLine, setLastLine] = useState<string | null>(null);
@@ -197,6 +225,62 @@ export function FeliciaCall({
     setStage("align");
     setPictureOpen(true);
   }, [video, feedId, face, heroVideo]);
+
+  /**
+   * Start her clip ourselves.
+   *
+   * The browser is asked to play directly — with `muted` set by hand first,
+   * because a muted element is the only kind allowed to start on its own — and
+   * asked again whenever metadata lands, since the first attempt often comes
+   * before there is anything to play. If the browser still refuses, the caller
+   * gets a tap-to-play button rather than a frozen frame.
+   */
+  useEffect(() => {
+    if (!clip) return;
+    const element = clipVideoRef.current;
+    if (!element) return;
+
+    let cancelled = false;
+    const attempt = () => {
+      if (cancelled || !element.paused) return;
+      element.muted = true;
+      void element
+        .play()
+        .then(() => {
+          if (!cancelled) setClipPhaseAt({ id: clip._id, phase: "playing" });
+        })
+        .catch((error: unknown) => {
+          if (cancelled) return;
+          if (error instanceof DOMException && error.name === "NotAllowedError") {
+            setClipPhaseAt({ id: clip._id, phase: "blocked" });
+          }
+        });
+    };
+
+    attempt();
+    element.addEventListener("loadedmetadata", attempt);
+    element.addEventListener("canplay", attempt);
+    return () => {
+      cancelled = true;
+      element.removeEventListener("loadedmetadata", attempt);
+      element.removeEventListener("canplay", attempt);
+    };
+  }, [clip, setClipPhaseAt]);
+
+  /**
+   * A clip the browser can't decode is worth saying out loud — otherwise the
+   * call quietly shows her picture and a successful upload looks ignored.
+   * Guarded so StrictMode's double effect doesn't say it twice.
+   */
+  const warnedClipRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!heroVideo || pictureOverride || brokenClipId !== heroVideo._id) return;
+    if (warnedClipRef.current === heroVideo._id) return;
+    warnedClipRef.current = heroVideo._id;
+    toast.error(
+      "That clip won't play in this browser, so her picture is on the call instead. MP4 (H.264) plays everywhere.",
+    );
+  }, [heroVideo, pictureOverride, brokenClipId]);
 
   /** Speak one of her lines in her own voice, falling back to the device voice. */
   const say = useCallback(
@@ -470,16 +554,63 @@ export function FeliciaCall({
       <div className="fixed inset-0 z-50 flex flex-col bg-background">
         {/* Her camera, with your own small feed floating over it. */}
         <div className="relative min-h-0 flex-1 overflow-hidden">
-          {heroVideo && !pictureOverride ? (
-            <video
-              key={heroVideo._id}
-              src={heroVideo.url}
-              autoPlay
-              muted
-              loop
-              playsInline
-              className="absolute inset-0 size-full bg-black object-contain"
-            />
+          {clip ? (
+            <>
+              <video
+                key={clip._id}
+                ref={clipVideoRef}
+                src={clip.url}
+                autoPlay
+                muted
+                loop
+                playsInline
+                preload="auto"
+                /* The file itself is the problem — undecodable codec, a
+                   rejected range request — so fall back to her picture rather
+                   than leaving a black rectangle for the whole call. */
+                onError={() => setBrokenClipId(clip._id)}
+                onPlaying={() => setClipPhase("playing")}
+                onWaiting={() => setClipPhase("loading")}
+                /* `stalled` deliberately isn't wired: it fires during healthy
+                   playback with no matching event to clear it, which would
+                   leave the spinner parked over a clip that is running. */
+                onCanPlay={() => {
+                  const element = clipVideoRef.current;
+                  if (element && !element.paused) setClipPhase("playing");
+                }}
+                className="absolute inset-0 size-full bg-black object-contain"
+              />
+
+              {/* Still pulling the file down: a clip can be hundreds of MB, and
+                  a black rectangle with no word on it reads as "broken". */}
+              {clipPhase === "loading" && (
+                <span className="pointer-events-none absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-full border border-white/25 bg-black/55 px-4 py-2 text-xs text-white/85 backdrop-blur-md">
+                  <Loader2 className="size-3.5 animate-spin" />
+                  loading clip…
+                </span>
+              )}
+
+              {/* The browser refused to start on its own. One tap anywhere in
+                  the call is a user gesture, which is all it needed. */}
+              {clipPhase === "blocked" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const element = clipVideoRef.current;
+                    if (!element) return;
+                    element.muted = true;
+                    void element
+                      .play()
+                      .then(() => setClipPhase("playing"))
+                      .catch(() => setClipPhase("blocked"));
+                  }}
+                  className="absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-full border border-white/30 bg-black/60 px-5 py-3 text-sm text-white backdrop-blur-md transition-transform hover:scale-105"
+                >
+                  <Play className="size-4 fill-current" />
+                  tap to play
+                </button>
+              )}
+            </>
           ) : (
             <FeliciaVideoFeed
               url={feedPhoto.fullUrl}
