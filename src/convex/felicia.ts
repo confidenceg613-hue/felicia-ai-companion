@@ -40,6 +40,7 @@ import {
   query,
 } from "./_generated/server";
 
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyCtx = any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2728,6 +2729,35 @@ export const backfillPhotoVision = action({
       userId,
       limit,
     });
+  },
+});
+
+/**
+ * Import photos from a public Google Photos share link into her roll.
+ *
+ * Uses Playwright to open the album page headless, reads the sized image
+ * URLs it actually loads, downloads each into Convex storage, and records
+ * each one as a photo she has sent this user — so it shows up in the album,
+ * the lightbox, and the conversation like any other of her pictures.
+ *
+ * The default link is the shared album the user pointed at
+ * (photos.app.goo.gl/NzhhrykYjuoDiokU9), and an explicit link can be passed
+ * instead when a different album is wanted.
+ */
+export const addPhotosFromLink = action({
+  args: { link: v.string() },
+  returns: v.object({ imported: v.number() }),
+  handler: async (
+    ctx: AnyCtx,
+    { link }: { link: string },
+  ): Promise<{ imported: number }> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Sign in first.");
+
+    return await ctx.runAction(internal.photos_import.addPhotosFromLink, {
+      link,
+      userId,
+    }) as { imported: number };
   },
 });
 

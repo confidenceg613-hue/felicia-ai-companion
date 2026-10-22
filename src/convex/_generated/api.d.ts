@@ -19,6 +19,7 @@ import type * as groq from "../groq.js";
 import type * as http from "../http.js";
 import type * as images from "../images.js";
 import type * as mature from "../mature.js";
+import type * as photos_import from "../photos_import.js";
 import type * as tts_test from "../tts_test.js";
 import type * as users from "../users.js";
 import type * as videos from "../videos.js";
@@ -42,6 +43,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   images: typeof images;
   mature: typeof mature;
+  photos_import: typeof photos_import;
   tts_test: typeof tts_test;
   users: typeof users;
   videos: typeof videos;
