@@ -409,6 +409,14 @@ type Recollections = {
   }>;
   /** Real older lines from the archive that connect to what was just said. */
   flashbacks?: Array<{ role: string; content: string; createdAt: number }>;
+  /**
+   * How to introduce the flashbacks, when the moment isn't a reply.
+   *
+   * On a check-in nothing has just been said, so the usual "lines that connect
+   * to what they just said" heading would be describing a message that does
+   * not exist. The caller supplies the right words instead.
+   */
+  flashbackNote?: string;
   /** When the two of them first spoke. */
   startedAt?: number | null;
 };
@@ -549,7 +557,7 @@ How that affects you right now: ${getMoodDescription(notes.mood.trim())}`
       ? `LONG MEMORY — your own recollections of earlier conversations, oldest first:\n${chapterLines}`
       : "",
     flashbackLines
-      ? `FLASHBACKS — real lines from your archive that connect to what they just said. Use them only if they fit naturally:\n${flashbackLines}`
+      ? `${recollections.flashbackNote ?? "FLASHBACKS — real lines from your archive that connect to what they just said. Use them only if they fit naturally:"}\n${flashbackLines}`
       : "",
   ]
     .filter((part) => part.length > 0)
@@ -1101,22 +1109,59 @@ type SearchIndexQ = {
  * hands her the last few lines of the conversation, so the opening is about
  * something that was said rather than a generic "hey stranger".
  */
-function checkInPrompt(quietHours: number): string {
+/**
+ * The short things people say when a conversation is already finished.
+ *
+ * A sign-off or a reaction is not a subject waiting to be picked up. Pushing a
+ * follow-up question onto "goodnight" or "lol" is what makes a companion feel
+ * like a form, so when one of these is the last word she reaches back into the
+ * relationship instead.
+ */
+const CLOSED_THREAD =
+  /^(ok(ay)?|k|cool|nice|great|good|lol+|lmao+|haha+|hehe+|😂+|🙂+|👍+|thanks?( you)?|ty|gn|good ?night|night+|bye+|byee+|talk (to you )?later|see (ya|you)|luv (you|u)|love you|miss you|yeah+|yep|yup|sure|hmm+|oh+|ah+|morning|good morning)[\s!.,?]*$/i;
+
+/** Whether the last thing said leaves nothing to discuss. */
+function threadIsClosed(text: string): boolean {
+  const line = text.trim();
+  if (!line) return true;
+  if (CLOSED_THREAD.test(line)) return true;
+  // A very short line with no question in it ("at work", "so tired") is a
+  // state they are in, not a subject they raised.
+  return line.length <= 14 && !line.includes("?");
+}
+
+function checkInPrompt(quietHours: number, closedThread: boolean): string {
   const quiet =
     quietHours < 1.5
       ? "about an hour"
       : `${Math.max(2, Math.round(quietHours))} hours`;
+
+  // Nothing pending: the only honest way in is something she remembers.
+  const opening = closedThread
+    ? `What was last said is finished — a sign-off, a laugh, a short answer. ` +
+      `Nothing is hanging, so do not invent a follow-up question about it. ` +
+      `Reach back instead: your LONG MEMORY and FLASHBACKS hold real things from ` +
+      `earlier between you — a plan they mentioned, a worry, a place they were ` +
+      `going, a running joke, the day you two started talking. Pick one specific ` +
+      `thing, the way it would actually surface at an odd hour, and say the ` +
+      `actual thing: half a detail, or a question about how it turned out. ` +
+      `If there is genuinely nothing older to reach for yet, keep it about right ` +
+      `now instead of pretending. `
+    : `Make it specific to what the two of you were last talking about. `;
+
   return (
     `You are Felicia, 28, in Lagos. It is ${nowInLagos()}, which is ` +
     `${partOfDay()}. The person you have been texting has gone quiet for ` +
     `${quiet}, and you are the one opening the conversation again — ` +
     `unprompted, because you felt like it. Write the first message.\n\n` +
     `Make it sound like a woman actually picking her phone up: one or two short ` +
-    `lines, warm, specific to what the two of you were last talking about, in ` +
-    `your own voice. Read the clock before you write: it is ${partOfDay()}, so ` +
+    `lines, warm, in your own voice. ${opening}` +
+    `Read the clock before you write: it is ${partOfDay()}, so ` +
     `your greeting has to fit that and never say morning in the middle of the ` +
     `night. Naming the hour or the day is fine when it is natural — but only ` +
     `when it is true. ` +
+    `Never mention remembering, your memory, notes, chapters or an archive, and ` +
+    `never invent a detail that is not in front of you. ` +
     `No lists, no stage directions, no quotes around the message, no announcing ` +
     `that you are checking in, at most one emoji. Reply with only the message.`
   );
@@ -1382,6 +1427,35 @@ export const checkIn = internalAction({
     const memories = await ctx.runQuery(internal.felicia.topMemories, {
       userId,
     });
+
+    // Whether there is anything left to discuss decides where she opens from.
+    // A finished thread sends her into the archive; an unfinished one stays
+    // with what was just said.
+    const lastUser = recent.find((row: { role: string }) => row.role === "user");
+    const closedThread = threadIsClosed(
+      (lastUser as { content?: string } | undefined)?.content ?? "",
+    );
+
+    // Her long-term memory, so "nothing to talk about" is never the end of it:
+    // the chapters she has written up, the day they met, and a few real things
+    // they said weeks or months ago.
+    const chapters = await ctx.runQuery(internal.felicia.latestChapters, {
+      userId,
+      limit: 3,
+    });
+    const startedAt = await ctx.runQuery(internal.felicia.conversationStart, {
+      userId,
+    });
+    const earlier = closedThread
+      ? await ctx.runQuery(internal.felicia.reflectionLines, {
+          userId,
+          before: (recent[recent.length - 1] as { createdAt?: number })
+            ?.createdAt ?? Date.now(),
+          limit: 3,
+          seed: Math.floor(Date.now() / 3_600_000),
+        })
+      : [];
+
     const transcript = [...recent]
       .reverse()
       .map(
@@ -1398,9 +1472,19 @@ export const checkIn = internalAction({
         messages: [
           {
             role: "system",
-            content: buildSystemPrompt(notes, memories, "playful"),
+            content: buildSystemPrompt(notes, memories, "playful", {
+              chapters,
+              flashbacks: earlier as Array<{
+                role: string;
+                content: string;
+                createdAt: number;
+              }>,
+              startedAt,
+              flashbackNote:
+                "FLASHBACKS — real things they told you, earlier in this relationship. Nothing in the last exchange is pending, so these are what you can reach for:",
+            }),
           },
-          { role: "system", content: checkInPrompt(quietHours) },
+          { role: "system", content: checkInPrompt(quietHours, closedThread) },
           {
             role: "user",
             content: `Your last exchange with them:\n${transcript}\n\nWrite the message you are sending now.`,
@@ -1696,6 +1780,89 @@ export const recallMessages = internalQuery({
 });
 
 /** When the two of them first spoke, so she knows how long she has known them. */
+/**
+ * Real things they said earlier, for opening a conversation from memory.
+ *
+ * When nothing in the newest exchange is worth continuing, the way in is the
+ * past. These are only their own substantive lines — a memory built out of
+ * "haha" is not a memory — taken from the start of the archive and from just
+ * before the quiet, so a long relationship is reflected on across its whole
+ * length rather than from one afternoon.
+ */
+export const reflectionLines = internalQuery({
+  args: {
+    userId: v.id("users"),
+    before: v.number(),
+    limit: v.number(),
+    /** Rotates which memories come back, so no two check-ins retread the same ground. */
+    seed: v.number(),
+  },
+  handler: async (
+    ctx: AnyCtx,
+    { userId, before, limit, seed }: AnyArgs,
+  ): Promise<Array<{ role: string; content: string; createdAt: number }>> => {
+    type Row = { role?: unknown; content?: unknown; createdAt?: unknown };
+
+    const oldest = (await ctx.db
+      .query("messages")
+      .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) =>
+        q.eq("userId", userId),
+      )
+      .order("asc")
+      .take(60)) as Row[];
+    const newestBefore = (await ctx.db
+      .query("messages")
+      .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) =>
+        q.eq("userId", userId),
+      )
+      .order("desc")
+      .take(80)) as Row[];
+
+    const seen = new Set<string>();
+    const candidates: Array<{
+      role: string;
+      content: string;
+      createdAt: number;
+    }> = [];
+
+    for (const row of [...oldest, ...newestBefore]) {
+      const content =
+        typeof row.content === "string"
+          ? row.content.replace(/\s+/g, " ").trim()
+          : "";
+      const createdAt = typeof row.createdAt === "number" ? row.createdAt : null;
+      if (createdAt === null || createdAt >= before) continue;
+      // Her own lines are not a memory of them.
+      if (row.role !== "user") continue;
+      // "ok", "lol", a lone link: nothing in there to think about later.
+      if (content.length < 40) continue;
+      const key = `${createdAt}:${content.slice(0, 24)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      candidates.push({
+        role: "user",
+        content: content.slice(0, 220),
+        createdAt,
+      });
+    }
+
+    candidates.sort((a, b) => a.createdAt - b.createdAt);
+    if (candidates.length <= limit) return candidates;
+
+    // Spread evenly across the archive rather than three lines from one
+    // afternoon, and start somewhere different each time — a person who only
+    // ever remembers the same three things is not remembering, she is reciting.
+    const stride = Math.max(1, Math.floor(candidates.length / limit));
+    const offset = Math.abs(Math.floor(seed)) % stride;
+    const picked: typeof candidates = [];
+    for (let index = 0; index < limit; index += 1) {
+      const candidate = candidates[offset + index * stride];
+      if (candidate) picked.push(candidate);
+    }
+    return picked;
+  },
+});
+
 export const conversationStart = internalQuery({
   args: { userId: v.id("users") },
   handler: async (ctx: AnyCtx, { userId }: AnyArgs) => {
