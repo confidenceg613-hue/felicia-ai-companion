@@ -25,7 +25,7 @@ import { useFeliciaAvatar } from "@/hooks/use-felicia-avatar";
 import { FELICIA } from "@/lib/felicia";
 import { FELICIA_GALLERY, galleryOriginal } from "@/lib/gallery";
 import { DEVELOP_MS, preloadImage } from "@/lib/photo";
-import { cn, friendlyError } from "@/lib/utils";
+import { cn, friendlyError, isTransientError } from "@/lib/utils";
 import { beginVoiceNote, playAudioUrl, speakWithBrowser } from "@/lib/voice";
 import { useAction, usePaginatedQuery, useQuery } from "convex/react";
 import { motion } from "framer-motion";
@@ -269,6 +269,13 @@ export default function Dashboard() {
   // Pages arrive newest-first so "load earlier" can walk all the way back; the
   // transcript itself reads oldest-to-newest.
   const list = [...(messagePages.results ?? [])].reverse();
+  /**
+   * The transcript as it stands on this render, for the retry check below.
+   * A failed send has to look at what is on screen now, not at whatever the
+   * closure captured when the send started.
+   */
+  const listRef = useRef(list);
+  listRef.current = list;
   const lastUserMessage = [...list].reverse().find((m) => m.role === "user");
   const showPending = pending !== null && lastUserMessage?.content !== pending;
   const composing = thinking || recording;
@@ -352,11 +359,7 @@ export default function Dashboard() {
       const result = await generatePhoto({ scene });
       if (result.url) await preloadImage(result.url);
     } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Felicia couldn't send that photo.",
-      );
+      toast.error(friendlyError(error, "Felicia couldn't send that photo."));
     } finally {
       setDeveloping(false);
       setHiddenCount(null);
@@ -412,11 +415,9 @@ export default function Dashboard() {
       }
       if (!played) await speakWithBrowser(content);
     } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Felicia couldn't speak just now.",
-      );
+      // A line she cannot render is read out by the device voice instead, so
+      // this is a note and not the end of the feature.
+      toast.error(friendlyError(error, "Felicia couldn't speak just now."));
     } finally {
       speakingRef.current = null;
       setSpeakingId(null);
@@ -433,6 +434,29 @@ export default function Dashboard() {
     }
   }
 
+  /**
+   * Send one line, and survive a dropped socket.
+   *
+   * "Connection lost while action was in flight" is not about the message: the
+   * socket restarted while the action was travelling, and Convex cannot say
+   * whether it ran. So the transcript is checked first — when the line did
+   * arrive, her reply is already on its way and sending it again would double
+   * it — and only a line that genuinely did not land is sent a second time.
+   */
+  async function sendMessageSafely(text: string) {
+    try {
+      return await sendMessage({ text });
+    } catch (error) {
+      if (!isTransientError(error)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      const landed = listRef.current.some(
+        (message) => message.role === "user" && message.content === text,
+      );
+      if (landed) return null;
+      return await sendMessage({ text });
+    }
+  }
+
   async function handleSend(text: string) {
     const trimmed = text.trim();
     if (!trimmed || composing) return;
@@ -442,9 +466,10 @@ export default function Dashboard() {
     setThinking(true);
 
     try {
-      const result = await sendMessage({ text: trimmed });
+      const result = await sendMessageSafely(trimmed);
       setPending(null);
       setThinking(false);
+      if (!result) return;
       setSparkleBurstId(String(result.replyMessageId));
       if (autoVoiceRef.current) {
         void playMessage(result.replyMessageId, result.reply);
@@ -460,6 +485,10 @@ export default function Dashboard() {
     } catch (error) {
       setPending(null);
       setThinking(false);
+      // The words are handed back rather than lost: a dropped connection is
+      // not their fault, and retyping a message they already wrote is the
+      // worst part of one. Anything typed since is left alone.
+      setDraft((current) => current || trimmed);
       toast.error(friendlyError(error, "Felicia didn't get that — try again."));
     }
   }
@@ -538,9 +567,7 @@ export default function Dashboard() {
         void playMessage(result.replyMessageId, result.reply);
       }
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "That photo didn't send.",
-      );
+      toast.error(friendlyError(error, "That photo didn't send."));
     } finally {
       setSendingPhoto(false);
       setThinking(false);

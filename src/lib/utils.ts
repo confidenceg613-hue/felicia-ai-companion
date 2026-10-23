@@ -21,6 +21,10 @@ export function friendlyError(error: unknown, fallback: string): string {
     .replace(/\[Request ID:[^\]]*\]/gi, " ")
     .replace(/Server Error:?/gi, " ")
     .replace(/Uncaught Error:?/gi, " ")
+    // Every client-side Convex error carries this line after the real message,
+    // stack or not; it is no more useful to a person than the stack is.
+    .replace(/Called by client/gi, " ")
+    .replace(/^\s+at\s+[\s\S]*$/im, " ")
     .replace(/\bat\s+[\s\S]*$/i, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -28,8 +32,12 @@ export function friendlyError(error: unknown, fallback: string): string {
   if (/sign in|not authenticated|unauthenticated/i.test(cleaned)) {
     return "Your session dropped — reload and she'll pick up again.";
   }
-  if (/failed to fetch|connection lost|network|timed out|timeout/i.test(cleaned)) {
-    return "The connection dipped for a second — say it again.";
+  if (
+    /failed to fetch|connection lost|connection dropped|network|timed out|timeout/i.test(
+      cleaned,
+    )
+  ) {
+    return "The connection dipped for a second — send that again.";
   }
   if (/rate.?limit|too many requests|\b429\b/i.test(cleaned)) {
     return "She's a little overloaded right now — give it a few seconds and say it again.";
