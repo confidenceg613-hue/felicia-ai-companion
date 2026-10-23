@@ -4,8 +4,9 @@ import { RequireAuth } from "@/components/RequireAuth";
 import { useAuth } from "@/hooks/use-auth";
 import AgeGate from "@/components/AgeGate";
 import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
+import { pageModules, prefetchPages } from "@/lib/pageModules";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
-import { ConvexReactClient } from "convex/react";
+import { ConvexReactClient, useConvexAuth } from "convex/react";
 import { MotionConfig } from "framer-motion";
 import React, { StrictMode, useEffect, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
@@ -18,16 +19,17 @@ import {
 } from "react-router";
 import "./index.css";
 
-// Lazy load route components for better code splitting
-const Landing = lazy(() => import("./pages/Landing.tsx"));
-const AuthPage = lazy(() => import("./pages/Auth.tsx"));
-const AppShell = lazy(() => import("./components/AppShell.tsx"));
-const Dashboard = lazy(() => import("./pages/Dashboard.tsx"));
-const Memories = lazy(() => import("./pages/Memories.tsx"));
-const Album = lazy(() => import("./pages/Album.tsx"));
-const SharedNotes = lazy(() => import("./pages/SharedNotes.tsx"));
-const Settings = lazy(() => import("./pages/Settings.tsx"));
-const NotFound = lazy(() => import("./pages/NotFound.tsx"));
+// Lazy load route components for better code splitting. The modules come from
+// one shared map so the prefetcher below warms exactly what the router needs.
+const Landing = lazy(pageModules.landing);
+const AuthPage = lazy(pageModules.auth);
+const AppShell = lazy(pageModules.shell);
+const Dashboard = lazy(pageModules.dashboard);
+const Memories = lazy(pageModules.memories);
+const Album = lazy(pageModules.album);
+const SharedNotes = lazy(pageModules.notes);
+const Settings = lazy(pageModules.settings);
+const NotFound = lazy(pageModules.notFound);
 
 // Simple loading fallback for route transitions
 function RouteLoading() {
@@ -113,6 +115,49 @@ function Home() {
 
 
 
+/**
+ * Fetches every page's code once the first screen is up.
+ *
+ * Without this, opening a tab meant waiting on a chunk request — and since the
+ * Suspense boundary sits above the routes, that wait blanked the whole app.
+ * Warming the modules while the browser is idle makes a tap a render, not a
+ * download.
+ */
+function RoutePrefetcher() {
+  const { isAuthenticated } = useConvexAuth();
+
+  useEffect(() => {
+    // Signed out, only the two public pages are worth pulling; once there is a
+    // session, every tab is warmed so none of them is the one that waits.
+    const warm = () => {
+      if (isAuthenticated) {
+        prefetchPages();
+        return;
+      }
+      void pageModules.landing();
+      void pageModules.auth();
+    };
+
+    const scope = window as Window & {
+      requestIdleCallback?: (
+        callback: () => void,
+        options?: { timeout: number },
+      ) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+
+    if (scope.requestIdleCallback) {
+      const handle = scope.requestIdleCallback(warm, { timeout: 1500 });
+      return () => scope.cancelIdleCallback?.(handle);
+    }
+
+    const timer = setTimeout(warm, 250);
+    return () => clearTimeout(timer);
+  }, [isAuthenticated]);
+
+  return null;
+}
+
 function RouteSyncer() {
   const location = useLocation();
   useEffect(() => {
@@ -149,6 +194,7 @@ createRoot(document.getElementById("root")!).render(
       <ConvexAuthProvider client={convex}>
         <BrowserRouter>
           <RouteSyncer />
+          <RoutePrefetcher />
           <Suspense fallback={<RouteLoading />}>
             <Routes>
               <Route path="/" element={<Home />} />

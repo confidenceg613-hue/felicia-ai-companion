@@ -1,5 +1,7 @@
+import { pageModules, type PageModuleKey } from "@/lib/pageModules";
 import { Brain, Images, MessageSquare, NotebookPen, Settings as SettingsIcon } from "lucide-react";
 import { motion } from "framer-motion";
+import { Suspense, useEffect } from "react";
 import { NavLink, Outlet, useLocation } from "react-router";
 
 /**
@@ -9,16 +11,57 @@ import { NavLink, Outlet, useLocation } from "react-router";
  * The bar is rendered here rather than in each page so it is always in the same
  * place and never scrolls away with the content above it.
  */
-const TABS = [
-  { to: "/dashboard", label: "Chat", Icon: MessageSquare, end: true },
-  { to: "/dashboard/album", label: "Album", Icon: Images },
-  { to: "/dashboard/memories", label: "Memories", Icon: Brain },
-  { to: "/dashboard/notes", label: "Notes", Icon: NotebookPen },
-  { to: "/dashboard/settings", label: "Settings", Icon: SettingsIcon },
+const TABS: {
+  to: string;
+  label: string;
+  Icon: typeof MessageSquare;
+  end?: boolean;
+  module: PageModuleKey;
+}[] = [
+  { to: "/dashboard", label: "Chat", Icon: MessageSquare, end: true, module: "dashboard" },
+  { to: "/dashboard/album", label: "Album", Icon: Images, module: "album" },
+  { to: "/dashboard/memories", label: "Memories", Icon: Brain, module: "memories" },
+  { to: "/dashboard/notes", label: "Notes", Icon: NotebookPen, module: "notes" },
+  { to: "/dashboard/settings", label: "Settings", Icon: SettingsIcon, module: "settings" },
 ];
+
+/** Start pulling a page's code the instant a tab is touched. */
+function warm(key: PageModuleKey) {
+  void pageModules[key]();
+}
+
+/**
+ * What a tab shows in the content area while its code is still arriving.
+ *
+ * The tab bar and the frame stay exactly where they are — a route change reads
+ * as a page loading, never as the app disappearing and coming back.
+ */
+function PageSkeleton() {
+  return (
+    <div aria-hidden className="flex min-h-0 flex-1 flex-col gap-3 p-4 sm:p-6">
+      <div className="h-7 w-32 animate-pulse rounded-full bg-muted/60" />
+      <div className="h-16 animate-pulse rounded-2xl bg-muted/40" />
+      <div className="grid grid-cols-3 gap-2.5">
+        {Array.from({ length: 6 }).map((_, index) => (
+          <div
+            key={index}
+            className="aspect-[2/3] animate-pulse rounded-xl bg-muted/30"
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function AppShell() {
   const location = useLocation();
+
+  // The tab bar is the only way between pages, so once the shell is on screen
+  // every tab's code is fetched — a tap then renders a module already in
+  // memory instead of waiting on a download.
+  useEffect(() => {
+    for (const tab of TABS) warm(tab.module);
+  }, []);
 
   return (
     /* A fixed, viewport-tall frame: the bar is a real row at the bottom and
@@ -36,7 +79,11 @@ export default function AppShell() {
           transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
           className="flex min-h-0 flex-1 flex-col"
         >
-          <Outlet />
+          {/* Scoped to the page area: the tab bar never unmounts while a route
+              is loading, so the app itself never blinks out. */}
+          <Suspense fallback={<PageSkeleton />}>
+            <Outlet />
+          </Suspense>
         </motion.div>
       </main>
 
@@ -47,11 +94,14 @@ export default function AppShell() {
         {/* Five equal columns on a phone: every tab keeps its own space, so the
             last one can never be pushed off the edge of a narrow screen. */}
         <ul className="grid w-full grid-cols-5 items-center gap-0.5 px-1 sm:flex sm:w-auto sm:justify-center sm:gap-1 sm:px-0">
-          {TABS.map(({ to, label, Icon, end }) => (
+          {TABS.map(({ to, label, Icon, end, module }) => (
             <li key={to} className="min-w-0">
               <NavLink
                 to={to}
                 end={end}
+                onPointerEnter={() => warm(module)}
+                onPointerDown={() => warm(module)}
+                onFocus={() => warm(module)}
                 className={({ isActive }) =>
                   [
                     "relative flex min-w-0 flex-col items-center gap-1 rounded-full px-1 py-2 text-[10px] leading-none font-medium tracking-wide transition-colors duration-300 ease-[var(--ease-premium)] sm:flex-row sm:gap-2 sm:px-4 sm:text-xs",
