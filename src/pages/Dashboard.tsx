@@ -25,7 +25,7 @@ import { useFeliciaAvatar } from "@/hooks/use-felicia-avatar";
 import { FELICIA } from "@/lib/felicia";
 import { FELICIA_GALLERY, galleryOriginal } from "@/lib/gallery";
 import { DEVELOP_MS, preloadImage } from "@/lib/photo";
-import { cn } from "@/lib/utils";
+import { cn, friendlyError } from "@/lib/utils";
 import { beginVoiceNote, playAudioUrl, speakWithBrowser } from "@/lib/voice";
 import { useAction, usePaginatedQuery, useQuery } from "convex/react";
 import { motion } from "framer-motion";
@@ -371,10 +371,11 @@ export default function Dashboard() {
     try {
       setGreeting(await startCall({}));
     } catch (error) {
+      // The call screen opens either way — a line from the backend is a note,
+      // not the end of the call — so it gets the same plain sentence a person
+      // would get, not the Convex wrapper with a stack trace in it.
       setCallError(
-        error instanceof Error
-          ? error.message
-          : "Felicia didn't pick up. Try again in a moment.",
+        friendlyError(error, "Felicia didn't pick up — say something to her instead."),
       );
     }
   }
@@ -459,9 +460,7 @@ export default function Dashboard() {
     } catch (error) {
       setPending(null);
       setThinking(false);
-      toast.error(
-        error instanceof Error ? error.message : "Felicia didn't get that.",
-      );
+      toast.error(friendlyError(error, "Felicia didn't get that — try again."));
     }
   }
 

@@ -26,7 +26,7 @@ import {
 } from "@/lib/feliciaCamera";
 import { FELICIA } from "@/lib/felicia";
 import { FELICIA_GALLERY } from "@/lib/gallery";
-import { cn } from "@/lib/utils";
+import { cn, friendlyError, isTransientError } from "@/lib/utils";
 import { DEVELOP_MS, preloadImage } from "@/lib/photo";
 import {
   hasSpeechRecognition,
@@ -442,12 +442,10 @@ export function FeliciaCall({
   );
 
   useEffect(() => {
-    if (!greeting) {
-      // She never picked up — show why, and let the call screen stay usable.
-      return;
-    }
-    // Keep initialNote in scope for the render surface contract without
-    // triggering a lint-unnecessary-unused-var error.
+    // She may never have picked up. A failed greeting used to end the call
+    // before it started — nothing on screen but the error, and a mic that never
+    // opened, so talking to her did nothing at all. The conversation runs
+    // whether or not there was an opening line; the note explains the rest.
     void initialNote;
 
     // Captured as a const so the nested closure keeps the non-null narrowing.
@@ -463,7 +461,7 @@ export function FeliciaCall({
       setStatus("connecting");
 
       // Guarded so a StrictMode remount does not replay her opening line.
-      if (spokenGreetingRef.current !== opening.messageId) {
+      if (opening && spokenGreetingRef.current !== opening.messageId) {
         spokenGreetingRef.current = opening.messageId;
         await say(opening.messageId, opening.reply, active);
       }
@@ -506,9 +504,14 @@ export function FeliciaCall({
         if (!heard.text) {
           misses += 1;
           if (misses > 4) {
-            setNote("I couldn't hear anything. Unmute the mic, or type below.");
+            // Say something, then keep listening: giving up on the mic after a
+            // quiet stretch left a call that could never hear the next thing
+            // said, which is exactly when someone tries to speak.
+            setNote("I couldn't catch that — say it again, or type below.");
             setStatus("idle");
-            return;
+            misses = 0;
+            await sleep(800);
+            continue;
           }
           await sleep(400);
           continue;
@@ -517,16 +520,30 @@ export function FeliciaCall({
         misses = 0;
         setStatus("thinking");
         try {
-          const result = await sendMessage({ text: heard.text });
+          let result;
+          try {
+            result = await sendMessage({ text: heard.text });
+          } catch (error) {
+            // A dropped connection is not about what was said, so the line is
+            // sent once more before anything is said about it.
+            if (!isTransientError(error)) throw error;
+            await sleep(700);
+            if (!active()) return;
+            result = await sendMessage({ text: heard.text });
+          }
           if (!active()) return;
+          setNote(null);
           if (result.photoUrl) void showExisting(result.photoUrl, active);
           else if (result.photoScene) void showPhoto(result.photoScene, active);
           await say(result.replyMessageId, result.reply, active);
         } catch (error) {
           if (!active()) return;
-          setNote(error instanceof Error ? error.message : "That didn't send.");
+          // One hiccup must not end the call: she goes back to listening, and
+          // the note says what happened in a sentence instead of a stack trace.
+          setNote(friendlyError(error, "That didn't go through — say it again."));
           setStatus("idle");
-          return;
+          await sleep(600);
+          continue;
         }
       }
     }
@@ -562,7 +579,7 @@ export function FeliciaCall({
       await say(result.replyMessageId, result.reply, active);
     } catch (error) {
       if (!active()) return;
-      toast.error(error instanceof Error ? error.message : "That didn't send.");
+      toast.error(friendlyError(error, "That didn't send — try again."));
       setStatus("idle");
     } finally {
       busyRef.current = false;
