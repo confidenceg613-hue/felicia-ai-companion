@@ -734,6 +734,11 @@ export function FeliciaCall({
                 loop
                 playsInline
                 preload="auto"
+                /* Her own picture is the frame until the clip can paint one:
+                   without it a buffering clip was a black rectangle, which is
+                   what made every call feel like it was still loading. The
+                   poster is a 20 KB local thumbnail, so it is there at once. */
+                poster={feedPhoto.thumbUrl}
                 onLoadedMetadata={(event) => {
                   const { videoWidth, videoHeight } = event.currentTarget;
                   if (videoWidth > 0 && videoHeight > 0) {
@@ -782,12 +787,15 @@ export function FeliciaCall({
                 </div>
               )}
 
-              {/* Still pulling the file down: a clip can be hundreds of MB, and
-                  a black rectangle with no word on it reads as "broken". */}
+              {/* Still pulling the file down. Her picture is already on
+                  screen from the poster, so this is a quiet note in the corner
+                  rather than a spinner sitting on a black rectangle. */}
               {clipPhase === "loading" && (
-                <span className="pointer-events-none absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-full border border-white/25 bg-black/55 px-4 py-2 text-xs text-white/85 backdrop-blur-md">
-                  <Loader2 className="size-3.5 animate-spin" />
-                  loading clip…
+                <span className="pointer-events-none absolute inset-x-0 bottom-28 z-10 flex justify-center">
+                  <span className="flex items-center gap-1.5 rounded-full border border-white/20 bg-black/40 px-3 py-1.5 text-[11px] text-white/80 backdrop-blur-md">
+                    <Loader2 className="size-3 animate-spin" />
+                    her camera is starting…
+                  </span>
                 </span>
               )}
 
@@ -815,6 +823,7 @@ export function FeliciaCall({
           ) : (
             <FeliciaVideoFeed
               url={feedPhoto.fullUrl}
+              previewUrl={feedPhoto.thumbUrl}
               speaking={talking}
               face={face}
               className="absolute inset-0 bg-black"

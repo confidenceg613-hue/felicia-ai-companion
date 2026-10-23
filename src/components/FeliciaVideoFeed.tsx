@@ -28,11 +28,21 @@ const BLINK_MS = 120;
  */
 export function FeliciaVideoFeed({
   url,
+  previewUrl,
   speaking,
   face,
   className,
 }: {
   url: string;
+  /**
+   * A small copy of the same picture, served from the app itself (~20 KB).
+   *
+   * Her full picture is a multi-megabyte upload on an external host, which is
+   * the one thing that could leave the call staring at an empty frame. The
+   * local copy is painted first and the full one replaces it as soon as it has
+   * decoded — same crop, same face, just softer for a moment.
+   */
+  previewUrl?: string;
   /** True while her voice is playing — that is when her lips move. */
   speaking: boolean;
   /** Where her mouth and eyes are on this picture. */
@@ -368,7 +378,7 @@ export function FeliciaVideoFeed({
           her face out of it, so it sits in a soft copy of itself instead of
           flat black bars. */}
       <img
-        src={url}
+        src={previewUrl ?? url}
         alt=""
         aria-hidden
         draggable={false}
@@ -405,6 +415,17 @@ export function FeliciaVideoFeed({
             }
           >
             <div ref={leanRef} className="absolute inset-0 will-change-transform">
+              {/* The instant copy, under the full picture: until the big file
+                  arrives this is what the call is showing. */}
+              {previewUrl && (
+                <img
+                  src={previewUrl}
+                  alt=""
+                  aria-hidden
+                  draggable={false}
+                  className="absolute inset-0 size-full object-contain select-none"
+                />
+              )}
               <img
                 src={url}
                 alt=""
@@ -415,7 +436,7 @@ export function FeliciaVideoFeed({
                     setNatural({ width: naturalWidth, height: naturalHeight });
                   }
                 }}
-                className="size-full object-contain select-none"
+                className="relative size-full object-contain select-none"
               />
 
               {/* Her warmth: two soft blooms on her cheeks, only lit when she
