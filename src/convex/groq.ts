@@ -25,15 +25,16 @@ const GROQ_SPEECH_URL = "https://api.groq.com/openai/v1/audio/speech";
 /**
  * The models behind her everyday and intimate words, best first.
  *
- * `gpt-oss-120b` is the strongest model on the key; the Qwen build and
- * `gpt-oss-20b` sit behind it in case the first is rate-limited. Groq retires
- * model ids regularly, so this list is tried in order and a `model_not_found`
- * simply moves on to the next one.
+ * `gpt-oss-120b` is the strongest model on the key; `gpt-oss-20b` sits behind
+ * it for when the first is rate-limited. The Qwen build is last because this
+ * project has it switched off: it answers 403, and asking it before a working
+ * model just adds a wasted request to every fallback. Groq retires model ids
+ * regularly, so the list is tried in order and a missing one simply moves on.
  */
 const GROQ_MODELS = [
   "openai/gpt-oss-120b",
-  "qwen/qwen3.8-27b",
   "openai/gpt-oss-20b",
+  "qwen/qwen3.8-27b",
 ];
 
 /**
@@ -63,6 +64,22 @@ const ALL_REFUSED =
   "Every Groq model refused that one. Nothing was saved — say it a different " +
   "way, or check the key in this project's Keys settings.";
 
+/**
+ * Why a request failed.
+ *
+ * `key` is the only kind worth giving up on: it fails identically for every
+ * model. `model` (this project has that model switched off, or it was retired)
+ * and `rate` (this model's per-minute budget is spent) both mean "ask the next
+ * one" — treating them as key failures used to abort a reply that the next
+ * model would have answered, and surfaced a misleading "key rejected" error.
+ */
+type FailureKind = "key" | "model" | "rate" | "other";
+type GroqFailure = Error & { kind?: FailureKind };
+
+function tagged(message: string, kind: FailureKind): GroqFailure {
+  return Object.assign(new Error(message), { kind });
+}
+
 /** Turn an HTTP failure into something worth showing a person. */
 async function failure(response: Response, what: string): Promise<Error> {
   let detail = "";
@@ -72,27 +89,43 @@ async function failure(response: Response, what: string): Promise<Error> {
     // The body is only ever used to make the message more useful.
   }
 
+  // Groq answers a blocked model with 403 and a body naming the model. The key
+  // is fine; only this deployment's model list is not.
+  if (
+    response.status === 403 &&
+    /model/i.test(detail) &&
+    /permission|blocked|restricted|not (?:enabled|allowed)/i.test(detail)
+  ) {
+    return tagged(
+      `That model isn't enabled on this Groq project.${detail ? ` ${detail}` : ""}`,
+      "model",
+    );
+  }
   if (response.status === 401 || response.status === 403) {
-    return new Error(
+    return tagged(
       `Groq rejected the API key — re-add it in this project's Keys ` +
         `settings.${detail ? ` ${detail}` : ""}`,
+      "key",
     );
   }
   if (response.status === 429) {
-    return new Error(
+    return tagged(
       "Groq is rate-limiting this key — give it a minute and try again.",
+      "rate",
     );
   }
   if (response.status === 404) {
-    return new Error(
+    return tagged(
       `Groq doesn't offer that model on this key.${detail ? ` ${detail}` : ""}`,
+      "model",
     );
   }
 
-  return new Error(
+  return tagged(
     `Groq rejected the ${what} request (${response.status} ${
       response.statusText
     }).${detail ? ` ${detail}` : ""}`,
+    "other",
   );
 }
 
@@ -114,6 +147,11 @@ async function groqChat(
       messages,
       temperature: temperature ?? 0.95,
       max_tokens: 500,
+      // The `gpt-oss` models think before they answer, and those thoughts are
+      // billed against the same token budget. Low effort keeps the reasoning
+      // short, so the budget goes to her actual words — a long think used to
+      // spend all 500 tokens and come back with an empty reply.
+      ...(model.includes("gpt-oss") ? { reasoning_effort: "low" } : {}),
     }),
   });
 
@@ -178,10 +216,10 @@ export const chat = internalAction({
         return reply;
       } catch (error) {
         lastError = error;
-        // A rejected key is the same for every model, so stop retrying.
-        if (error instanceof Error && /rejected the API key/i.test(error.message)) {
-          throw error;
-        }
+        // A rejected key is the same for every model, so stop retrying. Every
+        // other failure — a model this project has blocked, a retired model, a
+        // rate-limited model — is worth trying against the next one.
+        if ((error as GroqFailure).kind === "key") throw error;
       }
     }
 

@@ -502,6 +502,12 @@ export function FeliciaCall({
         }
 
         if (!heard.text) {
+          // A line the caller typed stops the recogniser on purpose; that is
+          // not a missed sentence.
+          if (busyRef.current) {
+            misses = 0;
+            continue;
+          }
           misses += 1;
           if (misses > 4) {
             // Say something, then keep listening: giving up on the mic after a
@@ -559,16 +565,26 @@ export function FeliciaCall({
     };
   }, [greeting, initialNote, sendMessage, say, showPhoto, showExisting, micSupported]);
 
-  /** Typing is only available when the voice loop is idle (e.g. muted). */
+  /**
+   * Typing works whenever she isn't mid-sentence.
+   *
+   * It used to need the call to be idle, which meant muting the mic before the
+   * box would even accept a character — on a call you can hear her and type to
+   * her at the same time, so the recogniser is stopped for the typed line and
+   * picks straight back up afterwards.
+   */
   async function handleTyped(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const text = typed.trim();
-    if (!text || status !== "idle" || busyRef.current) return;
+    if (!text || !canType || busyRef.current) return;
 
     const runId = runIdRef.current;
     const active = () => runIdRef.current === runId;
 
     busyRef.current = true;
+    abortRef.current?.();
+    abortRef.current = null;
+    setInterim("");
     setTyped("");
     setStatus("thinking");
     try {
@@ -594,7 +610,8 @@ export function FeliciaCall({
     onClose();
   }
 
-  const canType = status === "idle";
+  /** She is the one talking, so this is the only moment typing waits. */
+  const canType = status === "idle" || status === "listening";
 
   /** The picture she is on, and the one being chosen in the picker. */
   const feedPhoto =
@@ -909,7 +926,7 @@ export function FeliciaCall({
               <Input
                 value={typed}
                 onChange={(event) => setTyped(event.target.value)}
-                placeholder={canType ? "Type to her…" : "Listening…"}
+                placeholder={canType ? "Type to her…" : "She's talking…"}
                 disabled={!canType}
                 className="surface h-8 rounded-full border-0 bg-card/70 shadow-none backdrop-blur-md focus-visible:ring-2 focus-visible:ring-ring/50"
               />
