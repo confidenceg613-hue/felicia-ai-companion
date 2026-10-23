@@ -9,6 +9,8 @@ import { FELICIA_GALLERY } from "../lib/gallery.js";
 import {
   bestPhoto,
   matchingWords,
+  photoFits,
+  requestDemands,
   type GalleryCandidate,
 } from "../lib/galleryMatch.js";
 
@@ -152,5 +154,20 @@ describe("Felicia choosing from her gallery", () => {
   test("asking for a photo of her at home sends a photo taken at home", () => {
     const chosen = pick("send me a pic of you at home");
     expect(chosen).not.toBeNull();
+  });
+
+  test("a picture she has already sent is still in her roll when asked again", () => {
+    // The repeat penalty stops her showing the same shot every time, but it
+    // must not empty the roll: once it scored a photo out of the running she
+    // took a brand-new picture instead of sending one she already had.
+    const roll = herRoll().map((candidate) =>
+      candidate.galleryId === "red-romper-on-the-bed"
+        ? { ...candidate, sentCount: 4 }
+        : candidate,
+    );
+    const demands = requestDemands("in a red romper on the bed");
+    const fitting = roll.filter((candidate) => photoFits(candidate, demands));
+    const found = bestPhoto(["send me a pic of you in a red romper on the bed"], fitting);
+    expect(found?.candidate.galleryId).toBe("red-romper-on-the-bed");
   });
 });

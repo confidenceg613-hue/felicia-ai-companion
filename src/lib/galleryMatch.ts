@@ -288,8 +288,15 @@ function scorePhoto(
 
   if (total === 0) return { total: 0, titleHits: 0 };
 
+  // Sending a picture again is not a reason to stop sending it. The penalty
+  // keeps her from showing the same shot every time, but it must never score a
+  // photo out of the roll: after a few sends, the only picture that fits was
+  // knocked down to zero, and she took a brand-new photo instead of scrolling
+  // to the one she already had. A photo that fits always keeps a point, so the
+  // choice is "which of these", never "none of these"; a fresher photo with a
+  // matching tag still outscores it, which is what keeps her variety.
   const repeatPenalty = 2 * Math.max(0, candidate.sentCount ?? 0);
-  return { total: Math.max(0, total - repeatPenalty), titleHits };
+  return { total: Math.max(1, total - repeatPenalty), titleHits };
 }
 
 /**

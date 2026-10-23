@@ -2441,6 +2441,53 @@ export const sendMessage = action({
         !isRefusal(message.content),
     );
 
+    // A caption named outright — "send me Curled up for the evening", which is
+    // exactly what tapping a picture in her roll writes — is an instruction,
+    // not a description. It is resolved before her reply is written, so she
+    // can talk about the picture she is actually sending instead of answering
+    // as if she never had it ("I don't have a red romper") while that exact
+    // photo arrives under the line.
+    const namedTitle = ASKS_TO_SEE.test(trimmed)
+      ? titleNamedIn(
+          trimmed,
+          FELICIA_GALLERY.map((photo) => photo.title),
+        )
+      : null;
+    const namedPhoto = namedTitle
+      ? (FELICIA_GALLERY.find((photo) => photo.title === namedTitle) ?? null)
+      : null;
+
+    const turns = spoke.map((message: { role: unknown; content: unknown; imageStorageId?: unknown; imageDescription?: unknown }) => ({
+      role: message.role === "user" ? ("user" as const) : ("assistant" as const),
+      // A photo the user shared carries no text, so stand it in with what
+      // Qwen-VL saw in it — otherwise she is answering an empty turn and
+      // can only thank them for a picture she cannot describe.
+      content: clip(
+        (message.content as string) ||
+          (message.imageStorageId
+            ? `[they sent you a photo. what you saw in it: ${
+                typeof message.imageDescription === "string"
+                  ? message.imageDescription
+                  : "a picture you could not make out"
+              }]`
+            : "[...]"),
+      ),
+    }));
+
+    if (namedPhoto && turns.length > 0) {
+      const last = turns[turns.length - 1];
+      if (last?.role === "user") {
+        last.content = clip(
+          `${last.content} ` +
+            `[[note to self: they asked for the picture "${namedPhoto.title}" ` +
+            `from your camera roll — ${namedPhoto.about} You are sending that ` +
+            `exact photo now. Reply in one or two short sentences that fit it: ` +
+            `where you were, what you were wearing, how it felt. Never say you ` +
+            `do not have it or are not wearing it, and do not add a scene line.]]`,
+        );
+      }
+    }
+
     // Her words come from Groq.
     const raw = await ctx.runAction(internal.groq.chat, {
       intimate: isIntimate(trimmed, spoke),
@@ -2453,22 +2500,7 @@ export const sendMessage = action({
             startedAt,
           }),
         },
-        ...spoke.map((message: { role: unknown; content: unknown; imageStorageId?: unknown; imageDescription?: unknown }) => ({
-          role: message.role === "user" ? "user" : "assistant",
-          // A photo the user shared carries no text, so stand it in with what
-          // Qwen-VL saw in it — otherwise she is answering an empty turn and
-          // can only thank them for a picture she cannot describe.
-          content: clip(
-            (message.content as string) ||
-              (message.imageStorageId
-                ? `[they sent you a photo. what you saw in it: ${
-                    typeof message.imageDescription === "string"
-                      ? message.imageDescription
-                      : "a picture you could not make out"
-                  }]`
-                : "[...]"),
-          ),
-        })),
+        ...turns,
       ],
     });
 
@@ -2538,17 +2570,22 @@ export const sendMessage = action({
     // nothing in it survives she takes a new photo instead of sending one that
     // only resembles the ask.
     let picked: GalleryMatch | null = null;
-    if (scene && !wantsFullBody) {
+    if (scene) {
       const roll = await herPhotoRoll(ctx, userId);
       // A caption she has been asked for by name outranks both the score and
-      // "take a new one": the user pointed at a specific picture.
+      // "take a new one": the user pointed at a specific picture. It is
+      // allowed past the full-body rule too — a caption like "Black bodysuit,
+      // full length" used to be skipped there, so asking for that exact photo
+      // had her generate a new one instead of scrolling to it.
       const named = ASKS_TO_SEE.test(trimmed) ? photoByTitle(trimmed, roll) : null;
-      const fitting = roll.filter((candidate) => photoFits(candidate, demands));
-      picked = named
-        ? { candidate: named, score: Number.MAX_SAFE_INTEGER }
-        : wantsFresh
+      if (named) {
+        picked = { candidate: named, score: Number.MAX_SAFE_INTEGER };
+      } else if (!wantsFullBody) {
+        const fitting = roll.filter((candidate) => photoFits(candidate, demands));
+        picked = wantsFresh
           ? null
           : bestPhoto([scene, trimmed, reply], fitting);
+      }
     }
 
     if (picked) {

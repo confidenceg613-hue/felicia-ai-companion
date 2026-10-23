@@ -183,7 +183,15 @@ function makeBag(): Bag {
         }
         if (called.endsWith("conversationStart")) return 1700000000000;
         if (called.endsWith("recallMessages")) return [];
-        if (called.endsWith("sentPhotos")) return [];
+        if (called.endsWith("sentPhotos")) {
+          // Her roll is the permanent gallery plus every picture already sent,
+          // so the photos bag doubles as the sent-photo history.
+          const limit = Number((args as { limit?: number }).limit ?? 200);
+          return photos.slice(-limit).map((photo) => ({
+            ...photo,
+            createdAt: 1700000000000,
+          }));
+        }
         if (called.endsWith("recentMessages")) {
           // Her history: the message was stored before the model is asked, so
           // the latest line is always the one being replied to.
@@ -314,6 +322,22 @@ describe("sendMessage", () => {
     expect(result.photoScene).not.toBeNull();
     expect(result.photoReadyAfterMs).toBeGreaterThan(0);
     expect(bag.photos).toHaveLength(0);
+  });
+
+  test("sends the same named picture again when asked for it again", async () => {
+    const first = (await invoke("send me Red romper on the bed")) as Result;
+    const second = (await invoke("send me Red romper on the bed")) as Result;
+
+    // Two sends of the very same picture: the second one must come from her
+    // roll again, not be replaced by a freshly taken photo.
+    expect(bag.photos.map((photo) => photo.galleryId)).toEqual([
+      "red-romper-on-the-bed",
+      "red-romper-on-the-bed",
+    ]);
+    expect(first.photoUrl).not.toBeNull();
+    expect(second.photoUrl).not.toBeNull();
+    expect(second.photoScene).toBeNull();
+    expect(second.photoReadyAfterMs).toBe(0);
   });
 
   test("sends no photo at all when none was asked for", async () => {
