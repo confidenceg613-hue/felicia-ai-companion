@@ -668,7 +668,7 @@ export default function Album() {
                   )}
                   Add video
                   <span className="hidden text-[10px] tracking-wide text-muted-foreground sm:inline">
-                    · 10 min
+                    · 5 min
                   </span>
                 </Button>
                 <Button
@@ -689,7 +689,7 @@ export default function Album() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">
+            <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4 sm:gap-3 lg:grid-cols-5">
               {FELICIA_GALLERY.map((photo: GalleryPhoto) => {
                 const isAvatar = avatarGalleryId === photo.id;
                 return (
@@ -901,7 +901,7 @@ export default function Album() {
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+            <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4 sm:gap-3 lg:grid-cols-5">
               {developing && (
                 <div className="flex aspect-[2/3] flex-col items-center justify-center rounded-2xl border border-primary/30 bg-primary/10 p-4 text-center text-xs text-primary">
                   <Camera className="size-5 animate-pulse" />
