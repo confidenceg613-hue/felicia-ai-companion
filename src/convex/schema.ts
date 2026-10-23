@@ -61,6 +61,20 @@ const schema = defineSchema(
         filterFields: ["userId"],
       }),
 
+    // One row per spoken piece of one of her lines.
+    //
+    // Her voice is rendered a piece at a time so the first phrase is audible in
+    // a fraction of the time a whole reply would take. Each piece is kept, so
+    // hearing the same line again — in a call, or replayed in the chat — costs
+    // nothing and starts instantly.
+    speechChunks: defineTable({
+      userId: v.id("users"),
+      messageId: v.id("messages"),
+      /** Position of this piece within the line, from zero. */
+      index: v.number(),
+      storageId: v.id("_storage"),
+    }).index("by_message_and_index", ["messageId", "index"]),
+
     // Every photo Felicia has sent a user: the ones generated for them, and the
     // ones she picked off her own roll. A generated photo lives in Convex file
     // storage; a roll photo keeps its public URL, because it is part of the app

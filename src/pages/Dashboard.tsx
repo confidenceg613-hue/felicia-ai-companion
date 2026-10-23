@@ -156,7 +156,7 @@ export default function Dashboard() {
   const sendMessage = useAction(api.felicia.sendMessage);
   const generatePhoto = useAction(api.felicia.generatePhoto);
   const sendUserPhoto = useAction(api.felicia.sendUserPhoto);
-  const speakMessage = useAction(api.felicia.speakMessage);
+  const speakChunk = useAction(api.felicia.speakChunk);
   const startCall = useAction(api.felicia.startCall);
 
   const [draft, setDraft] = useState("");
@@ -386,9 +386,29 @@ export default function Dashboard() {
     try {
       // Her real voice is Groq's text-to-speech, the same key as her chat. The
       // device voice is only there for when that can't render a line.
+      //
+      // It is asked for in pieces: the opening phrase is rendered first, with
+      // the piece after it rendering in parallel, so she starts talking as soon
+      // as a phrase exists rather than after the whole line does.
       let played = false;
-      const { url } = await speakMessage({ messageId });
-      if (url) played = await playAudioUrl(url);
+      const queue: Array<Promise<{ url: string | null; total: number }>> = [
+        speakChunk({ messageId, index: 0 }),
+        speakChunk({ messageId, index: 1 }),
+      ];
+      let index = 0;
+      let total = Infinity;
+      while (index < total && speakingRef.current === messageId) {
+        const chunk = await queue.shift();
+        if (!chunk) break;
+        total = chunk.total;
+        if (index + 2 < total) {
+          queue.push(speakChunk({ messageId, index: index + 2 }));
+        }
+        if (!chunk.url) break;
+        const spoke = await playAudioUrl(chunk.url);
+        played = played || spoke;
+        index += 1;
+      }
       if (!played) await speakWithBrowser(content);
     } catch (error) {
       toast.error(

@@ -6,6 +6,7 @@ import {
   SHARED_NOTE_SECTIONS,
 } from "../lib/felicia";
 import { FELICIA_GALLERY } from "../lib/gallery";
+import { splitForSpeech } from "../lib/speech";
 import {
   bestPhoto,
   photoByTitle,
@@ -1639,6 +1640,103 @@ export const attachAudio = internalMutation({
   handler: async (ctx: AnyCtx, { messageId, audioStorageId }: AnyArgs) => {
     await ctx.db.patch(messageId, { audioStorageId });
     return null;
+  },
+});
+
+/** The cached render of one piece of a line, if it has been spoken before. */
+export const chunkFor = internalQuery({
+  args: { messageId: v.id("messages"), index: v.number() },
+  handler: async (ctx: AnyCtx, { messageId, index }: AnyArgs) => {
+    const row = (await ctx.db
+      .query("speechChunks")
+      .withIndex(
+        "by_message_and_index",
+        (q: { eq: (key: string, value: unknown) => { eq: (key: string, value: unknown) => unknown } }) =>
+          q.eq("messageId", messageId).eq("index", index),
+      )
+      .unique()) as { storageId?: unknown } | null;
+    return row?.storageId ?? null;
+  },
+});
+
+/** Keep a rendered piece so hearing the same line again costs nothing. */
+export const storeChunk = internalMutation({
+  args: {
+    userId: v.id("users"),
+    messageId: v.id("messages"),
+    index: v.number(),
+    storageId: v.id("_storage"),
+  },
+  returns: v.null(),
+  handler: async (ctx: AnyCtx, args: AnyArgs) => {
+    const existing = await ctx.db
+      .query("speechChunks")
+      .withIndex(
+        "by_message_and_index",
+        (q: { eq: (key: string, value: unknown) => { eq: (key: string, value: unknown) => unknown } }) =>
+          q.eq("messageId", args.messageId).eq("index", args.index),
+      )
+      .unique();
+    if (existing) return null;
+    await ctx.db.insert("speechChunks", {
+      userId: args.userId,
+      messageId: args.messageId,
+      index: args.index,
+      storageId: args.storageId,
+    });
+    return null;
+  },
+});
+
+/**
+ * One piece of one of her lines, spoken.
+ *
+ * Rendering the whole reply before a syllable played was the reason she took
+ * seconds to start talking: a text-to-speech call costs in proportion to the
+ * text. The client asks for the opening phrase, starts it, and asks for the
+ * next piece while that one plays, so the wait is for a phrase rather than for
+ * the whole answer. Every piece is kept, so a line is paid for once however
+ * often it is heard.
+ */
+export const speakChunk = action({
+  args: { messageId: v.id("messages"), index: v.number() },
+  returns: v.object({ url: v.union(v.string(), v.null()), total: v.number() }),
+  handler: async (
+    ctx: AnyCtx,
+    { messageId, index }: AnyArgs,
+  ): Promise<{ url: string | null; total: number }> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Sign in to hear Felicia.");
+
+    const info = await ctx.runQuery(internal.felicia.messageAudio, { messageId });
+    if (!info) throw new Error("That message no longer exists.");
+    if (info.ownerId !== userId) throw new Error("That message isn't yours.");
+    if (info.role !== "felicia") throw new Error("Only Felicia's lines can be spoken.");
+
+    const pieces = splitForSpeech(String(info.content ?? ""));
+    const total = pieces.length;
+    const text = pieces[index];
+    if (!text) return { url: null, total };
+
+    const cached = (await ctx.runQuery(internal.felicia.chunkFor, {
+      messageId,
+      index,
+    })) as Id<"_storage"> | null;
+    if (cached) return { url: await ctx.storage.getUrl(cached), total };
+
+    const audioStorageId = await ctx.runAction(internal.groq.speak, {
+      text,
+    });
+    if (!audioStorageId) return { url: null, total };
+
+    await ctx.runMutation(internal.felicia.storeChunk, {
+      userId,
+      messageId,
+      index,
+      storageId: audioStorageId,
+    });
+
+    return { url: await ctx.storage.getUrl(audioStorageId), total };
   },
 });
 

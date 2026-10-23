@@ -118,7 +118,7 @@ export function FeliciaCall({
 }) {
   const sendMessage = useAction(api.felicia.sendMessage);
   const generatePhoto = useAction(api.felicia.generatePhoto);
-  const speakMessage = useAction(api.felicia.speakMessage);
+  const speakChunk = useAction(api.felicia.speakChunk);
   const avatarUrl = useFeliciaAvatar();
   /**
    * The clip her camera is set to play by itself, chosen in the album.
@@ -359,8 +359,33 @@ export function FeliciaCall({
       const startTalking = () => setTalking(true);
       let played = false;
       try {
-        const { url } = await speakMessage({ messageId });
-        if (url) played = await playAudioUrl(url, startTalking);
+        // Her line is rendered in pieces, not all at once: the opening phrase
+        // is asked for, and the next piece is already being rendered while she
+        // says this one. She starts talking as soon as a phrase exists instead
+        // of after the whole answer does, which is the difference between
+        // answering and thinking about it.
+        // Two requests are in flight from the first moment: the opening phrase
+        // and the piece after it render in parallel, so the second is ready
+        // before the first finishes and there is no silence between them.
+        const queue: Array<Promise<{ url: string | null; total: number }>> = [
+          speakChunk({ messageId, index: 0 }),
+          speakChunk({ messageId, index: 1 }),
+        ];
+        let index = 0;
+        let total = Infinity;
+        while (active() && index < total) {
+          const chunk = await queue.shift();
+          if (!chunk) break;
+          total = chunk.total;
+          // Keep two pieces rendering ahead of the one being spoken.
+          if (index + 2 < total) {
+            queue.push(speakChunk({ messageId, index: index + 2 }));
+          }
+          if (!chunk.url) break;
+          const spoke = await playAudioUrl(chunk.url, startTalking);
+          played = played || spoke;
+          index += 1;
+        }
       } catch {
         played = false;
       }
@@ -382,7 +407,7 @@ export function FeliciaCall({
       }
       setTalking(false);
     },
-    [speakMessage],
+    [speakChunk],
   );
 
   /** Generate a photo mid-call, honouring the same reveal delay as the chat. */
