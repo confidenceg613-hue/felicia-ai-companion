@@ -22,11 +22,11 @@ const VIDEO_LIMIT = 24;
 /** Matches MAX_VIDEO_MB on the client; checked again after the upload lands. */
 const MAX_VIDEO_BYTES = 1024 * 1024 * 1024;
 /**
- * Her gallery takes clips up to ten minutes. Matches MAX_VIDEO_SECONDS on the
+ * Her gallery takes clips up to five minutes. Matches MAX_VIDEO_SECONDS on the
  * client, which reads the length before uploading; this is the check that
  * counts, because the browser's word for it is only a courtesy.
  */
-const MAX_VIDEO_SECONDS = 600;
+const MAX_VIDEO_SECONDS = 300;
 
 /** Every video in her gallery, newest first, with a URL the browser can play. */
 export const list = query({
@@ -116,15 +116,15 @@ export const save = mutation({
     }
 
     // A few seconds of slack: some containers report their length a touch
-    // longer than the clip actually runs, and rejecting a 10:02 video that
-    // plays for exactly ten minutes would be mean, not tidy.
+    // longer than the clip actually runs, and rejecting a 5:02 video that
+    // plays for exactly five minutes would be mean, not tidy.
     if (
       typeof args.durationSeconds === "number" &&
       args.durationSeconds > MAX_VIDEO_SECONDS + 15
     ) {
       await ctx.storage.delete(args.storageId);
       throw new Error(
-        "That clip runs longer than 10 minutes. Trim it to 10 minutes or under.",
+        "That clip runs longer than 5 minutes. Trim it to 5 minutes or under.",
       );
     }
 

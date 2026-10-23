@@ -134,8 +134,8 @@ function videoContentType(file: File): string | null {
   return VIDEO_TYPES[extension] ?? null;
 }
 
-/** Her gallery takes clips up to ten minutes; convex/videos.ts enforces it. */
-const MAX_VIDEO_SECONDS = 600;
+/** Her gallery takes clips up to five minutes; convex/videos.ts enforces it. */
+const MAX_VIDEO_SECONDS = 300;
 
 /**
  * Read a clip's length in the browser, before a byte is uploaded.
@@ -411,14 +411,14 @@ export default function Album() {
       return;
     }
 
-    // Read the length before uploading, so a fifteen-minute clip is refused
-    // in a second rather than after a long upload and a server rejection.
+    // Read the length before uploading, so an over-long clip is refused in a
+    // second rather than after a long upload and a server rejection.
     const duration = await readVideoDuration(file);
     if (duration !== null && duration > MAX_VIDEO_SECONDS + 15) {
       const minutes = Math.floor(duration / 60);
       const seconds = Math.round(duration % 60);
       toast.error(
-        `That clip runs ${minutes}:${String(seconds).padStart(2, "0")} — her gallery takes videos up to 10 minutes.`,
+        `That clip runs ${minutes}:${String(seconds).padStart(2, "0")} — her gallery takes videos up to 5 minutes.`,
       );
       return;
     }
@@ -658,7 +658,7 @@ export default function Album() {
                   size="sm"
                   className="gap-2 rounded-full"
                   disabled={uploadingVideo}
-                  title="Add a clip from this device — up to 10 minutes, under 1 GB"
+                  title="Add a clip from this device — up to 5 minutes, under 1 GB"
                   onClick={() => videoInputRef.current?.click()}
                 >
                   {uploadingVideo ? (
