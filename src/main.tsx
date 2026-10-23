@@ -7,7 +7,8 @@ import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { pageModules, prefetchPages } from "@/lib/pageModules";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient, useConvexAuth } from "convex/react";
-import { MotionConfig } from "framer-motion";
+import { Heart } from "lucide-react";
+import { MotionConfig, motion } from "framer-motion";
 import React, { StrictMode, useEffect, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import {
@@ -31,11 +32,63 @@ const SharedNotes = lazy(pageModules.notes);
 const Settings = lazy(pageModules.settings);
 const NotFound = lazy(pageModules.notFound);
 
-// Simple loading fallback for route transitions
+/**
+ * The app's boot screen: her heart, beating.
+ *
+ * It replaces a bare "Loading…". A real heart is a lub-dub — two thumps close
+ * together, then a rest — so the beats are timed that way rather than as an
+ * even pulse, and the halo and ring breathe with it instead of fading on their
+ * own. The whole thing honours the system's reduced-motion setting, because it
+ * is wrapped in MotionConfig above.
+ */
 function RouteLoading() {
+  /** One lub-dub, shared by the heart, its halo and its ring. */
+  const beat = [1, 1.16, 1.02, 1.09, 1];
+  const beatTiming = {
+    duration: 1.5,
+    // Two thumps, then a rest — the shape of a real heartbeat.
+    times: [0, 0.12, 0.24, 0.36, 1],
+    repeat: Infinity,
+    ease: "easeInOut" as const,
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="animate-pulse text-muted-foreground">Loading...</div>
+    <div className="flex min-h-screen flex-col items-center justify-center gap-7 bg-background">
+      <div className="relative flex size-32 items-center justify-center">
+        {/* The light it throws on the room behind it. */}
+        <motion.span
+          aria-hidden
+          className="absolute size-32 rounded-full bg-primary/30 blur-2xl"
+          animate={{ scale: beat, opacity: [0.45, 0.9, 0.5, 0.8, 0.45] }}
+          transition={beatTiming}
+        />
+
+        {/* One ring per beat, spreading out and fading like a pulse. */}
+        <motion.span
+          aria-hidden
+          className="absolute size-24 rounded-full border border-primary/30"
+          animate={{ scale: [1, 1.45, 1.05, 1.3, 1], opacity: [0.5, 0, 0.35, 0, 0.5] }}
+          transition={beatTiming}
+        />
+
+        <motion.div
+          initial={{ scale: 0.6, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <motion.div animate={{ scale: beat }} transition={beatTiming}>
+            <Heart
+              aria-hidden
+              className="size-16 fill-primary text-primary"
+              strokeWidth={1.25}
+            />
+          </motion.div>
+        </motion.div>
+      </div>
+
+      <p className="font-display text-xs tracking-[0.42em] text-muted-foreground/80 uppercase">
+        Felicia
+      </p>
     </div>
   );
 }
