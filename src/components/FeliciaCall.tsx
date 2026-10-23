@@ -177,6 +177,15 @@ export function FeliciaCall({
   const [stage, setStage] = useState<"pick" | "align">("pick");
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [pendingFace, setPendingFace] = useState<Face>(defaultFace());
+  /**
+   * Aspect ratio of the picture being aligned, in pixels.
+   *
+   * Her gallery is not all 3:4 — several shots are square and a few are
+   * landscape — and the preview letterboxes those inside its 3:4 box. Points
+   * are stored as percentages of the *picture*, which is what the call feed
+   * maps them back onto, so this ratio is the conversion between the two.
+   */
+  const [pendingRatio, setPendingRatio] = useState(3 / 4);
   /** Which point of her face the next tap on the picture places. */
   const [activePoint, setActivePoint] = useState<"mouth" | "eyes">("mouth");
 
@@ -508,6 +517,8 @@ export function FeliciaCall({
   function choosePicture(id: string) {
     setPendingId(id);
     setPendingFace(readFace(id));
+    // Unknown until the file reports its size; 3:4 is the gallery's norm.
+    setPendingRatio(3 / 4);
     setActivePoint("mouth");
     setStage("align");
   }
@@ -519,18 +530,41 @@ export function FeliciaCall({
    * the box that was tapped is the percentage of the picture — no conversion
    * to do, and the mouth and eyes land where they were put at any screen size.
    */
+  /**
+   * Where the picture actually sits inside the 3:4 preview box.
+   *
+   * The preview letterboxes (`object-contain`), so a square or landscape photo
+   * is drawn smaller than the box. A tap in box space has to be converted into
+   * picture space — and back again to place the markers — because a stored
+   * point means "this far across the picture", which is how the call feed
+   * reads it. Treating box space as picture space used to shift her mouth on
+   * every non-3:4 shot in the gallery.
+   */
+  const previewFit =
+    pendingRatio >= 3 / 4
+      ? {
+          x: 0,
+          y: (1 - 3 / 4 / pendingRatio) / 2,
+          w: 1,
+          h: 3 / 4 / pendingRatio,
+        }
+      : {
+          x: (1 - pendingRatio / (3 / 4)) / 2,
+          y: 0,
+          w: pendingRatio / (3 / 4),
+          h: 1,
+        };
+
   function tapPoint(event: React.MouseEvent<HTMLDivElement>) {
     const rect = event.currentTarget.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
+    const box = {
+      x: (event.clientX - rect.left) / rect.width,
+      y: (event.clientY - rect.top) / rect.height,
+    };
     const point = {
-      x: Math.min(
-        100,
-        Math.max(0, ((event.clientX - rect.left) / rect.width) * 100),
-      ),
-      y: Math.min(
-        100,
-        Math.max(0, ((event.clientY - rect.top) / rect.height) * 100),
-      ),
+      x: Math.min(100, Math.max(0, ((box.x - previewFit.x) / previewFit.w) * 100)),
+      y: Math.min(100, Math.max(0, ((box.y - previewFit.y) / previewFit.h) * 100)),
     };
     setPendingFace((current) => ({ ...current, [activePoint]: point }));
   }
@@ -852,7 +886,14 @@ export function FeliciaCall({
                     <img
                       src={pendingPhoto.url}
                       alt={pendingPhoto.title}
-                      className="aspect-[3/4] w-full object-cover"
+                      onLoad={(event) => {
+                        const { naturalWidth, naturalHeight } =
+                          event.currentTarget;
+                        if (naturalWidth > 0 && naturalHeight > 0) {
+                          setPendingRatio(naturalWidth / naturalHeight);
+                        }
+                      }}
+                      className="aspect-[3/4] w-full bg-black object-contain"
                     />
                   )}
                   {(["mouth", "eyes"] as const).map((point) => {
@@ -868,8 +909,8 @@ export function FeliciaCall({
                             : "border-white/70 bg-black/45",
                         )}
                         style={{
-                          left: `${placed.x}%`,
-                          top: `${placed.y}%`,
+                          left: `${(previewFit.x + (placed.x / 100) * previewFit.w) * 100}%`,
+                          top: `${(previewFit.y + (placed.y / 100) * previewFit.h) * 100}%`,
                           x: "-50%",
                           y: "-50%",
                         }}
