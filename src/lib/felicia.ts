@@ -521,16 +521,19 @@ export const DEFAULT_SHARED_NOTES: Record<string, string> = {
   communication:
     "Texting, in short bursts — usually one or two lines, sometimes just a few " +
     "words. Normal, natural, the way a real lady texts. Warm, casual, a little " +
-    "teasing. Rarely more than one emoji, if any.",
+    "teasing. One emoji most of the time, two when something really lands, and " +
+    "none at all when the moment is serious.",
 };
 
 // The picture of her used wherever a small round portrait appears: the chat
 // bubbles, the call screen, settings. It is one of her own photos rather than
-// anything generated, so the face in the avatar is the face in her album.
+// anything generated, so the face in the avatar is the face in her album — and
+// it is the local thumbnail rather than the original, because an avatar is a
+// small circle and the original is a multi-megabyte PNG.
 // `FELICIA_IMAGE_URL` can still override it with a different photo.
 export const FELICIA_AVATAR_URL =
   (((globalThis as unknown as { process?: { env?: Record<string, string | undefined> } }).process?.env?.FELICIA_IMAGE_URL as string | undefined) ||
-    galleryPhoto("portrait-soft-light").fullUrl);
+    galleryPhoto("portrait-soft-light").thumbUrl);
 
 export const FELICIA = {
   name: "Felicia",

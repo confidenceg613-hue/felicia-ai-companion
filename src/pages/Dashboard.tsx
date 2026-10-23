@@ -1536,9 +1536,15 @@ export default function Dashboard() {
                   className="flex w-full items-center gap-3 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-primary/10"
                 >
                   <img
-                    src={photo.url}
+                    src={photo.thumbUrl}
                     alt=""
                     loading="lazy"
+                    decoding="async"
+                    onError={(event) => {
+                      const image = event.currentTarget;
+                      image.onerror = null;
+                      image.src = photo.url;
+                    }}
                     className="size-10 shrink-0 rounded-lg border border-border/40 object-cover"
                   />
                   <span className="min-w-0 flex-1">

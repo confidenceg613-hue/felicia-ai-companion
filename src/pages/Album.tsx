@@ -717,11 +717,19 @@ export default function Album() {
                       title={photo.title}
                     >
                       <img
-                        src={photo.url}
+                        src={photo.thumbUrl}
                         alt={photo.title}
                         loading="lazy"
                         decoding="async"
-                        className="aspect-[2/3] w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        /* ~20 KB local WebP instead of the hosted 1 MB PNG.
+                           If one is ever missing, the hosted copy still
+                           stands in rather than leaving a hole. */
+                        onError={(event) => {
+                          const image = event.currentTarget;
+                          image.onerror = null;
+                          image.src = photo.url;
+                        }}
+                        className="aspect-[2/3] w-full bg-muted/40 object-cover transition-transform duration-500 group-hover:scale-105"
                       />
                     </button>
 

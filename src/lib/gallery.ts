@@ -26,6 +26,16 @@
 export type GalleryPhoto = {
   /** Stable key for React and for looking a photo up by URL. */
   id: string;
+  /**
+   * Local ~420px WebP thumbnail, generated from the grid copy.
+   *
+   * The hosted grid copies are PNGs of 87 KB to 3.2 MB — a whole gallery of
+   * them was tens of megabytes, which is why her pictures took seconds to
+   * appear. These are ~20 KB each and served from the app itself, so a screen
+   * full of tiles is a few hundred kilobytes. Use the hosted `url` only when
+   * something needs to be bigger than a tile.
+   */
+  thumbUrl: string;
   /** Grid copy: direct image URL, sized for a tile. */
   url: string;
   /** Original-resolution copy: direct image URL, for the lightbox and avatars. */
@@ -2025,6 +2035,7 @@ const GALLERY_SEEDS = [
 export const FELICIA_GALLERY: readonly GalleryPhoto[] = GALLERY_SEEDS.map(
   (photo) => ({
     id: photo.id,
+    thumbUrl: `/gallery/${photo.id}.webp`,
     url: `https://i.postimg.cc/${photo.host}/${photo.file}`,
     fullUrl: `https://i.postimg.cc/${photo.full}/${photo.file}?dl=1`,
     title: photo.title,

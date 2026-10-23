@@ -835,10 +835,16 @@ export function FeliciaCall({
                     title={photo.title}
                   >
                     <img
-                      src={photo.url}
+                      src={photo.thumbUrl}
                       alt={photo.title}
                       loading="lazy"
-                      className="aspect-[3/4] w-full object-cover"
+                      decoding="async"
+                      onError={(event) => {
+                        const image = event.currentTarget;
+                        image.onerror = null;
+                        image.src = photo.url;
+                      }}
+                      className="aspect-[3/4] w-full bg-muted/40 object-cover"
                     />
                     {photo.id === feedId && (
                       <span className="absolute inset-0 flex items-center justify-center bg-black/30">

@@ -17,8 +17,11 @@ export function useFeliciaAvatar(): string {
   const id = profile?.avatarGalleryId;
   if (!id) return FELICIA_AVATAR_URL;
 
+  // The thumbnail copy, not the original: an avatar is a circle a hundred-odd
+  // pixels wide, and the original is a multi-megabyte PNG that every screen
+  // showing her face would otherwise wait on.
   return (
-    FELICIA_GALLERY.find((photo) => photo.id === id)?.fullUrl ??
+    FELICIA_GALLERY.find((photo) => photo.id === id)?.thumbUrl ??
     FELICIA_AVATAR_URL
   );
 }
