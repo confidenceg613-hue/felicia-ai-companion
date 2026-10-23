@@ -62,10 +62,29 @@ function tick() {
   publish(blended);
 }
 
-/** Follow one playing line. Safe to call again for the next line. */
-export function startLipSync(audio: HTMLMediaElement) {
+/**
+ * Follow one playing line. Safe to call again for the next line.
+ *
+ * Resolves `true` only when the element was actually wired in — that is, only
+ * when the context really reached the running state. The check matters because
+ * the moment an element is routed through a source node, its sound comes out
+ * *only* through the graph: wiring it into a context that stays suspended
+ * (autoplay policy, an embedded frame without permission) used to swallow her
+ * voice completely while everything upstream still believed the line played.
+ * So the context is resumed and verified *first*, and a refused context leaves
+ * the element untouched — she speaks through the speakers, mouth on the
+ * envelope, rather than not at all.
+ */
+export async function startLipSync(audio: HTMLMediaElement): Promise<boolean> {
   const ctx = getContext();
-  if (!ctx) return;
+  if (!ctx) return false;
+
+  try {
+    await ctx.resume?.();
+  } catch {
+    // Resume refused — the state check below decides what happens.
+  }
+  if (ctx.state !== "running") return false;
 
   try {
     if (!analyser) {
@@ -84,13 +103,11 @@ export function startLipSync(audio: HTMLMediaElement) {
     analyser = null;
     source = null;
     samples = null;
-    return;
+    return false;
   }
 
-  // A context built before a user gesture starts suspended; her voice would be
-  // silence until it resumes, so ask every time.
-  void ctx.resume?.().catch(() => undefined);
   if (!frame) frame = requestAnimationFrame(tick);
+  return true;
 }
 
 /** Stop following the audio and let the mouth settle shut. */

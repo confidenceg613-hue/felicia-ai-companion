@@ -64,12 +64,15 @@ function playOnce(
     if (started && typeof started.then === "function") {
       started
         .then(() => {
-          if (analyse) startLipSync(audio);
+          // Her voice only leaves the speakers through the analyser graph, so
+          // the reroute happens solely once that graph is verified running;
+          // a refused context leaves the element playing out loud normally.
+          if (analyse) void startLipSync(audio);
           onStart?.();
         })
         .catch(() => finish(false));
     } else {
-      if (analyse) startLipSync(audio);
+      if (analyse) void startLipSync(audio);
       onStart?.();
     }
 
