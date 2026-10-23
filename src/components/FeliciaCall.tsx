@@ -1,3 +1,4 @@
+import { ClipMouth } from "@/components/ClipMouth";
 import { FeliciaVideoFeed } from "@/components/FeliciaVideoFeed";
 import { SelfView } from "@/components/SelfView";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +22,7 @@ import {
   saveCameraPicture,
   saveFace,
   type Face,
+  type Point,
 } from "@/lib/feliciaCamera";
 import { FELICIA } from "@/lib/felicia";
 import { FELICIA_GALLERY } from "@/lib/gallery";
@@ -46,10 +48,11 @@ import {
   PhoneOff,
   Play,
   Send,
+  Smile,
   Video,
   VideoOff,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 type CallStatus =
@@ -144,6 +147,22 @@ export function FeliciaCall({
     phase: "loading" | "playing" | "blocked";
   } | null>(null);
   const [brokenClipId, setBrokenClipId] = useState<string | null>(null);
+
+  /** The feed box and the clip's own pixel size, for placing her mouth. */
+  const feedBoxRef = useRef<HTMLDivElement>(null);
+  const [feedBox, setFeedBox] = useState({ width: 0, height: 0 });
+  /** The clip's own pixel size, tagged with the clip that measured it. */
+  const [clipSizeAt, setClipSizeAt] = useState<{
+    id: string;
+    width: number;
+    height: number;
+  } | null>(null);
+  /** Lips placed during this call, tagged with the clip they belong to. */
+  const [mouthAt, setMouthAt] = useState<{ id: string; mouth: Point } | null>(
+    null,
+  );
+  /** The clip the caller is currently pointing at, if any. */
+  const [alignTargetId, setAlignTargetId] = useState<string | null>(null);
   /** The clip actually on screen — a failed one drops back to her picture. */
   const clip =
     heroVideo && !pictureOverride && brokenClipId !== heroVideo._id
@@ -154,6 +173,27 @@ export function FeliciaCall({
   const setClipPhase = (phase: "loading" | "playing" | "blocked") => {
     if (clip) setClipPhaseAt({ id: clip._id, phase });
   };
+
+  /**
+   * Her lips on this clip: what was just placed, else what was placed before.
+   *
+   * Both are keyed by the clip's own id, so swapping clips starts from that
+   * clip's own memory instead of carrying the last one's mouth across — the
+   * same trick the clip phase uses, and the reason none of this needs an effect
+   * writing state to notice that a different video is on screen.
+   */
+  const clipMouth = useMemo(
+    () =>
+      !clip ? null : mouthAt?.id === clip._id
+        ? mouthAt.mouth
+        : readFace(clip._id).mouth,
+    [clip, mouthAt],
+  );
+  const clipVideoSize =
+    clip && clipSizeAt?.id === clip._id
+      ? { width: clipSizeAt.width, height: clipSizeAt.height }
+      : { width: 0, height: 0 };
+  const aligningMouth = Boolean(clip) && alignTargetId === clip?._id;
 
   const [status, setStatus] = useState<CallStatus>("connecting");
   const [interim, setInterim] = useState("");
@@ -275,6 +315,19 @@ export function FeliciaCall({
       element.removeEventListener("canplay", attempt);
     };
   }, [clip, setClipPhaseAt]);
+
+  // The feed is laid out by flexbox, so its size follows the viewport; it is
+  // measured rather than assumed.
+  useEffect(() => {
+    const node = feedBoxRef.current;
+    if (!node) return;
+    const measure = () =>
+      setFeedBox({ width: node.clientWidth, height: node.clientHeight });
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [video]);
 
   /**
    * A clip the browser can't decode is worth saying out loud — otherwise the
@@ -583,11 +636,68 @@ export function FeliciaCall({
     setPictureOverride(true);
   }
 
+  /** Where the clip is actually drawn inside the feed (`object-contain`). */
+  const clipFit =
+    feedBox.width > 0 &&
+    feedBox.height > 0 &&
+    clipVideoSize.width > 0 &&
+    clipVideoSize.height > 0
+      ? (() => {
+          const scale = Math.min(
+            feedBox.width / clipVideoSize.width,
+            feedBox.height / clipVideoSize.height,
+          );
+          const width = clipVideoSize.width * scale;
+          const height = clipVideoSize.height * scale;
+          return {
+            left: (feedBox.width - width) / 2,
+            top: (feedBox.height - height) / 2,
+            width,
+            height,
+          };
+        })()
+      : null;
+
+  /** One tap on her lips, stored against this clip. */
+  function placeClipMouth(event: React.MouseEvent<HTMLDivElement>) {
+    if (!clip || !clipFit) return;
+    // A tap that landed on a control is a tap on the control.
+    if ((event.target as HTMLElement).closest("button")) return;
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const point = {
+      x: Math.min(
+        100,
+        Math.max(0, ((event.clientX - rect.left - clipFit.left) / clipFit.width) * 100),
+      ),
+      y: Math.min(
+        100,
+        Math.max(0, ((event.clientY - rect.top - clipFit.top) / clipFit.height) * 100),
+      ),
+    };
+
+    saveFace(clip._id, {
+      mouth: point,
+      eyes: { x: point.x, y: Math.max(4, point.y - 11) },
+    });
+    setMouthAt({ id: clip._id, mouth: point });
+    setAlignTargetId(null);
+    toast.success("She'll move her lips when she talks.");
+  }
+
   if (video) {
     return (
       <div className="fixed inset-0 z-50 flex flex-col bg-background">
         {/* Her camera, with your own small feed floating over it. */}
-        <div className="relative min-h-0 flex-1 overflow-hidden">
+        <div
+          ref={feedBoxRef}
+          onClick={aligningMouth ? placeClipMouth : undefined}
+          className={cn(
+            "relative min-h-0 flex-1 overflow-hidden",
+            aligningMouth && "cursor-crosshair",
+          )}
+        >
           {clip ? (
             <>
               <video
@@ -599,6 +709,19 @@ export function FeliciaCall({
                 loop
                 playsInline
                 preload="auto"
+                onLoadedMetadata={(event) => {
+                  const { videoWidth, videoHeight } = event.currentTarget;
+                  if (videoWidth > 0 && videoHeight > 0) {
+                    setClipSizeAt({
+                      id: clip._id,
+                      width: videoWidth,
+                      height: videoHeight,
+                    });
+                    // First time this clip is seen: ask for the one tap that
+                    // puts her mouth on her lips.
+                    if (!hasFace(clip._id)) setAlignTargetId(clip._id);
+                  }
+                }}
                 /* The file itself is the problem — undecodable codec, a
                    rejected range request — so fall back to her picture rather
                    than leaving a black rectangle for the whole call. */
@@ -614,6 +737,25 @@ export function FeliciaCall({
                 }}
                 className="absolute inset-0 size-full bg-black object-contain"
               />
+
+              {/* Her voice, mouthed onto the clip where her lips are. */}
+              {clipMouth && clipFit && (
+                <ClipMouth
+                  x={clipFit.left + (clipMouth.x / 100) * clipFit.width}
+                  y={clipFit.top + (clipMouth.y / 100) * clipFit.height}
+                  size={Math.max(14, clipFit.width * 0.085)}
+                  talking={talking}
+                />
+              )}
+
+              {/* Asking for the one tap that makes the mouth land on her face. */}
+              {aligningMouth && (
+                <div className="pointer-events-none absolute inset-x-0 top-24 z-20 flex justify-center px-6">
+                  <span className="rounded-full border border-white/25 bg-black/55 px-4 py-2 text-center text-xs leading-relaxed text-white/90 backdrop-blur-md">
+                    tap her lips, so she moves when she talks
+                  </span>
+                </div>
+              )}
 
               {/* Still pulling the file down: a clip can be hundreds of MB, and
                   a black rectangle with no word on it reads as "broken". */}
@@ -762,6 +904,21 @@ export function FeliciaCall({
               >
                 <Images className="size-4" />
               </Button>
+
+              {/* Re-aim the mouth if it drifts off her lips on a new clip. */}
+              {clip && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="surface size-11 rounded-full border-border/60 bg-card/70 backdrop-blur-md hover:bg-card"
+                  onClick={() => setAlignTargetId(clip._id)}
+                  aria-label="Place her lips"
+                  title="Tap her lips"
+                >
+                  <Smile className="size-4" />
+                </Button>
+              )}
 
               <Button
                 type="button"
