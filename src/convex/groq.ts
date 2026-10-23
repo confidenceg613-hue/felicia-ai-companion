@@ -203,8 +203,18 @@ async function groqSpeak(
   text: string,
   ctx: { storage: { store: (blob: Blob) => Promise<Id<"_storage">> } },
 ): Promise<Id<"_storage"> | null> {
-  const safeText = text.slice(0, 600);
-  if (!safeText.trim()) return null;
+  // Emoji are punctuation for the eye, not the voice: a speech model that is
+  // handed them either reads a character name or stalls on it. They come out
+  // before the line is spoken, so her mood still shows in the chat and the
+  // call stays a sentence.
+  const safeText = text
+    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}]/gu, " ")
+    // Variation selectors and joiners left behind by a stripped glyph.
+    .replace(/\uFE0F|\u200D/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 600);
+  if (!safeText) return null;
 
   for (const voice of GROQ_VOICES) {
     let response: Response;
@@ -313,7 +323,8 @@ export const followUp = internalAction({
               "you would send right after it: an afterthought, a tease you could " +
               "not leave alone, a question you forgot, something you noticed " +
               "after pressing send. 3 to 15 words, casual and in the same voice, " +
-              "no narration, no quotes, at most one emoji. Reply with that line " +
+              "no narration, no quotes, and one emoji if it carries how you feel. " +
+              "Reply with that line " +
               "and nothing else. If nothing natural comes to mind, reply exactly NONE.",
           },
           {
