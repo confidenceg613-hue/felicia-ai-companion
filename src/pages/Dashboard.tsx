@@ -903,8 +903,8 @@ export default function Dashboard() {
               ref={scrollRef}
               className="relative z-10 min-h-0 flex-1 overflow-y-auto px-1 sm:px-2 pb-2"
             >
-            <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
-              {/* On this day — a real moment from an earlier year, surfaced only
+              <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+                {/* On this day — a real moment from an earlier year, surfaced only
                   when one exists. Dismissible, and it never invents one. */}
               {memoryDay &&
                 memoryDay.year > 0 &&
