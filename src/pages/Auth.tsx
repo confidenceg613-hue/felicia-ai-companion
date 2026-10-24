@@ -18,6 +18,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { GUEST_MERGE_KEY } from "@/lib/upgrade";
+import { friendlyError } from "@/lib/utils";
 import logo from "@/assets/logo.svg";
 import { ArrowRight, Loader2, Mail, UserX } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -33,6 +34,31 @@ interface AuthProps {
 // Set just before leaving for Google, cleared when we get back. It has to live
 // in sessionStorage because the OAuth round trip is a full page navigation.
 const GOOGLE_PENDING_KEY = "felicia:google-signin";
+
+/**
+ * What a failed send means in words, not in a Convex banner.
+ *
+ * The email sender rate-limits by address — and a user who never got the code
+ * will inevitably tap again and again, so the limit hitting is a normal part of
+ * the flow, not an exception to print. When the server says how long to wait,
+ * the sentence repeats it; otherwise it keeps it vague enough to always be
+ * true.
+ */
+function signEmailError(error: unknown, fallback: string): string {
+  const raw = error instanceof Error ? error.message : String(error ?? "");
+  if (/429|rate.?limit|too many/i.test(raw)) {
+    const match = raw.match(/retry after (\d+)/i);
+    const seconds = match ? Number(match[1]) : null;
+    const wait = seconds
+      ? `${Math.max(1, Math.ceil(seconds / 60))} minute${Math.ceil(seconds / 60) > 1 ? "s" : ""}`
+      : "a few minutes";
+    return `Too many codes were sent to this email. Please wait about ${wait}, and if a code already arrived, use that — no new one is needed.`;
+  }
+  if (/VLY_INTEGRATION_KEY/i.test(raw)) {
+    return "The email sender isn't set up for this app yet. Try signing in with Google instead.";
+  }
+  return friendlyError(error, fallback);
+}
 
 function resolveRedirectAfterAuth(
   returnTo: string | null,
@@ -176,9 +202,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     } catch (error) {
       console.error("Email sign-in error:", error);
       setError(
-        error instanceof Error
-          ? error.message
-          : "Failed to send verification code. Please try again.",
+        signEmailError(error, "Failed to send verification code. Please try again."),
       );
       setIsLoading(false);
     }
@@ -200,7 +224,12 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     } catch (error) {
       console.error("OTP verification error:", error);
 
-      setError("The verification code you entered is incorrect.");
+      const raw = error instanceof Error ? error.message : String(error ?? "");
+      setError(
+        /rate.?limit|too many/i.test(raw)
+          ? "Too many attempts — please wait a few minutes, then request a new code."
+          : "The verification code you entered is incorrect.",
+      );
       setIsLoading(false);
 
       setOtp("");
