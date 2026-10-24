@@ -230,13 +230,14 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   return (
     <div className="min-h-screen flex flex-col">
       {/* Auth Content */}
-      <div className="flex flex-col">
+      <div className="flex-1 flex items-center justify-center">
+        <div className="glow-warm relative flex items-center justify-center h-full flex-col px-6">
         <motion.div
           initial={{ opacity: 0, y: 22, scale: 0.97 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
         >
-          <Card className="w-full rounded-2xl border-border/60 bg-card/85 p-0 shadow-[0_28px_80px_-48px_rgba(24,14,44,0.4)] ring-1 ring-foreground/5 backdrop-blur-full">
+          <Card className="min-w-[350px] rounded-3xl border-border/60 bg-card/85 p-0 shadow-[0_40px_80px_-48px_rgba(24,14,44,0.55)] ring-1 ring-foreground/5 backdrop-blur-xl">
             <AnimatePresence mode="wait" initial={false}>
               {step === "signIn" ? (
                 <motion.div
@@ -297,6 +298,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                         <div className="relative flex-1">
                           <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                           <Input
+                            name="email"
                             placeholder="name@example.com"
                             type="email"
                             className="pl-9 rounded-full"
@@ -417,8 +419,8 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                           </>
                         ) : (
                           <>
-                            Verifying code
-                            <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                            Verify code
+                            <ArrowRight className="ml-2 h-4 w-4" />
                           </>
                         )}
                       </Button>
@@ -429,7 +431,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                         disabled={isLoading}
                         className="w-full"
                       >
-                        Different email
+                        Use different email
                       </Button>
                     </CardFooter>
                   </form>
@@ -450,6 +452,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
             </div>
           </Card>
         </motion.div>
+        </div>
       </div>
     </div>
   );
