@@ -1,1 +1,0 @@
-{"root":["./auth.config.ts","./auth.ts","./cloudflare.d.ts","./config.ts","./felicia.ts","./feliciaAppearance.ts","./http.ts","./schema.ts","./users.ts","./auth/emailOtp.ts"],"errors":true,"version":"5.9.3"}
