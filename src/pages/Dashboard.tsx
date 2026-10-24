@@ -27,7 +27,12 @@ import { FELICIA_GALLERY, galleryOriginal } from "@/lib/gallery";
 import { DEVELOP_MS, preloadImage } from "@/lib/photo";
 import { cn, friendlyError, isTransientError } from "@/lib/utils";
 import { beginVoiceNote, playAudioUrl, speakWithBrowser } from "@/lib/voice";
-import { useAction, usePaginatedQuery, useQuery } from "convex/react";
+import {
+  useAction,
+  useMutation,
+  usePaginatedQuery,
+  useQuery,
+} from "convex/react";
 import { motion } from "framer-motion";
 import {
   Camera,
@@ -153,6 +158,21 @@ export default function Dashboard() {
   );
   const photos = useQuery(api.felicia.photos);
   const connection = useQuery(api.felicia.connectorStatus);
+  /**
+   * An empty chat still has a past: earlier guest sessions of this app keep
+   * their history under the guest id that made it, so the empty state can offer
+   * to fold them back in instead of showing nothing. Only asked for while the
+   * transcript is empty, and skipped the rest of the time.
+   */
+  const chatIsEmpty =
+    messagePages.results.length === 0 &&
+    messagePages.status !== "LoadingFirstPage";
+  const earlier = useQuery(
+    api.accounts.earlierSessions,
+    chatIsEmpty ? {} : "skip",
+  );
+  const restoreEarlier = useMutation(api.accounts.restoreEarlierSessions);
+  const [restoring, setRestoring] = useState(false);
   const sendMessage = useAction(api.felicia.sendMessage);
   const generatePhoto = useAction(api.felicia.generatePhoto);
   const sendUserPhoto = useAction(api.felicia.sendUserPhoto);
@@ -1014,6 +1034,66 @@ export default function Dashboard() {
                       </motion.button>
                     ))}
                   </div>
+
+                  {/* An empty chat is only empty because this browser arrived as
+                      a new guest. The old conversations are still in the
+                      database, so offer them back rather than letting them
+                      look lost. */}
+                  {earlier && earlier.sessions > 0 && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{
+                        delay: 0.32,
+                        duration: 0.4,
+                        ease: [0.22, 1, 0.36, 1],
+                      }}
+                      className="mt-6 w-full max-w-sm rounded-3xl border border-primary/25 bg-primary/5 px-4 py-3 text-left"
+                    >
+                      <p className="flex items-center gap-1.5 text-[10px] tracking-widest text-primary uppercase">
+                        <History className="size-3" />
+                        Earlier conversations
+                      </p>
+                      <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                        {earlier.messages} messages from{" "}
+                        {earlier.sessions === 1
+                          ? "an earlier session"
+                          : `${earlier.sessions} earlier sessions`}{" "}
+                        of this app are still saved — they were made before this
+                        account existed.
+                      </p>
+                      <Button
+                        size="sm"
+                        className="mt-3 w-full gap-2 rounded-full"
+                        disabled={restoring}
+                        onClick={async () => {
+                          setRestoring(true);
+                          try {
+                            const result = await restoreEarlier({});
+                            toast.success(
+                              `Brought back ${result.moved} message${result.moved === 1 ? "" : "s"}.`,
+                            );
+                          } catch (restoreError) {
+                            toast.error(
+                              friendlyError(
+                                restoreError,
+                                "Couldn't bring those conversations back.",
+                              ),
+                            );
+                          } finally {
+                            setRestoring(false);
+                          }
+                        }}
+                      >
+                        {restoring ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          <History className="size-3.5" />
+                        )}
+                        Bring them back
+                      </Button>
+                    </motion.div>
+                  )}
                 </motion.div>
               )}
 
