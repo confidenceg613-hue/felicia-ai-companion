@@ -9,7 +9,13 @@ import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient, useConvexAuth } from "convex/react";
 import { Heart } from "lucide-react";
 import { MotionConfig, motion } from "framer-motion";
-import React, { StrictMode, useEffect, lazy, Suspense } from "react";
+import React, {
+  StrictMode,
+  useEffect,
+  useState,
+  lazy,
+  Suspense,
+} from "react";
 import { createRoot } from "react-dom/client";
 import {
   BrowserRouter,
@@ -161,8 +167,18 @@ const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
  */
 function Home() {
   const { isLoading, isAuthenticated } = useAuth();
-  if (isLoading) return <RouteLoading />;
+
+  /** The heart never owns the screen: if the backend is slow to answer, the
+   *  landing page takes over after a few seconds instead of beating forever. */
+  const [authTimedOut, setAuthTimedOut] = useState(false);
+  useEffect(() => {
+    if (!isLoading) return;
+    const timer = setTimeout(() => setAuthTimedOut(true), 4000);
+    return () => clearTimeout(timer);
+  }, [isLoading]);
+
   if (isAuthenticated) return <Navigate to="/dashboard" replace />;
+  if (isLoading && !authTimedOut) return <RouteLoading />;
   return <Landing />;
 }
 
@@ -180,13 +196,16 @@ function RoutePrefetcher() {
   const { isAuthenticated } = useConvexAuth();
 
   useEffect(() => {
-    // Signed out, only the two public pages are worth pulling; once there is a
-    // session, every tab is warmed so none of them is the one that waits.
-    const warm = () => {
-      if (isAuthenticated) {
-        prefetchPages();
-        return;
-      }
+    // Signed-out visitors get the two public pages warmed while idle. A signed
+    // session goes straight to the dashboard, so its code is pulled at once —
+    // waiting on the browser's idle time would show the heart during a chunk
+    // request that could have been in flight already.
+    if (isAuthenticated) {
+      prefetchPages();
+      return;
+    }
+
+    const warmSignedOut = () => {
       void pageModules.landing();
       void pageModules.auth();
     };
@@ -200,11 +219,11 @@ function RoutePrefetcher() {
     };
 
     if (scope.requestIdleCallback) {
-      const handle = scope.requestIdleCallback(warm, { timeout: 1500 });
+      const handle = scope.requestIdleCallback(warmSignedOut, { timeout: 1500 });
       return () => scope.cancelIdleCallback?.(handle);
     }
 
-    const timer = setTimeout(warm, 250);
+    const timer = setTimeout(warmSignedOut, 250);
     return () => clearTimeout(timer);
   }, [isAuthenticated]);
 

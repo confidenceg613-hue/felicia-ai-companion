@@ -10,6 +10,7 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { Loader2, Lock } from "lucide-react";
 import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router";
 
 /**
@@ -39,7 +40,16 @@ export function RequireAuth({
   const navigate = useNavigate();
   const location = useLocation();
 
-  if (isLoading) {
+  /** A slow backend answer must not spin here forever: after a few seconds
+   *  the sign-in screen takes over, which is always an actionable place. */
+  const [authTimedOut, setAuthTimedOut] = useState(false);
+  useEffect(() => {
+    if (!isLoading) return;
+    const timer = setTimeout(() => setAuthTimedOut(true), 4000);
+    return () => clearTimeout(timer);
+  }, [isLoading]);
+
+  if (isLoading && !authTimedOut) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="size-6 animate-spin text-muted-foreground" />
