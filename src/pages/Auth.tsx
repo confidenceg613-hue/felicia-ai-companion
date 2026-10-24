@@ -249,10 +249,17 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       // the user should be told to try again, not shown the server's raw
       // banner — the Dashboard already uses the same logic for the same reason.
       if (isTransientError(error)) {
-        setError(
-          "The connection dipped for a second — your device just kept itself close enough.",
-        );
+        // Genuine transport hiccup: the server didn't answer or the socket
+        // dropped. Retrying the button usually just works.
+        setError("Your device missed the server for a moment — refresh and it'll keep going.");
       } else {
+        // Session/endpoint mismatch, CORS, 4xx — not a retryable blip.
+        setError(
+          error instanceof Error
+            ? friendlyError(error, "Couldn't start a guest session.")
+            : "Failed to start a guest session.",
+        );
+      }
         setError(
           error instanceof Error
                        ? friendlyError(error, "Couldn't start a guest session.")

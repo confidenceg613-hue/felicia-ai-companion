@@ -54,7 +54,13 @@ export function friendlyError(error: unknown, fallback: string): string {
  */
 export function isTransientError(error: unknown): boolean {
   const raw = error instanceof Error ? error.message : String(error ?? "");
-  return /failed to fetch|connection lost|network|timed out|timeout|\b50[234]\b/i.test(
-    raw,
-  );
+  // A transient failure is a real transport hiccup: the socket dropped, the
+  // connection timed out, or a load balancer returned a 5xx. Anything with a
+  // "connection in flight" banner but a client/cors/4xx/redirect tone is
+  // usually a session or endpoint mismatch, not a blip the user can retry out
+  // of — that gets a different message on the auth page specifically.
+  if (/failed to fetch|network|timed? ?out|connection lost|disconnected/i.test(raw))
+    return true;
+  if (/\b50[234]\b/i.test(raw)) return true;
+  return false;
 }
