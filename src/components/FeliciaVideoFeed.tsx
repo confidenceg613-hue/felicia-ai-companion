@@ -305,14 +305,19 @@ export function FeliciaVideoFeed({
   const offsetX = (box.width - imageWidth) / 2;
   const offsetY = (box.height - imageHeight) / 2;
 
-  boxSizeRef.current = {
-    width: box.width,
-    height: box.height,
-    imageWidth,
-    imageHeight,
-    offsetX,
-    offsetY,
-  };
+  // The frame loop reads the measured box through a ref so it doesn't have to
+  // re-render to follow it; a ref is only ever written outside render, so this
+  // hand-off happens in an effect, one frame after the layout settles.
+  useEffect(() => {
+    boxSizeRef.current = {
+      width: box.width,
+      height: box.height,
+      imageWidth,
+      imageHeight,
+      offsetX,
+      offsetY,
+    };
+  }, [box.width, box.height, imageWidth, imageHeight, offsetX, offsetY]);
 
   // Nothing is drawn until the picture has been measured, so a stray dot can't
   // flash in the corner on the first frame.

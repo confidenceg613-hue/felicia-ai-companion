@@ -8,6 +8,7 @@ import type { Id } from "./_generated/dataModel";
 // Match the convention used everywhere else in this codebase: the handler
 // context is typed as `any` so internal calls don't carry the full generic
 // context shape across module boundaries.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyCtx = any;
 
 // ---------------------------------------------------------------------------

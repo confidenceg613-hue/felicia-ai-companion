@@ -53,7 +53,7 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 
@@ -171,6 +171,7 @@ export default function Dashboard() {
   const [callError, setCallError] = useState<string | null>(null);
   const [speakingId, setSpeakingId] = useState<string | null>(null);
   const [pendingPhotoScene, setPendingPhotoScene] = useState<string | null>(null);
+  /** Delay in ms before the developing photo reveals; null when nothing is cooking. */
   const [photoScheduledAt, setPhotoScheduledAt] = useState<number | null>(null);
   const photoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -198,11 +199,9 @@ export default function Dashboard() {
    * messages cascade in, older history is simply there. This flips off shortly
    * after first paint, so messages that land later (a live reply) never wait.
    */
-  const firstPaintRef = useRef(true);
+  const [firstPaint, setFirstPaint] = useState(true);
   useEffect(() => {
-    const timer = setTimeout(() => {
-      firstPaintRef.current = false;
-    }, 1500);
+    const timer = setTimeout(() => setFirstPaint(false), 1500);
     return () => clearTimeout(timer);
   }, []);
 
@@ -240,23 +239,6 @@ export default function Dashboard() {
     }
   }, []);
 
-  useEffect(() => {
-    if (photoScheduledAt === null) return;
-    // A zero-delay timeout rather than a synchronous setState: the reveal is
-    // always dispatched from the timer, so this effect never cascades a render.
-    const remaining = Math.max(0, photoScheduledAt - Date.now());
-    const timer = setTimeout(() => {
-      setPhotoScheduledAt(null);
-      if (pendingPhotoScene) void requestPhoto(pendingPhotoScene);
-      setPendingPhotoScene(null);
-    }, remaining);
-    photoTimerRef.current = timer;
-    return () => {
-      clearTimeout(timer);
-      photoTimerRef.current = null;
-    };
-  }, [pendingPhotoScene, photoScheduledAt, requestPhoto]);
-
   const scrollRef = useRef<HTMLDivElement>(null);
   /** Distance from the bottom, kept across a "load earlier" so the view holds. */
   const restoreScrollRef = useRef<number | null>(null);
@@ -275,7 +257,12 @@ export default function Dashboard() {
    * closure captured when the send started.
    */
   const listRef = useRef(list);
-  listRef.current = list;
+  // A ref is only written outside render; the transcript-as-of-now for the
+  // retry check trails its render by a commitment, which is close enough — the
+  // send retries read it only after the message list has settled.
+  useEffect(() => {
+    listRef.current = list;
+  }, [list]);
   const lastUserMessage = [...list].reverse().find((m) => m.role === "user");
   const showPending = pending !== null && lastUserMessage?.content !== pending;
   const composing = thinking || recording;
@@ -330,10 +317,11 @@ export default function Dashboard() {
 
   // Follow the newest line only. Keyed on the last item rather than the count,
   // so loading older messages above does not yank the reader to the bottom.
+  const lastItemId = items[items.length - 1]?.id;
   useEffect(() => {
     const node = scrollRef.current;
     if (node) node.scrollTop = node.scrollHeight;
-  }, [items[items.length - 1]?.id, showPending, developing, interim]);
+  }, [lastItemId, showPending, developing, interim]);
 
   // Older messages are prepended above, so the reader keeps their place: the
   // distance from the bottom is remembered and put back.
@@ -350,7 +338,14 @@ export default function Dashboard() {
     void messagePages.loadMore(MESSAGE_PAGE_SIZE);
   }
 
-  async function requestPhoto(scene: string) {
+  /**
+   * A stable function, not a fresh one per render.
+   *
+   * The reveal timer below is armed with this function, so an unstable
+   * identity would tear the timer down and re-arm it on every render — a
+   * churny transcript could keep the developing photo from ever finishing.
+   */
+  const requestPhoto = useCallback(async (scene: string) => {
     if (!photosReady) return;
 
     setHiddenCount(allPhotos.length);
@@ -364,7 +359,23 @@ export default function Dashboard() {
       setDeveloping(false);
       setHiddenCount(null);
     }
-  }
+  }, [allPhotos.length, generatePhoto, photosReady]);
+
+  useEffect(() => {
+    if (photoScheduledAt === null) return;
+    // A zero-delay timeout rather than a synchronous setState: the reveal is
+    // always dispatched from the timer, so this effect never cascades a render.
+    const timer = setTimeout(() => {
+      setPhotoScheduledAt(null);
+      if (pendingPhotoScene) void requestPhoto(pendingPhotoScene);
+      setPendingPhotoScene(null);
+    }, photoScheduledAt);
+    photoTimerRef.current = timer;
+    return () => {
+      clearTimeout(timer);
+      photoTimerRef.current = null;
+    };
+  }, [pendingPhotoScene, photoScheduledAt, requestPhoto]);
 
   async function handleStartCall(video = false) {
     setGreeting(null);
@@ -480,7 +491,7 @@ export default function Dashboard() {
         await preloadImage(result.photoUrl);
       } else if (result.photoScene) {
         setPendingPhotoScene(result.photoScene);
-        setPhotoScheduledAt(Date.now() + (result.photoReadyAfterMs || 8000));
+        setPhotoScheduledAt(result.photoReadyAfterMs || 8000);
       }
     } catch (error) {
       setPending(null);
@@ -495,7 +506,9 @@ export default function Dashboard() {
 
   /** Preview URLs live only while the picker does; drop them on unmount. */
   const stagedRef = useRef<StagedPhoto[]>([]);
-  stagedRef.current = staged;
+  useEffect(() => {
+    stagedRef.current = staged;
+  }, [staged]);
   useEffect(
     () => () => {
       for (const photo of stagedRef.current) URL.revokeObjectURL(photo.url);
@@ -1030,7 +1043,7 @@ export default function Dashboard() {
               {items.map((item, index) => {
                 const isUser = item.role === "user";
                 const position = index - (items.length - ENTRANCE_WINDOW);
-                const isEntrance = firstPaintRef.current && position >= 0;
+                const isEntrance = firstPaint && position >= 0;
                 const entranceDelay = isEntrance
                   ? Math.min(position, ENTRANCE_WINDOW - 1) * 0.035
                   : 0;

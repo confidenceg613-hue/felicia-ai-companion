@@ -19,23 +19,30 @@ export function SelfView({
   className?: string;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [state, setState] = useState<"off" | "starting" | "live" | "blocked">(
-    enabled ? "starting" : "off",
+  /**
+   * The camera's own state, written only from the camera's callbacks.
+   *
+   * "Off" is not stored: it is what the tiles show whenever the caller's
+   * switch says so. Writing state straight in the effect body would cascade a
+   * render on every toggle, so the restarts show through the derived phase
+   * below instead.
+   */
+  const [streamState, setStreamState] = useState<"starting" | "live" | "blocked">(
+    "starting",
   );
 
   useEffect(() => {
-    if (!enabled) {
-      setState("off");
-      return;
-    }
+    // A switched-off tile never asks for the camera at all.
+    if (!enabled) return;
 
     let stream: MediaStream | null = null;
     let cancelled = false;
-    setState("starting");
 
     const media = navigator.mediaDevices;
     if (!media?.getUserMedia) {
-      setState("blocked");
+      queueMicrotask(() => {
+        if (!cancelled) setStreamState("blocked");
+      });
       return;
     }
 
@@ -55,10 +62,10 @@ export function SelfView({
           element.srcObject = next;
           void element.play().catch(() => undefined);
         }
-        setState("live");
+        setStreamState("live");
       })
       .catch(() => {
-        if (!cancelled) setState("blocked");
+        if (!cancelled) setStreamState("blocked");
       });
 
     return () => {
@@ -66,6 +73,10 @@ export function SelfView({
       stream?.getTracks().forEach((track) => track.stop());
     };
   }, [enabled]);
+
+  const state: "off" | "starting" | "live" | "blocked" = !enabled
+    ? "off"
+    : streamState;
 
   return (
     <div

@@ -60,7 +60,7 @@ import {
   Star,
   Trash2,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -327,9 +327,10 @@ export default function Album() {
     return `portrait of Felicia, ${scene}, ${outfit?.sceneSuffix ?? ""} ${background?.sceneSuffix ?? ""} warm photoreal portrait light, candid, elegant`;
   }
 
-  const requestCurrent: () => void = useCallback(() => {
+  /** Only ever an onClick here, so it doesn't need a stable identity. */
+  function requestCurrent() {
     void requestPhoto(resolveScene(undefined));
-  }, [requestPhoto, appearance]);
+  }
 
   function openScenePicker(scene: string | undefined) {
     if (scene === undefined || scene === appearance.overrideScene) {

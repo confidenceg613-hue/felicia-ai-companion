@@ -14,7 +14,9 @@ import { internalMutation, mutation, query } from "./_generated/server";
 
 // The rest of this codebase types the Convex context loosely, so these follow
 // the same convention rather than fighting the generated types.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyCtx = any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyArgs = any;
 
 /** How many clips her gallery holds before one has to go. */
