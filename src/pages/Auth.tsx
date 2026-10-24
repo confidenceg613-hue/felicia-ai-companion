@@ -18,7 +18,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { GUEST_MERGE_KEY } from "@/lib/upgrade";
-import { friendlyError } from "@/lib/utils";
+import { friendlyError, isTransientError } from "@/lib/utils";
 import logo from "@/assets/logo.svg";
 import { ArrowRight, Loader2, Mail, UserX } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -245,9 +245,20 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       console.log("Anonymous sign in successful");
       navigate(redirect);
     } catch (error) {
-      console.error("Guest login error:", error);
-      console.error("Error details:", JSON.stringify(error, null, 2));
-      setError(`Failed to sign in as guest: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      // Network blips during the first hop are retryable; when they clear
+      // the user should be told to try again, not shown the server's raw
+      // banner — the Dashboard already uses the same logic for the same reason.
+      if (isTransientError(error)) {
+        setError(
+          "The connection dipped for a second — your device just kept itself close enough.",
+        );
+      } else {
+        setError(
+          error instanceof Error
+                       ? friendlyError(error, "Couldn't start a guest session.")
+            : "Failed to start a guest session.",
+        );
+      }
       setIsLoading(false);
     }
   };
