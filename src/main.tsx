@@ -1,21 +1,16 @@
-import '@vly-ai/integrations';
+import "@vly-ai/integrations";
 import { Toaster } from "@/components/ui/sonner";
 import { RequireAuth } from "@/components/RequireAuth";
 import { useAuth } from "@/hooks/use-auth";
 import AgeGate from "@/components/AgeGate";
 import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { pageModules, prefetchPages } from "@/lib/pageModules";
+import { resolveConvexUrl } from "@/lib/convexDeployment";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient, useConvexAuth } from "convex/react";
 import { Heart } from "lucide-react";
 import { MotionConfig, motion } from "framer-motion";
-import React, {
-  StrictMode,
-  useEffect,
-  useState,
-  lazy,
-  Suspense,
-} from "react";
+import React, { StrictMode, useEffect, useState, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import {
   BrowserRouter,
@@ -73,7 +68,10 @@ function RouteLoading() {
         <motion.span
           aria-hidden
           className="absolute size-24 rounded-full border border-primary/30"
-          animate={{ scale: [1, 1.45, 1.05, 1.3, 1], opacity: [0.5, 0, 0.35, 0, 0.5] }}
+          animate={{
+            scale: [1, 1.45, 1.05, 1.3, 1],
+            opacity: [0.5, 0, 0.35, 0, 0.5],
+          }}
           transition={beatTiming}
         />
 
@@ -155,8 +153,6 @@ class RootErrorBoundary extends React.Component<
   }
 }
 
-const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
-
 /**
  * The app's front door.
  *
@@ -181,8 +177,6 @@ function Home() {
   if (isLoading && !authTimedOut) return <RouteLoading />;
   return <Landing />;
 }
-
-
 
 /**
  * Fetches every page's code once the first screen is up.
@@ -219,7 +213,9 @@ function RoutePrefetcher() {
     };
 
     if (scope.requestIdleCallback) {
-      const handle = scope.requestIdleCallback(warmSignedOut, { timeout: 1500 });
+      const handle = scope.requestIdleCallback(warmSignedOut, {
+        timeout: 1500,
+      });
       return () => scope.cancelIdleCallback?.(handle);
     }
 
@@ -253,50 +249,75 @@ function RouteSyncer() {
   return null;
 }
 
-
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <RootErrorBoundary>
-      {/* Every Framer animation in the app honours the system's motion
+/**
+ * The whole app, built around the deployment the browser was told to use.
+ *
+ * It is a function of the client rather than a module-level singleton because
+ * the deployment is verified before the first connection (see
+ * lib/convexDeployment): a published build that was produced with a stale
+ * address has to be able to fall back to one that answers.
+ */
+function App({ convex }: { convex: ConvexReactClient }) {
+  return (
+    <StrictMode>
+      <RootErrorBoundary>
+        {/* Every Framer animation in the app honours the system's motion
           preference from here — exit and layout transforms included. */}
-      <MotionConfig reducedMotion="user">
-      <ToolbarErrorBoundary>
-        <VlyToolbar />
-      </ToolbarErrorBoundary>
-      <ConvexAuthProvider client={convex}>
-        <BrowserRouter>
-          <RouteSyncer />
-          <RoutePrefetcher />
-          <Suspense fallback={<RouteLoading />}>
-            <Routes>
-              <Route path="/" element={<Home />} />
-              <Route
-                path="/auth"
-                element={<AuthPage redirectAfterAuth="/dashboard" />}
-              />
-              <Route
-                path="/dashboard"
-                element={
-                  <RequireAuth>
-                    <AppShell />
-                  </RequireAuth>
-                }
-              >
-                <Route index element={<Dashboard />} />
-                <Route path="memories" element={<Memories />} />
-                <Route path="album" element={<Album />} />
-                <Route path="notes" element={<SharedNotes />} />
-                <Route path="settings" element={<Settings />} />
-              </Route>
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Suspense>
-          {/* Adults-only, asked once and remembered on this device. */}
-          <AgeGate />
-        </BrowserRouter>
-        <Toaster />
-      </ConvexAuthProvider>
-      </MotionConfig>
-    </RootErrorBoundary>
+        <MotionConfig reducedMotion="user">
+          <ToolbarErrorBoundary>
+            <VlyToolbar />
+          </ToolbarErrorBoundary>
+          <ConvexAuthProvider client={convex}>
+            <BrowserRouter>
+              <RouteSyncer />
+              <RoutePrefetcher />
+              <Suspense fallback={<RouteLoading />}>
+                <Routes>
+                  <Route path="/" element={<Home />} />
+                  <Route
+                    path="/auth"
+                    element={<AuthPage redirectAfterAuth="/dashboard" />}
+                  />
+                  <Route
+                    path="/dashboard"
+                    element={
+                      <RequireAuth>
+                        <AppShell />
+                      </RequireAuth>
+                    }
+                  >
+                    <Route index element={<Dashboard />} />
+                    <Route path="memories" element={<Memories />} />
+                    <Route path="album" element={<Album />} />
+                    <Route path="notes" element={<SharedNotes />} />
+                    <Route path="settings" element={<Settings />} />
+                  </Route>
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </Suspense>
+              {/* Adults-only, asked once and remembered on this device. */}
+              <AgeGate />
+            </BrowserRouter>
+            <Toaster />
+          </ConvexAuthProvider>
+        </MotionConfig>
+      </RootErrorBoundary>
+    </StrictMode>
+  );
+}
+
+const root = createRoot(document.getElementById("root")!);
+
+// Her heart is on screen from the very first frame, while the deployment check
+// below is still in flight — never a blank page during boot.
+root.render(
+  <StrictMode>
+    <MotionConfig reducedMotion="user">
+      <RouteLoading />
+    </MotionConfig>
   </StrictMode>,
 );
+
+void resolveConvexUrl().then((url) => {
+  root.render(<App convex={new ConvexReactClient(url)} />);
+});
