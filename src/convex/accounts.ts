@@ -11,13 +11,24 @@ import type { Id } from "./_generated/dataModel";
 /** How far back an earlier guest session is still worth folding back in. */
 const RESTORE_WINDOW_MS = 45 * 24 * 60 * 60 * 1000;
 /**
- * How many recent messages the scan reads, and how many earlier guest
- * sessions it will fold in. Both are generous because a person's history is
- * spread over every guest session they ever started, and a missed session is
- * a lost conversation — the table itself is small by nature.
+ * How many recent rows the scan reads, and how many earlier guest sessions it
+ * will fold in. Both are generous because a person's history is spread over
+ * every guest session they ever started, and a missed session is a lost
+ * conversation — the tables themselves are small by nature.
  */
-const RESTORE_SCAN = 1000;
+const RESTORE_SCAN = 600;
+/** Clips and photos are much heavier rows, so their window is smaller. */
+const RESTORE_MEDIA_SCAN = 200;
 const RESTORE_MAX_SESSIONS = 60;
+
+/** One earlier guest account, and what is sitting under it. */
+type EarlierGuest = {
+  id: Id<"users">;
+  messages: number;
+  videos: number;
+  newest: number;
+  oldest: number;
+};
 
 /**
  * Bind a guest conversation to the account that just signed in.
@@ -70,7 +81,13 @@ export const earlierSessions = query({
   args: {},
   handler: async (ctx: QueryCtx) => {
     const userId = await getAuthUserId(ctx);
-    const empty = { sessions: 0, messages: 0, newest: null, oldest: null };
+    const empty = {
+      sessions: 0,
+      messages: 0,
+      videos: 0,
+      newest: null as number | null,
+      oldest: null as number | null,
+    };
     if (!userId) return empty;
 
     // Nothing is missing if this account already talks.
@@ -80,42 +97,19 @@ export const earlierSessions = query({
       .take(1);
     if (own.length > 0) return empty;
 
-    const cutoff = Date.now() - RESTORE_WINDOW_MS;
-    const recent = await ctx.db.query("messages").order("desc").take(RESTORE_SCAN);
-
-    const tallies = new Map<
-      Id<"users">,
-      { messages: number; newest: number; oldest: number }
-    >();
-    for (const message of recent) {
-      if (message.userId === userId || message.createdAt < cutoff) continue;
-      const tally = tallies.get(message.userId);
-      if (tally) {
-        tally.messages += 1;
-        tally.oldest = Math.min(tally.oldest, message.createdAt);
-      } else if (tallies.size < RESTORE_MAX_SESSIONS) {
-        tallies.set(message.userId, {
-          messages: 1,
-          newest: message.createdAt,
-          oldest: message.createdAt,
-        });
-      }
-    }
-
-    let sessions = 0;
+    const guests = await earlierGuests(ctx, userId);
     let messages = 0;
+    let videos = 0;
     let newest: number | null = null;
     let oldest: number | null = null;
-    for (const [id, tally] of tallies) {
-      const owner = await ctx.db.get(id);
-      if (owner?.isAnonymous !== true) continue;
-      sessions += 1;
-      messages += tally.messages;
-      newest = newest === null ? tally.newest : Math.max(newest, tally.newest);
-      oldest = oldest === null ? tally.oldest : Math.min(oldest, tally.oldest);
+    for (const guest of guests) {
+      messages += guest.messages;
+      videos += guest.videos;
+      newest = newest === null ? guest.newest : Math.max(newest, guest.newest);
+      oldest = oldest === null ? guest.oldest : Math.min(oldest, guest.oldest);
     }
 
-    return { sessions, messages, newest, oldest };
+    return { sessions: guests.length, messages, videos, newest, oldest };
   },
 });
 
@@ -132,28 +126,85 @@ export const restoreEarlierSessions = mutation({
     const toUserId = await getAuthUserId(ctx);
     if (!toUserId) throw new Error("Sign in first.");
 
-    const cutoff = Date.now() - RESTORE_WINDOW_MS;
-    const recent = await ctx.db.query("messages").order("desc").take(RESTORE_SCAN);
-
-    const candidates: Id<"users">[] = [];
-    for (const message of recent) {
-      if (message.userId === toUserId || message.createdAt < cutoff) continue;
-      if (!candidates.includes(message.userId)) candidates.push(message.userId);
-      if (candidates.length >= RESTORE_MAX_SESSIONS) break;
-    }
-
+    const guests = await earlierGuests(ctx, toUserId);
     let sessions = 0;
     let moved = 0;
-    for (const fromUserId of candidates) {
-      const owner = await ctx.db.get(fromUserId);
-      if (owner?.isAnonymous !== true) continue;
-      moved += await moveAccountData(ctx, fromUserId, toUserId);
+    for (const guest of guests) {
+      moved += await moveAccountData(ctx, guest.id, toUserId);
       sessions += 1;
     }
 
     return { sessions, moved };
   },
 });
+
+/**
+ * The guest accounts that hold something worth bringing back.
+ *
+ * Candidates come from the transcript, the clips in her gallery and the photos
+ * she sent. A guest who only ever uploaded a few videos and never typed a
+ * message has no transcript at all — scanning messages alone would report
+ * nothing to restore and leave those clips stranded under an id nobody is
+ * signed in as any more.
+ */
+async function earlierGuests(
+  ctx: QueryCtx,
+  userId: Id<"users">,
+): Promise<EarlierGuest[]> {
+  const cutoff = Date.now() - RESTORE_WINDOW_MS;
+  const guests = new Map<Id<"users">, EarlierGuest>();
+
+  function note(id: Id<"users">, at: number): EarlierGuest {
+    const existing = guests.get(id);
+    if (existing) {
+      existing.newest = Math.max(existing.newest, at);
+      existing.oldest = Math.min(existing.oldest, at);
+      return existing;
+    }
+    const fresh: EarlierGuest = {
+      id,
+      messages: 0,
+      videos: 0,
+      newest: at,
+      oldest: at,
+    };
+    guests.set(id, fresh);
+    return fresh;
+  }
+
+  const messages = await ctx.db.query("messages").order("desc").take(RESTORE_SCAN);
+  for (const message of messages) {
+    if (message.userId === userId || message.createdAt < cutoff) continue;
+    if (!guests.has(message.userId) && guests.size >= RESTORE_MAX_SESSIONS) continue;
+    note(message.userId, message.createdAt).messages += 1;
+  }
+
+  const videos = await ctx.db
+    .query("galleryVideos")
+    .order("desc")
+    .take(RESTORE_MEDIA_SCAN);
+  for (const video of videos) {
+    if (video.userId === userId || video.createdAt < cutoff) continue;
+    if (!guests.has(video.userId) && guests.size >= RESTORE_MAX_SESSIONS) continue;
+    note(video.userId, video.createdAt).videos += 1;
+  }
+
+  const photos = await ctx.db.query("photos").order("desc").take(RESTORE_MEDIA_SCAN);
+  for (const photo of photos) {
+    if (photo.userId === userId || photo.createdAt < cutoff) continue;
+    if (!guests.has(photo.userId) && guests.size >= RESTORE_MAX_SESSIONS) continue;
+    note(photo.userId, photo.createdAt);
+  }
+
+  // Only a guest can be folded in: a signed-in account's history is its own.
+  const out: EarlierGuest[] = [];
+  for (const guest of guests.values()) {
+    const owner = await ctx.db.get(guest.id);
+    if (owner?.isAnonymous !== true) continue;
+    out.push(guest);
+  }
+  return out;
+}
 
 /**
  * Move one account's history onto another.

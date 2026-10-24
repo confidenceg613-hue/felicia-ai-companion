@@ -1055,7 +1055,12 @@ export default function Dashboard() {
                         Earlier conversations
                       </p>
                       <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                        {earlier.messages} messages from{" "}
+                        {earlier.messages > 0 &&
+                          `${earlier.messages} message${earlier.messages === 1 ? "" : "s"}`}
+                        {earlier.messages > 0 && earlier.videos > 0 && " and "}
+                        {earlier.videos > 0 &&
+                          `${earlier.videos} video${earlier.videos === 1 ? "" : "s"} in her gallery`}{" "}
+                        from{" "}
                         {earlier.sessions === 1
                           ? "an earlier session"
                           : `${earlier.sessions} earlier sessions`}{" "}
@@ -1071,7 +1076,7 @@ export default function Dashboard() {
                           try {
                             const result = await restoreEarlier({});
                             toast.success(
-                              `Brought back ${result.moved} message${result.moved === 1 ? "" : "s"}.`,
+                              `Brought back ${result.moved} item${result.moved === 1 ? "" : "s"} — check your gallery too.`,
                             );
                           } catch (restoreError) {
                             toast.error(
