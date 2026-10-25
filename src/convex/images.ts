@@ -189,7 +189,9 @@ export const generate = internalAction({
     // quota to run out of. Every paid route is tried first, so this only takes
     // the picture on the days the others cannot.
     try {
-      return { storageId: await viaPollinations(trimmed, ctx) };
+      return {
+        storageId: await viaPollinations(trimmed, ctx, referenceUrl ?? null),
+      };
     } catch (error) {
       problems.push(error instanceof Error ? error.message : String(error));
     }
@@ -668,45 +670,103 @@ async function viaVenice(
 // ---------------------------------------------------------------------------
 
 const POLLINATIONS_URL = "https://image.pollinations.ai/prompt";
-const POLLINATIONS_TIMEOUT_MS = 120_000;
+const POLLINATIONS_TIMEOUT_MS = 180_000;
 /** A URL prompt has a practical ceiling; anything longer is cut, not encoded. */
 const POLLINATIONS_PROMPT_LIMIT = 1_600;
+/**
+ * The model behind the free path, and what takes over if it refuses.
+ *
+ * Klein is the open-weight FLUX 3: it is the same family as the paid BFL call,
+ * it takes reference images — so her face goes in as a picture rather than
+ * only as prose — and Pollinations serves it to anonymous callers.
+ */
+const POLLINATIONS_MODEL = "black-forest-labs/flux-3-image-klein";
+const POLLINATIONS_FALLBACK_MODEL = "flux";
+/** The free tier allows one image per 45 seconds per IP; the rest is backoff. */
+const FREE_LIMIT_WAIT_MS = 45_000;
+const FREE_LIMIT_ATTEMPTS = 3;
+
+/** A pacing signal from the free tier: wait, then ask again. Not a failure. */
+class FreeLimit extends Error {}
 
 /**
  * One photo from Pollinations, which needs no key at all.
  *
  * This is the backstop that keeps her sending photos on a day when every paid
- * key is out of credits and Cloudflare's free neurons are spent. It is FLUX.1
- * behind a plain GET, so it is the least realistic of the lot and sits last on
- * purpose — but a slightly softer photo of her beats a broken photo.
+ * key is out of credits and Cloudflare's free neurons are spent — and it is not
+ * a downgrade: FLUX 3 Klein with her portrait as a reference is the same model
+ * family the paid route uses.
+ *
+ * The free tier spaces anonymous requests out rather than refusing them, so a
+ * `FREE_LIMIT` answer waits for its `retry-after` and asks again instead of
+ * surfacing — the photo just takes a moment longer.
  */
 async function viaPollinations(
   prompt: string,
   ctx: StorageCtx,
+  referenceUrl: string | null,
 ): Promise<Id<"_storage">> {
-  const encoded = encodeURIComponent(prompt.slice(0, POLLINATIONS_PROMPT_LIMIT));
-  const url =
-    `${POLLINATIONS_URL}/${encoded}` +
-    `?width=${PHOTO_WIDTH}&height=${PHOTO_HEIGHT}` +
-    "&model=flux&nologo=true&enhance=false";
+  // Her face goes in as a picture, and the prompt still says in words what the
+  // picture is for — a model handed an unlabelled reference happily draws the
+  // room and puts somebody else in it.
+  const text = referenceUrl ? `${identity("the reference image")}${prompt}` : prompt;
+  const encoded = encodeURIComponent(text.slice(0, POLLINATIONS_PROMPT_LIMIT));
+  const query = new URLSearchParams({
+    width: String(PHOTO_WIDTH),
+    height: String(PHOTO_HEIGHT),
+    nologo: "true",
+    enhance: "false",
+  });
+  if (referenceUrl) query.set("image", referenceUrl);
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), POLLINATIONS_TIMEOUT_MS);
-  try {
-    const response = await fetch(url, { signal: controller.signal });
-    if (!response.ok) {
-      const detail = (await response.text()).slice(0, 200);
-      throw new Error(`Pollinations (${response.status}) ${detail}`);
+  const attempt = async (model: string): Promise<Id<"_storage">> => {
+    const url = `${POLLINATIONS_URL}/${encoded}?${query.toString()}&model=${encodeURIComponent(model)}`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), POLLINATIONS_TIMEOUT_MS);
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      const contentType = response.headers.get("content-type") ?? "";
+
+      if (!response.ok) {
+        const detail = (await response.text()).slice(0, 300);
+        if (/FREE_LIMIT/i.test(detail)) throw new FreeLimit(detail);
+        throw new Error(`Pollinations ${model} (${response.status}) ${detail}`);
+      }
+      if (!contentType.startsWith("image/")) {
+        const detail = (await response.text()).slice(0, 300);
+        throw new Error(`Pollinations ${model} answered with ${detail}`);
+      }
+      const bytes = await response.arrayBuffer();
+      if (bytes.byteLength === 0) {
+        throw new Error("Pollinations returned an empty image");
+      }
+      const type = contentType.startsWith("image/") ? contentType : "image/jpeg";
+      return await ctx.storage.store(new Blob([bytes], { type }));
+    } finally {
+      clearTimeout(timer);
     }
-    const bytes = await response.arrayBuffer();
-    if (bytes.byteLength === 0) throw new Error("Pollinations returned an empty image");
-    const type = response.headers.get("content-type") ?? "image/jpeg";
-    return await ctx.storage.store(
-      new Blob([bytes], { type: type.startsWith("image/") ? type : "image/jpeg" }),
-    );
-  } finally {
-    clearTimeout(timer);
+  };
+
+  outer: for (let round = 0; round < FREE_LIMIT_ATTEMPTS; round += 1) {
+    for (const model of [POLLINATIONS_MODEL, POLLINATIONS_FALLBACK_MODEL]) {
+      try {
+        return await attempt(model);
+      } catch (error) {
+        // The free tier is pacing us: wait out its slot and start again, on
+        // the same model rather than falling down the list.
+        if (error instanceof FreeLimit) {
+          await sleep(FREE_LIMIT_WAIT_MS);
+          continue outer;
+        }
+        // FLUX 3 Klein is not on offer for this caller — the plain one is.
+        if (model === POLLINATIONS_MODEL) continue;
+        throw error;
+      }
+    }
   }
+  throw new Error(
+    "Pollinations' free tier kept the slot busy — try again in a minute.",
+  );
 }
 
 // ---------------------------------------------------------------------------
