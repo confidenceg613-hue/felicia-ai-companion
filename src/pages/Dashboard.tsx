@@ -26,7 +26,12 @@ import { FELICIA } from "@/lib/felicia";
 import { FELICIA_GALLERY, galleryOriginal } from "@/lib/gallery";
 import { DEVELOP_MS, preloadImage } from "@/lib/photo";
 import { cn, friendlyError, isTransientError } from "@/lib/utils";
-import { beginVoiceNote, playAudioUrl, speakWithBrowser } from "@/lib/voice";
+import {
+  beginVoiceNote,
+  playAudioUrl,
+  speakWithBrowser,
+  unlockAudio,
+} from "@/lib/voice";
 import {
   useAction,
   useMutation,
@@ -398,6 +403,9 @@ export default function Dashboard() {
   }, [pendingPhotoScene, photoScheduledAt, requestPhoto]);
 
   async function handleStartCall(video = false) {
+    // Straight from the tap, before anything is awaited: browsers (and iOS in
+    // particular) only grant sound to a page that asked while being touched.
+    unlockAudio();
     setGreeting(null);
     setCallError(null);
     setCallVideo(video);
@@ -415,6 +423,8 @@ export default function Dashboard() {
   }
 
   async function playMessage(messageId: Id<"messages">, content: string) {
+    // Same gate as a call: this is a click, so the page gets to make sound.
+    unlockAudio();
     if (speakingRef.current) return;
     speakingRef.current = messageId;
     setSpeakingId(messageId);

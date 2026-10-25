@@ -63,6 +63,40 @@ function tick() {
 }
 
 /**
+ * Open the audio gate while a real tap is still in progress.
+ *
+ * Browsers only let a page make sound once it has been touched, and Safari on
+ * iOS is strict about it: the permission is granted to the *first* playback
+ * that happens inside a gesture handler. Everything in the call happens after
+ * a network round trip — her line has to be rendered first — so by the time the
+ * audio element calls `play()` the tap is long over and the request is refused.
+ * The result is a call where her lips and her captions move but nothing is
+ * heard.
+ *
+ * So this is called from the click that starts the call, before anything is
+ * awaited: the context is resumed and a silent one-sample buffer is pushed
+ * through it, which is the standard way to prove to the browser that this page
+ * is allowed to make noise. Every later clip then plays under that permission.
+ */
+export function primeLipSyncAudio(): void {
+  const ctx = getContext();
+  if (!ctx) return;
+
+  void ctx.resume?.().catch(() => {
+    // A refusal here is not fatal: the state check in startLipSync decides.
+  });
+
+  try {
+    const source = ctx.createBufferSource();
+    source.buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+    source.connect(ctx.destination);
+    source.start(0);
+  } catch {
+    // Some browsers refuse a buffer before the context is running; harmless.
+  }
+}
+
+/**
  * Follow one playing line. Safe to call again for the next line.
  *
  * Resolves `true` only when the element was actually wired in — that is, only

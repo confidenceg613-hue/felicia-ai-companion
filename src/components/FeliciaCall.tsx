@@ -36,6 +36,7 @@ import {
   sleep,
   speakWithBrowser,
   stopBrowserSpeech,
+  unlockAudio,
 } from "@/lib/voice";
 import { useAction, useQuery } from "convex/react";
 import { motion } from "framer-motion";
@@ -575,6 +576,8 @@ export function FeliciaCall({
    */
   async function handleTyped(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    // This is a tap too, so it can be the moment the browser allows sound.
+    unlockAudio();
     const text = typed.trim();
     if (!text || !canType || busyRef.current) return;
 

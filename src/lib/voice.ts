@@ -8,7 +8,57 @@
  *    speech recognition for you.
  */
 
-import { startLipSync, stopLipSync } from "@/lib/lipSync";
+import {
+  primeLipSyncAudio,
+  startLipSync,
+  stopLipSync,
+} from "@/lib/lipSync";
+
+// ---------------------------------------------------------------------------
+// Getting past the browser's audio gate
+// ---------------------------------------------------------------------------
+
+/**
+ * A fraction of a second of silence, used to open the gate.
+ *
+ * 8 kHz mono, 400 samples of zero. Playing it is inaudible but counts as a real
+ * playback, which is what Safari on iOS remembers when it decides whether this
+ * page may make sound later without another tap.
+ */
+const SILENT_WAV =
+  "data:audio/wav;base64,UklGRmQAAABXQVZFZm10IBAAAAABAAEAgD4AAIA+AAABAAgAZGF0YUAAAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIA=";
+
+let unlocked = false;
+
+/**
+ * Open the page's audio gate from inside a real tap.
+ *
+ * Everything in a call plays *after* a network round trip — her line is
+ * rendered on the server first — and iOS refuses playback that is attempted
+ * outside a gesture. Without this the call silently shows a talking face: the
+ * audio element is told to play, is refused, and the device-voice fallback is
+ * refused for the same reason.
+ *
+ * Call it directly from the click handler, before awaiting anything.
+ */
+export function unlockAudio(): void {
+  if (typeof window === "undefined") return;
+
+  // The Web Audio context can only be resumed while the gesture is live.
+  primeLipSyncAudio();
+
+  if (unlocked) return;
+  unlocked = true;
+  try {
+    const chime = new Audio(SILENT_WAV);
+    chime.volume = 0.01;
+    void chime.play().catch(() => {
+      // Nothing to do: the line itself is still tried normally.
+    });
+  } catch {
+    // No audio support at all; speakWithBrowser may still work.
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Server-rendered audio
