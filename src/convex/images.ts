@@ -51,13 +51,6 @@ const SDXL_MODEL = "@cf/stabilityai/stable-diffusion-xl-base-1.0";
 const PHOTO_WIDTH = 832;
 const PHOTO_HEIGHT = 1216;
 
-/** What is kept out of her photos. */
-const NEGATIVE_PROMPT =
-  "close-up, headshot, cropped, cut off, portrait crop, bust shot, " +
-  "out of frame, cropped legs, cropped feet, deformed, extra limbs, " +
-  "digital art, illustration, painting, cgi, 3d render, plastic airbrushed " +
-  "skin, doll, glamour retouch, oversaturated";
-
 /** The only part of an action context this file needs. */
 type StorageCtx = {
   storage: { store: (blob: Blob) => Promise<Id<"_storage">> };
@@ -124,10 +117,6 @@ export const generate = internalAction({
 
 /**
  * One round trip to Workers AI, stored as a Convex file.
- *
- * Two models, because they fail in different ways: FLUX answers JSON with the
- * photo inline, SDXL streams the bytes back. Both are handled here so the
- * caller never has to know which one actually took the picture.
  */
 async function viaCloudflare(
   token: string,
@@ -136,18 +125,28 @@ async function viaCloudflare(
   ctx: StorageCtx,
   referenceUrl: string | null,
 ): Promise<Id<"_storage">> {
-  const failures: string[] = [];
-
-  // 1. FLUX.2 [dev] — the best-looking of the three, on a tall frame, and the
-  // only one that can be shown a picture of the woman it is drawing.
   const form = new FormData();
   form.set("prompt", referenceUrl ? `${identity("image 0")}${prompt}` : prompt);
   form.set("width", String(PHOTO_WIDTH));
   form.set("height", String(PHOTO_HEIGHT));
   form.set("steps", "6");
 
-  const reference = referenceUrl ? await fetchPortrait(referenceUrl) : null;
-  if (reference) form.set("input_image_0", reference, "her.png");
+  if (referenceUrl) {
+    try {
+      const response = await fetch(referenceUrl);
+      if (response.ok) {
+        const bytes = await response.arrayBuffer();
+        if (bytes.byteLength > 0) {
+          const blob = new Blob([bytes], {
+            type: response.headers.get("content-type") ?? "image/png",
+          });
+          form.set("input_image_0", blob, "her.png");
+        }
+      }
+    } catch {
+      // A reference that won't load is not a failure: the words still describe her.
+    }
+  }
 
   const flux2 = await fetch(cloudflareRun(account, FLUX2_MODEL), {
     method: "POST",
@@ -163,131 +162,25 @@ async function viaCloudflare(
     };
     const base64 = payload.result?.image;
     if (base64) return await storeBase64(base64, ctx, "image/jpeg");
-    failures.push(
-      `FLUX.2 [dev]: ${payload.errors?.[0]?.message ?? "answered without an image"}`,
-    );
-  } else {
-    const detail = (await flux2.text()).slice(0, 200);
-    failures.push(`FLUX.2 [dev] (${flux2.status}) ${detail}`);
+    const detail = payload.errors?.[0]?.message ?? "answered without an image";
     if (flux2.status === 401 || flux2.status === 403) {
       throw new Error(
         `Cloudflare rejected the API token — re-add CLOUDFLARE_API_TOKEN in ` +
           `this project's Keys settings. ${detail}`,
       );
     }
+    throw new Error(`Cloudflare FLUX.2 [dev]: ${detail}`);
   }
 
-  // 2. FLUX.1 [schnell] — JSON too, and much faster, but locked to a square.
-  const flux = await fetch(cloudflareRun(account, FLUX_MODEL), {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      // Framing is not a parameter on this model, so it is asked for in words:
-      // without it the frame is square and her feet are what get cropped.
-      prompt: `${prompt} Vertical portrait framing, 3:4 frame, her whole figure in shot.`,
-      // Only `prompt` and `steps` are accepted here: this model rejects any
-      // other property outright with a 400, so a seed cannot be passed.
-      steps: 6,
-    }),
-  });
-
-  if (flux.ok) {
-    const payload = (await flux.json()) as {
-      result?: { image?: string };
-      success?: boolean;
-      errors?: Array<{ message?: string }>;
-    };
-    const base64 = payload.result?.image;
-    if (base64) return await storeBase64(base64, ctx, "image/jpeg");
-    const detail = payload.errors?.[0]?.message ?? "answered without an image";
-    failures.push(`FLUX.1 schnell: ${detail}`);
-  } else {
-    const detail = (await flux.text()).slice(0, 200);
-    failures.push(`FLUX.1 schnell (${flux.status}) ${detail}`);
-    if (flux.status === 401 || flux.status === 403) {
-      throw new Error(
-        `Cloudflare rejected the API token — re-add CLOUDFLARE_API_TOKEN in ` +
-          `this project's Keys settings. ${detail}`,
-      );
-    }
+  if (flux2.status === 401 || flux2.status === 403) {
+    throw new Error(
+      `Cloudflare rejected the API token — re-add CLOUDFLARE_API_TOKEN in ` +
+        `this project's Keys settings.`,
+    );
   }
 
-  // 3. SDXL — streams the bytes back and takes a negative prompt.
-  const sdxl = await fetch(cloudflareRun(account, SDXL_MODEL), {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      prompt,
-      negative_prompt: NEGATIVE_PROMPT,
-      width: PHOTO_WIDTH,
-      height: PHOTO_HEIGHT,
-      num_steps: 20,
-      guidance: 7.5,
-      seed: Math.floor(Math.random() * 2 ** 31),
-    }),
-  });
-
-  if (sdxl.ok) {
-    const bytes = await sdxl.arrayBuffer();
-    if (bytes.byteLength === 0) {
-      failures.push("SDXL: finished with no image");
-    } else {
-      const type = sdxl.headers.get("content-type") ?? "image/png";
-      return await ctx.storage.store(
-        new Blob([bytes], { type: type.startsWith("image/") ? type : "image/png" }),
-      );
-    }
-  } else {
-    failures.push(`SDXL (${sdxl.status}) ${(await sdxl.text()).slice(0, 200)}`);
-  }
-
-  throw new Error(`Cloudflare couldn't take that photo. ${failures.join(" · ")}`);
-}
-
-/**
- * The portraits already downloaded, so one photo does not pay for the last.
- *
- * Her profile picture is a couple of megabytes; a call to her photo studio is
- * one request, but a few in a row would otherwise re-download the same file
- * every time. Capped so a long-lived instance cannot grow without bound.
- */
-const portraitCache = new Map<string, Blob>();
-const PORTRAIT_CACHE_LIMIT = 4;
-
-/**
- * Her portrait, as bytes the model can read.
- *
- * A reference that will not load is not a failure: the words in the prompt
- * still describe her, so the photo is simply taken without the picture — which
- * is what every photo did before this existed.
- */
-async function fetchPortrait(url: string): Promise<Blob | null> {
-  const cached = portraitCache.get(url);
-  if (cached) return cached;
-
-  try {
-    const response = await fetch(url);
-    if (!response.ok) return null;
-    const bytes = await response.arrayBuffer();
-    if (bytes.byteLength === 0) return null;
-    const blob = new Blob([bytes], {
-      type: response.headers.get("content-type") ?? "image/png",
-    });
-    if (portraitCache.size >= PORTRAIT_CACHE_LIMIT) {
-      const oldest = portraitCache.keys().next().value;
-      if (oldest) portraitCache.delete(oldest);
-    }
-    portraitCache.set(url, blob);
-    return blob;
-  } catch {
-    return null;
-  }
+  const detail = (await flux2.text()).slice(0, 300);
+  throw new Error(`Cloudflare FLUX.2 [dev] (${flux2.status}) ${detail}`);
 }
 
 // ---------------------------------------------------------------------------
