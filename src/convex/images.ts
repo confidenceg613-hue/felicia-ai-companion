@@ -27,9 +27,18 @@ function cloudflareRun(accountId: string, model: string): string {
 }
 
 /**
- * FLUX.1 [schnell] answers with the finished photo as base64 in JSON, in
- * roughly a second. It is asked for first because it is both the cheapest and
- * the most dependable of the models on Workers AI.
+ * FLUX.2 [dev] is asked for first: it is the most realistic of the models on
+ * Workers AI, and unlike the smaller one it takes an explicit width and height,
+ * so she is framed the tall way her gallery is.
+ *
+ * It is a partner model, and its request is form-data rather than JSON — the
+ * prompt and the size are fields, not properties.
+ */
+const FLUX2_MODEL = "@cf/black-forest-labs/flux-2-dev";
+
+/**
+ * FLUX.1 [schnell] is the fast one, kept behind it: it answers with the photo
+ * as base64 in JSON in about a second, on a fixed square frame.
  */
 const FLUX_MODEL = "@cf/black-forest-labs/flux-1-schnell";
 
@@ -114,6 +123,42 @@ async function viaCloudflare(
 ): Promise<Id<"_storage">> {
   const failures: string[] = [];
 
+  // 1. FLUX.2 [dev] — the best-looking of the three, on a tall frame.
+  const form = new FormData();
+  form.set("prompt", prompt);
+  form.set("width", String(PHOTO_WIDTH));
+  form.set("height", String(PHOTO_HEIGHT));
+  form.set("steps", "6");
+
+  const flux2 = await fetch(cloudflareRun(account, FLUX2_MODEL), {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+
+  if (flux2.ok) {
+    const payload = (await flux2.json()) as {
+      result?: { image?: string };
+      success?: boolean;
+      errors?: Array<{ message?: string }>;
+    };
+    const base64 = payload.result?.image;
+    if (base64) return await storeBase64(base64, ctx, "image/jpeg");
+    failures.push(
+      `FLUX.2 [dev]: ${payload.errors?.[0]?.message ?? "answered without an image"}`,
+    );
+  } else {
+    const detail = (await flux2.text()).slice(0, 200);
+    failures.push(`FLUX.2 [dev] (${flux2.status}) ${detail}`);
+    if (flux2.status === 401 || flux2.status === 403) {
+      throw new Error(
+        `Cloudflare rejected the API token — re-add CLOUDFLARE_API_TOKEN in ` +
+          `this project's Keys settings. ${detail}`,
+      );
+    }
+  }
+
+  // 2. FLUX.1 [schnell] — JSON too, and much faster, but locked to a square.
   const flux = await fetch(cloudflareRun(account, FLUX_MODEL), {
     method: "POST",
     headers: {
@@ -151,6 +196,7 @@ async function viaCloudflare(
     }
   }
 
+  // 3. SDXL — streams the bytes back and takes a negative prompt.
   const sdxl = await fetch(cloudflareRun(account, SDXL_MODEL), {
     method: "POST",
     headers: {
