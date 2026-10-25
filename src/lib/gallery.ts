@@ -1997,6 +1997,16 @@ const GALLERY_SEEDS = [
     title: "Fresh out of the shower",
     about:
       "Wet hair, fresh out of the shower, the room still steamy behind her.",
+    tags: [
+      "portrait",
+      "shower",
+      "wet hair",
+      "towel",
+      "morning",
+      "getting ready",
+      "bathroom",
+      "indoor",
+    ],
   },
 
   /* ---------------------------------------------------- the new gallery uploads */
@@ -2519,18 +2529,6 @@ const GALLERY_SEEDS = [
     about:
       "A new picture you added to her roll.",
     tags: ["new", "gallery", "added by you"],
-  },
-
-    tags: [
-      "portrait",
-      "shower",
-      "wet hair",
-      "towel",
-      "morning",
-      "getting ready",
-      "bathroom",
-      "indoor",
-    ],
   },
   {
     id: "night-air-balcony",
