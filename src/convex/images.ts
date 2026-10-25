@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { internalAction } from "./_generated/server";
 import {
+  bflApiKey,
   cloudflareAccountId,
   cloudflareToken,
   veniceApiKey,
@@ -67,14 +68,19 @@ type StorageCtx = {
 /**
  * Who she is, in the words the reference image cannot say.
  *
- * FLUX.2 can be handed pictures to work from, and it addresses them by index —
- * so the prompt names image 0 and says, in as many ways as it takes, that this
- * is the same woman. Without it the model renders a beautiful stranger every
- * time, and her album looks like a stock library instead of one person's roll.
+ * Both providers can be handed pictures to work from, and each addresses them
+ * differently — Workers AI numbers them ("image 0"), Black Forest Labs takes a
+ * list and has the model read it as "the reference photo" — so the wording is
+ * built per provider rather than hardcoded once. Without it the model renders
+ * a beautiful stranger every time, and her album looks like a stock library
+ * instead of one person's roll.
  */
-const IDENTITY =
-  "The woman in image 0 — exactly the same person: identical face, features, " +
-  "skin tone, hair and body. Photograph her again, not a lookalike. ";
+function identity(ref: string): string {
+  return (
+    `The woman in ${ref} — exactly the same person: identical face, features, ` +
+    "skin tone, hair and body. Photograph her again, not a lookalike. "
+  );
+}
 
 export const generate = internalAction({
   args: {
@@ -100,7 +106,29 @@ export const generate = internalAction({
     const token = cloudflareToken();
     const account = cloudflareAccountId();
     const venice = veniceApiKey();
+    const bfl = bflApiKey();
     const problems: string[] = [];
+
+    // FLUX 3 first when there is a Black Forest Labs key: it is the newest of
+    // the FLUX family and the most realistic of them, and it takes her profile
+    // picture as a reference so the same woman comes back. Workers AI does not
+    // publish FLUX 3 — this is the only route to it. A key with no credits on
+    // it is not a failure of the app: the photo simply falls through to
+    // Cloudflare, which is where every photo was taken before this.
+    if (bfl) {
+      try {
+        return {
+          storageId: await viaBlackForest(
+            bfl,
+            trimmed,
+            ctx,
+            referenceUrl ?? null,
+          ),
+        };
+      } catch (error) {
+        problems.push(error instanceof Error ? error.message : String(error));
+      }
+    }
 
     if (token && account) {
       try {
@@ -160,7 +188,7 @@ async function viaCloudflare(
   // 1. FLUX.2 [dev] — the best-looking of the three, on a tall frame, and the
   // only one that can be shown a picture of the woman it is drawing.
   const form = new FormData();
-  form.set("prompt", referenceUrl ? `${IDENTITY}${prompt}` : prompt);
+  form.set("prompt", referenceUrl ? `${identity("image 0")}${prompt}` : prompt);
   form.set("width", String(PHOTO_WIDTH));
   form.set("height", String(PHOTO_HEIGHT));
   form.set("steps", "6");
@@ -307,6 +335,104 @@ async function fetchPortrait(url: string): Promise<Blob | null> {
   } catch {
     return null;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Black Forest Labs — FLUX 3, the best of the family
+// ---------------------------------------------------------------------------
+
+const BFL_IMAGE_URL = "https://api.bfl.ai/v1/flux-3-image";
+/** 2:3 is in FLUX 3's own list of ratios, and matches her tall gallery frame. */
+const BFL_ASPECT_RATIO = "2:3";
+/** `1k` is the default pixel tier; `2k` costs more and is not needed here. */
+const BFL_RESOLUTION = "1k";
+/** How long one photo may take before it is called a failure. */
+const BFL_TIMEOUT_MS = 90_000;
+const BFL_POLL_MS = 1_000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * One FLUX 3 photo, start to finish.
+ *
+ * The API is asynchronous: a request comes back with a `polling_url`, and the
+ * image only exists once that URL reports `Ready` with a signed sample URL.
+ * Both halves are here so the caller still gets one stored file back.
+ *
+ * Her profile picture goes in as a reference image, which is what keeps the
+ * same face, hair and body across the album; the prompt calls it out in words
+ * as well, because a model given an unlabelled picture will happily draw the
+ * room around it and put somebody else in it.
+ */
+async function viaBlackForest(
+  key: string,
+  prompt: string,
+  ctx: StorageCtx,
+  referenceUrl: string | null,
+): Promise<Id<"_storage">> {
+  const submit = await fetch(BFL_IMAGE_URL, {
+    method: "POST",
+    headers: {
+      "x-key": key,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      prompt: referenceUrl ? `${identity("the reference photo")}${prompt}` : prompt,
+      ...(referenceUrl ? { images: [referenceUrl] } : {}),
+      aspect_ratio: BFL_ASPECT_RATIO,
+      resolution: BFL_RESOLUTION,
+      // Web grounding is on by default and would drag stock photography of
+      // real places into a personal photo of her, so it is turned off.
+      grounding: false,
+    }),
+  });
+
+  if (!submit.ok) {
+    const detail = (await submit.text()).slice(0, 300);
+    throw new Error(`FLUX 3 (${submit.status}) ${detail}`);
+  }
+
+  const queued = (await submit.json()) as { polling_url?: string };
+  const pollingUrl = queued.polling_url;
+  if (!pollingUrl) throw new Error("FLUX 3 accepted the request but sent no polling URL");
+
+  const deadline = Date.now() + BFL_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    await sleep(BFL_POLL_MS);
+    const polled = await fetch(pollingUrl, { headers: { "x-key": key } });
+    if (!polled.ok) {
+      // A 404 on the polling URL is the task not existing yet rather than a
+      // rejection, so it is waited out like any other not-ready answer.
+      if (polled.status === 404) continue;
+      const detail = (await polled.text()).slice(0, 200);
+      throw new Error(`FLUX 3 poll (${polled.status}) ${detail}`);
+    }
+
+    const state = (await polled.json()) as {
+      status?: string;
+      result?: { sample?: string } | null;
+    };
+    const status = state.status ?? "";
+    if (status === "Ready") {
+      const sample = state.result?.sample;
+      if (!sample) throw new Error("FLUX 3 finished without an image");
+      const image = await fetch(sample);
+      if (!image.ok) throw new Error("FLUX 3's image link could not be opened");
+      const bytes = await image.arrayBuffer();
+      if (bytes.byteLength === 0) throw new Error("FLUX 3 returned an empty image");
+      const type = image.headers.get("content-type") ?? "image/jpeg";
+      return await ctx.storage.store(
+        new Blob([bytes], { type: type.startsWith("image/") ? type : "image/jpeg" }),
+      );
+    }
+    if (/moderat|error|failed|not found|no card/i.test(status)) {
+      throw new Error(`FLUX 3 ${status.toLowerCase()}`);
+    }
+  }
+
+  throw new Error("FLUX 3 timed out before the photo was finished");
 }
 
 // ---------------------------------------------------------------------------

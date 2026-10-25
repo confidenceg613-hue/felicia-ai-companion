@@ -59,6 +59,22 @@ export function isCloudflareConfigured(): boolean {
   return Boolean(cloudflareToken() && cloudflareAccountId());
 }
 
+/**
+ * Black Forest Labs: FLUX 3, the newest and most realistic of the family.
+ *
+ * Workers AI stops at FLUX.2, so this key is the only way to reach FLUX 3 at
+ * all. Added under the Keys tab as `BFL_API_KEY`; the other spellings are
+ * accepted because a key under an unread name is indistinguishable from no key.
+ */
+export function bflApiKey(): string | null {
+  return (
+    process.env.BFL_API_KEY ??
+    process.env.BFL_KEY ??
+    process.env.BLACK_FOREST_LABS_API_KEY ??
+    null
+  );
+}
+
 /** Venice: image generation, newest key name first. */
 export function veniceApiKey(): string | null {
   return (
