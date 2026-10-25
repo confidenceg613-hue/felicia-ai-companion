@@ -62,22 +62,49 @@ function withRetry<T>(load: () => Promise<T>): () => Promise<T> {
   };
 }
 
-export const pageModules = {
+/**
+ * The raw loaders, before any retrying.
+ *
+ * The router wraps these in `withRetry` — a failed navigation has to be
+ * recovered — while the prefetcher uses them as they are. Warming a module is
+ * an optimisation, and an optimisation must never reload the tab: during a
+ * rebuild every one of these requests fails at the same instant, and reloading
+ * the page in the middle of that is how a warm-up turns into a loop.
+ */
+const loaders = {
   // Landing and Auth are imported directly by the entry file: they are what a
   // first-time visitor loads, so they belong in the main bundle instead of
   // behind a chunk request.
-  shell: withRetry(() => import("@/components/AppShell")),
-  dashboard: withRetry(() => import("@/pages/Dashboard")),
-  album: withRetry(() => import("@/pages/Album")),
-  memories: withRetry(() => import("@/pages/Memories")),
-  notes: withRetry(() => import("@/pages/SharedNotes")),
-  settings: withRetry(() => import("@/pages/Settings")),
-  notFound: withRetry(() => import("@/pages/NotFound")),
+  shell: () => import("@/components/AppShell"),
+  dashboard: () => import("@/pages/Dashboard"),
+  album: () => import("@/pages/Album"),
+  memories: () => import("@/pages/Memories"),
+  notes: () => import("@/pages/SharedNotes"),
+  settings: () => import("@/pages/Settings"),
+  notFound: () => import("@/pages/NotFound"),
+} as const;
+
+export const pageModules = {
+  shell: withRetry(loaders.shell),
+  dashboard: withRetry(loaders.dashboard),
+  album: withRetry(loaders.album),
+  memories: withRetry(loaders.memories),
+  notes: withRetry(loaders.notes),
+  settings: withRetry(loaders.settings),
+  notFound: withRetry(loaders.notFound),
 } as const;
 
 export type PageModuleKey = keyof typeof pageModules;
 
-/** Start loading every page's code. Idempotent, and safe to fire and forget. */
+/**
+ * Start loading every page's code. Idempotent, and safe to fire and forget.
+ *
+ * Failures are swallowed on purpose: the browser caches a module once it has
+ * been fetched, so a warm-up that misses only costs the click it was meant to
+ * save, and the route's own `withRetry` loader covers the fetch afterwards.
+ */
 export function prefetchPages() {
-  for (const load of Object.values(pageModules)) void load();
+  for (const load of Object.values(loaders)) {
+    void load().catch(() => undefined);
+  }
 }
