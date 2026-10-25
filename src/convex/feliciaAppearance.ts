@@ -1,11 +1,14 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { FELICIA_APPEARANCE_DEFAULT } from "../lib/felicia";
-import { FELICIA_GALLERY } from "../lib/gallery";
-import { mutation, query } from "./_generated/server";
+import { FELICIA_GALLERY, galleryOriginal } from "../lib/gallery";
+import { internalQuery, mutation, query } from "./_generated/server";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyCtx = any;
+
+/** The picture she has until an account chooses one of its own. */
+const FELICIA_AVATAR_DEFAULT_ID = "portrait-soft-light";
 
 /** Where the user's chosen outfit / background / custom scene live. */
 export const feliciaAppearance = query({
@@ -77,6 +80,27 @@ export const setProfilePhoto = mutation({
         avatarGalleryId: galleryId,
       });
     }
+  },
+});
+
+/**
+ * Her profile picture, as the full-size file a model can be shown.
+ *
+ * This is what every new photo of her is drawn against: whichever picture is
+ * on her profile is the face she keeps, so the avatar is not decoration — it
+ * is her identity. The default portrait is used until the account picks
+ * another one.
+ */
+export const avatarOriginal = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx: AnyCtx, { userId }: { userId: string }) => {
+    const row = (await ctx.db
+      .query("feliciaAppearance")
+      .withIndex("by_user", (q: { eq: (key: string, value: string) => unknown }) => q.eq("userId", userId))
+      .unique()) as { avatarGalleryId?: string | null } | null;
+
+    const id = row?.avatarGalleryId ?? FELICIA_AVATAR_DEFAULT_ID;
+    return galleryOriginal(id) ?? galleryOriginal(FELICIA_AVATAR_DEFAULT_ID);
   },
 });
 

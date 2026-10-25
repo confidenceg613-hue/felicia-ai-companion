@@ -2706,7 +2706,15 @@ export const generatePhoto = action({
     const notes = await ctx.runQuery(internal.felicia.notesFor, { userId });
     const look = (notes.appearance ?? "").trim() || FELICIA_LOOK;
 
-    // One photo per request. If Venice rejects the scene or stalls, try once
+    // The picture on her profile is the woman in the next photo: it is handed
+    // to the model as a reference, so her face, hair and body stay the same
+    // across the album instead of drifting into a new person every shot.
+    const referenceUrl = await ctx.runQuery(
+      internal.feliciaAppearance.avatarOriginal,
+      { userId },
+    );
+
+    // One photo per request. If the scene is rejected or stalls, try once
     // more with a plainer one before surfacing the error.
     const candidates = [
       buildImagePrompt(requested, look),
@@ -2719,6 +2727,7 @@ export const generatePhoto = action({
       try {
         const attempt = await ctx.runAction(internal.images.generate, {
           prompt,
+          ...(referenceUrl ? { referenceUrl } : {}),
         });
         success = { prompt, storageId: attempt.storageId };
         break;

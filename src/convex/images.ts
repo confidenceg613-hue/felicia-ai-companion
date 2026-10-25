@@ -64,9 +64,34 @@ type StorageCtx = {
   storage: { store: (blob: Blob) => Promise<Id<"_storage">> };
 };
 
+/**
+ * Who she is, in the words the reference image cannot say.
+ *
+ * FLUX.2 can be handed pictures to work from, and it addresses them by index —
+ * so the prompt names image 0 and says, in as many ways as it takes, that this
+ * is the same woman. Without it the model renders a beautiful stranger every
+ * time, and her album looks like a stock library instead of one person's roll.
+ */
+const IDENTITY =
+  "The woman in image 0 — exactly the same person: identical face, features, " +
+  "skin tone, hair and body. Photograph her again, not a lookalike. ";
+
 export const generate = internalAction({
-  args: { prompt: v.string() },
-  handler: async (ctx: StorageCtx, { prompt }: { prompt: string }): Promise<{
+  args: {
+    prompt: v.string(),
+    /**
+     * Her portrait, as a picture the model can hold her identity to.
+     *
+     * Passed in by the caller because it is the account's own choice of
+     * picture — the one on her profile — rather than something this file could
+     * know on its own.
+     */
+    referenceUrl: v.optional(v.string()),
+  },
+  handler: async (
+    ctx: StorageCtx,
+    { prompt, referenceUrl }: { prompt: string; referenceUrl?: string | null },
+  ): Promise<{
     storageId: Id<"_storage">;
   }> => {
     const trimmed = prompt.trim();
@@ -79,7 +104,15 @@ export const generate = internalAction({
 
     if (token && account) {
       try {
-        return { storageId: await viaCloudflare(token, account, trimmed, ctx) };
+        return {
+          storageId: await viaCloudflare(
+            token,
+            account,
+            trimmed,
+            ctx,
+            referenceUrl ?? null,
+          ),
+        };
       } catch (error) {
         problems.push(error instanceof Error ? error.message : String(error));
         // A missing key or an exhausted quota is the same for every model, so
@@ -120,15 +153,20 @@ async function viaCloudflare(
   account: string,
   prompt: string,
   ctx: StorageCtx,
+  referenceUrl: string | null,
 ): Promise<Id<"_storage">> {
   const failures: string[] = [];
 
-  // 1. FLUX.2 [dev] — the best-looking of the three, on a tall frame.
+  // 1. FLUX.2 [dev] — the best-looking of the three, on a tall frame, and the
+  // only one that can be shown a picture of the woman it is drawing.
   const form = new FormData();
-  form.set("prompt", prompt);
+  form.set("prompt", referenceUrl ? `${IDENTITY}${prompt}` : prompt);
   form.set("width", String(PHOTO_WIDTH));
   form.set("height", String(PHOTO_HEIGHT));
   form.set("steps", "6");
+
+  const reference = referenceUrl ? await fetchPortrait(referenceUrl) : null;
+  if (reference) form.set("input_image_0", reference, "her.png");
 
   const flux2 = await fetch(cloudflareRun(account, FLUX2_MODEL), {
     method: "POST",
@@ -229,6 +267,46 @@ async function viaCloudflare(
   }
 
   throw new Error(`Cloudflare couldn't take that photo. ${failures.join(" · ")}`);
+}
+
+/**
+ * The portraits already downloaded, so one photo does not pay for the last.
+ *
+ * Her profile picture is a couple of megabytes; a call to her photo studio is
+ * one request, but a few in a row would otherwise re-download the same file
+ * every time. Capped so a long-lived instance cannot grow without bound.
+ */
+const portraitCache = new Map<string, Blob>();
+const PORTRAIT_CACHE_LIMIT = 4;
+
+/**
+ * Her portrait, as bytes the model can read.
+ *
+ * A reference that will not load is not a failure: the words in the prompt
+ * still describe her, so the photo is simply taken without the picture — which
+ * is what every photo did before this existed.
+ */
+async function fetchPortrait(url: string): Promise<Blob | null> {
+  const cached = portraitCache.get(url);
+  if (cached) return cached;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const bytes = await response.arrayBuffer();
+    if (bytes.byteLength === 0) return null;
+    const blob = new Blob([bytes], {
+      type: response.headers.get("content-type") ?? "image/png",
+    });
+    if (portraitCache.size >= PORTRAIT_CACHE_LIMIT) {
+      const oldest = portraitCache.keys().next().value;
+      if (oldest) portraitCache.delete(oldest);
+    }
+    portraitCache.set(url, blob);
+    return blob;
+  } catch {
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------

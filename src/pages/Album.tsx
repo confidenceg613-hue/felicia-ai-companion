@@ -381,7 +381,7 @@ export default function Album() {
   async function chooseAsProfile(photo: GalleryPhoto) {
     try {
       await setProfilePhoto({ galleryId: photo.id });
-      toast.success("That's her face now.");
+      toast.success("That's her face now — every new photo will look like her.");
     } catch (error) {
       toast.error(
         error instanceof Error
