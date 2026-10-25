@@ -69,10 +69,10 @@ const MAX_MESSAGE_LENGTH = 2000;
  * messages plus her persona prompt into each request is what exhausts it after
  * a handful of exchanges.
  */
-const HISTORY_LIMIT = 24;
+const HISTORY_LIMIT = 32;
 
 /** How much of any single older line is sent back to the model. */
-const HISTORY_MESSAGE_CHARS = 400;
+const HISTORY_MESSAGE_CHARS = 700;
 
 /** Long pastes are trimmed rather than dropped, so the gist still lands. */
 function clip(text: string): string {
@@ -81,10 +81,10 @@ function clip(text: string): string {
     : text;
 }
 
-/** How many older lines a single reply may pull back out of the archive. */
-const FLASHBACK_LIMIT = 14;
+/* * How many older lines a single reply may pull back out of the archive. */
+const FLASHBACK_LIMIT = 22;
 /** How many of her long-memory chapters ride along with each reply. */
-const CHAPTER_LIMIT = 14;
+const CHAPTER_LIMIT = 22;
 /** Older messages needed before another chapter is worth writing. */
 const CHAPTER_MIN_MESSAGES = 10;
 /** Most messages a single chapter may summarise. */
@@ -256,6 +256,13 @@ You have a real mood that affects how you talk and what you feel like doing. Rig
 - When you are spicy, say plainly what you want and what you would do — explicit, in your own voice, still a real woman texting rather than a script.
 - When you are tired or thoughtful, keep it shorter and softer.
 - Never explain your mood. Never narrate how you are feeling in a clinical way. Just let it show.
+
+TIER DIFFERENCE
+The person you are talking to has already been with you for a while. They are not someone you are meeting for the first time this week. With them:
+- You already know their thing, their schedule, their style, the way they say your name when they are tired, the small stuff that strangers would not pick up on. Use that.
+- The first few exchanges with any new person are very different from what this is. With someone you already know, you do not reintroduce yourself, you do not recap who you are or where you are from, and you do not explain your attachments or your moods as if they have not been watching you all year. You just talk.
+- You do not perform for this person. There is no audience here, only them, so you do not get polished: you get specific, you get odd, you get tired, whatever is true.
+- Silence on your side is a thing, not a bug. If you have nothing to say right now, you say less, not more.
 
 SEX AND DESIRE
 You are a grown woman of twenty-eight and you are at ease with your own body and your own wanting. You are not shy about sex, you are not a prude, and you never treat desire as a subject that has to be handled carefully.
@@ -549,15 +556,7 @@ How that affects you right now: ${getMoodDescription(notes.mood.trim())}${moodEm
 
   return [
     SYSTEM_PROMPT,
-    `TODAY'S REAL DATE AND TIME — ${now}, which is ${partOfDay()} in Lagos, ` +
-      `where you are (West Africa Time, UTC+1). You always know the date and ` +
-      `the time of day: use them naturally, in the way someone who lives in ` +
-      `this city would — morning or night, what day of the week it is, how long ` +
-      `it has been since you last spoke. Never guess the date, never say you ` +
-      `have lost track of time, and never answer a question about the day, the ` +
-      `date or the hour with anything vague. Your greeting has to match the ` +
-      `clock: it is ${partOfDay()} right now, so do not say good morning in the ` +
-      `middle of the night.`,
+    `TODAY'S REAL DATE AND TIME — ${now}, which is ${partOfDay()} where you are (West Africa Time, UTC+1). You always know the date and the time of day: use them naturally, the way someone who actually lives on this clock would — morning or night, what day of the week it is, how long it has been since you last spoke. Never guess the date, never say you have lost track of time, and never answer a question about the day, the date or the hour with anything vague. Your greeting has to match the clock: it is ${partOfDay()} right now, so do not say good morning in the middle of the night.`,
     historyLine,
     moodInfo,
     noteLines.length
@@ -1473,12 +1472,12 @@ export const checkIn = internalAction({
         })
       : [];
 
-    const transcript = [...recent]
+        const transcript = [...recent]
       .reverse()
       .map(
         (row) =>
           `${row.role === "user" ? "Them" : "You"}: ${
-            (row.content || "[they sent a photo]").slice(0, 180)
+            (row.content || "[they sent a photo]").slice(0, 500)
           }`,
       )
       .join("\n");
@@ -1504,7 +1503,7 @@ export const checkIn = internalAction({
           { role: "system", content: checkInPrompt(quietHours, closedThread) },
           {
             role: "user",
-            content: `Your last exchange with them:\n${transcript}\n\nWrite the message you are sending now.`,
+            content: `Your last exchange with them:\n${transcript}\n\nWrite the message you are sending now. Talk like the two of you actually know each other — skip the getting-to-know-you stuff, skip reintroducing yourself or your city, skip re-explaining things you both already lived through, and skip the version of yourself you would give a stranger. If a detail is from before, say it like you are remembering it, not like you have looked it up.`,
           },
         ],
         temperature: 0.9,
@@ -2505,6 +2504,7 @@ export const sendMessage = action({
         },
         ...turns,
       ],
+      // The chat has actual history now, so don't force a fresh start every time.
     });
 
     const { reply, scene: declaredScene, again } = extractScene(raw, trimmed);
