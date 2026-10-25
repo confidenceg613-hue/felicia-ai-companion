@@ -185,6 +185,15 @@ export const generate = internalAction({
       }
     }
 
+    // Last of all, and never a reason to fail: a keyless service that has no
+    // quota to run out of. Every paid route is tried first, so this only takes
+    // the picture on the days the others cannot.
+    try {
+      return { storageId: await viaPollinations(trimmed, ctx) };
+    } catch (error) {
+      problems.push(error instanceof Error ? error.message : String(error));
+    }
+
     if (problems.length === 0) {
       throw new Error(
         "Her photos need CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in " +
@@ -652,6 +661,52 @@ async function viaVenice(
   }
 
   throw new Error(`Venice couldn't take that photo. ${failures.join(" · ")}`);
+}
+
+// ---------------------------------------------------------------------------
+// Pollinations — keyless, so a photo still happens when a wallet is empty
+// ---------------------------------------------------------------------------
+
+const POLLINATIONS_URL = "https://image.pollinations.ai/prompt";
+const POLLINATIONS_TIMEOUT_MS = 120_000;
+/** A URL prompt has a practical ceiling; anything longer is cut, not encoded. */
+const POLLINATIONS_PROMPT_LIMIT = 1_600;
+
+/**
+ * One photo from Pollinations, which needs no key at all.
+ *
+ * This is the backstop that keeps her sending photos on a day when every paid
+ * key is out of credits and Cloudflare's free neurons are spent. It is FLUX.1
+ * behind a plain GET, so it is the least realistic of the lot and sits last on
+ * purpose — but a slightly softer photo of her beats a broken photo.
+ */
+async function viaPollinations(
+  prompt: string,
+  ctx: StorageCtx,
+): Promise<Id<"_storage">> {
+  const encoded = encodeURIComponent(prompt.slice(0, POLLINATIONS_PROMPT_LIMIT));
+  const url =
+    `${POLLINATIONS_URL}/${encoded}` +
+    `?width=${PHOTO_WIDTH}&height=${PHOTO_HEIGHT}` +
+    "&model=flux&nologo=true&enhance=false";
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), POLLINATIONS_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) {
+      const detail = (await response.text()).slice(0, 200);
+      throw new Error(`Pollinations (${response.status}) ${detail}`);
+    }
+    const bytes = await response.arrayBuffer();
+    if (bytes.byteLength === 0) throw new Error("Pollinations returned an empty image");
+    const type = response.headers.get("content-type") ?? "image/jpeg";
+    return await ctx.storage.store(
+      new Blob([bytes], { type: type.startsWith("image/") ? type : "image/jpeg" }),
+    );
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // ---------------------------------------------------------------------------
