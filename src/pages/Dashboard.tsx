@@ -88,6 +88,35 @@ const OPENERS = [
   "What's playing in the studio?",
 ];
 
+/** What she is asked for when the photo request is left blank. */
+const SELFIE_SCENE =
+  "a candid selfie, holding the camera at arm's length, soft window light, natural smile";
+
+/**
+ * Outfits and settings offered as one-tap starting points.
+ *
+ * They are not a fixed list of what she can wear — the field under them takes
+ * any words at all — they just save typing the same three sentences, and they
+ * show that telling her what to put on is the point of that field.
+ */
+const DRESS_IDEAS = [
+  "red satin slip dress",
+  "black vest and grey shorts",
+  "white linen shirt, unbuttoned",
+  "oversized knit and leggings",
+  "black cocktail dress, gold hoops",
+  "silk robe",
+];
+
+const SCENE_IDEAS = [
+  "on the balcony at golden hour",
+  "rooftop bar at night, city lights behind her",
+  "in bed, morning light through the curtains",
+  "in the kitchen with a cup of coffee",
+  "dressed up in the hallway mirror",
+  "on the beach at sunset",
+];
+
 function timeLabel(ms: number) {
   return new Date(ms).toLocaleTimeString([], {
     hour: "2-digit",
@@ -217,6 +246,17 @@ export default function Dashboard() {
    */
   const [rollOpen, setRollOpen] = useState(false);
   const [rollTerm, setRollTerm] = useState("");
+  /**
+   * The photo request: what she should wear and where she should be.
+   *
+   * Both are free text. A dress is not a choice from six — it is whatever the
+   * two of them have been talking about — and the setting is usually the
+   * place they were just discussing, so the fields stay open and the chips
+   * below them are only a head start.
+   */
+  const [askOpen, setAskOpen] = useState(false);
+  const [askDress, setAskDress] = useState("");
+  const [askPlace, setAskPlace] = useState("");
   /** The id of the reply that should shimmer when it arrives. */
   const [sparkleBurstId, setSparkleBurstId] = useState<string | null>(null);
   /**
@@ -667,6 +707,23 @@ export default function Dashboard() {
       photo.title.toLowerCase().includes(rollQuery) ||
       photo.tags.some((tag) => tag.includes(rollQuery)),
   );
+
+  /**
+   * The scene line for a photo request, in the order a person says it.
+   *
+   * The dress goes in as "wearing …" because a bare "red satin slip dress" at
+   * the front of a scene reads like an object in the room to an image model;
+   * naming the verb is what puts it on her. An empty pair of fields falls back
+   * to the plain selfie the camera button always used to take.
+   */
+  function askSceneLine(): string {
+    const dress = askDress.trim();
+    const place = askPlace.trim();
+    const parts: string[] = [];
+    if (dress) parts.push(`wearing ${dress}`);
+    if (place) parts.push(place);
+    return parts.join(", ") || SELFIE_SCENE;
+  }
 
   /** Ask her for one of her own pictures by its caption. */
   function askForTitle(title: string) {
@@ -1520,13 +1577,9 @@ export default function Dashboard() {
                     variant="ghost"
                     size="icon"
                     className="size-8 shrink-0 rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary"
-                    title="Ask for a selfie"
+                    title="Ask for a photo — tell her what to wear"
                     disabled={composing || developing || !photosReady}
-                    onClick={() =>
-                      void requestPhoto(
-                        "a candid selfie, holding the camera at arm's length, soft window light, natural smile",
-                      )
-                    }
+                    onClick={() => setAskOpen(true)}
                   >
                     <Camera className="size-3.5" />
                   </Button>
@@ -1720,6 +1773,123 @@ export default function Dashboard() {
           <p className="border-t border-border/50 px-5 py-2.5 text-[10px] text-muted-foreground/70">
             {FELICIA_GALLERY.length} pictures · tap one to send “send me …”
           </p>
+        </DialogContent>
+      </Dialog>
+
+      {/* ask for a photo — what she wears, and where she is */}
+      <Dialog
+        open={askOpen}
+        onOpenChange={(open) => {
+          setAskOpen(open);
+          if (!open) {
+            setAskDress("");
+            setAskPlace("");
+          }
+        }}
+      >
+        <DialogContent className="max-h-[90vh] gap-0 overflow-y-auto border-border/60 bg-card/95 backdrop-blur-xl">
+          <DialogHeader>
+            <DialogTitle className="font-display text-xl tracking-tight">
+              Ask her for a photo
+            </DialogTitle>
+            <DialogDescription>
+              Tell her what to wear and where she is. Leave either one blank and
+              she decides.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="mt-3 space-y-4">
+            <div>
+              <label
+                htmlFor="ask-dress"
+                className="text-[10px] tracking-widest text-muted-foreground/70 uppercase"
+              >
+                What she's wearing
+              </label>
+              <Input
+                id="ask-dress"
+                value={askDress}
+                onChange={(event) => setAskDress(event.target.value)}
+                placeholder="red satin slip dress, gold hoops"
+                className="mt-1.5"
+              />
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {DRESS_IDEAS.map((idea) => (
+                  <button
+                    key={idea}
+                    type="button"
+                    onClick={() => setAskDress(idea)}
+                    className={cn(
+                      "rounded-full border px-2.5 py-1 text-[11px] transition-colors",
+                      askDress === idea
+                        ? "border-primary bg-primary/15 text-primary"
+                        : "border-border/60 text-muted-foreground hover:border-primary/50 hover:text-foreground",
+                    )}
+                  >
+                    {idea}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label
+                htmlFor="ask-place"
+                className="text-[10px] tracking-widest text-muted-foreground/70 uppercase"
+              >
+                Where she is
+              </label>
+              <Input
+                id="ask-place"
+                value={askPlace}
+                onChange={(event) => setAskPlace(event.target.value)}
+                placeholder="on the balcony, golden hour"
+                className="mt-1.5"
+              />
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {SCENE_IDEAS.map((idea) => (
+                  <button
+                    key={idea}
+                    type="button"
+                    onClick={() => setAskPlace(idea)}
+                    className={cn(
+                      "rounded-full border px-2.5 py-1 text-[11px] transition-colors",
+                      askPlace === idea
+                        ? "border-primary bg-primary/15 text-primary"
+                        : "border-border/60 text-muted-foreground hover:border-primary/50 hover:text-foreground",
+                    )}
+                  >
+                    {idea}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="mt-5 flex-col gap-2 sm:flex-col">
+            <Button
+              className="w-full gap-2"
+              disabled={composing || developing || !photosReady}
+              onClick={() => {
+                setAskOpen(false);
+                void requestPhoto(askSceneLine());
+              }}
+            >
+              <Sparkles className="size-3.5" />
+              Ask for the photo
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full text-xs text-muted-foreground"
+              disabled={composing || developing || !photosReady}
+              onClick={() => {
+                setAskOpen(false);
+                void requestPhoto(SELFIE_SCENE);
+              }}
+            >
+              Just a selfie
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
