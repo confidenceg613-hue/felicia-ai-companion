@@ -63,8 +63,9 @@ function withRetry<T>(load: () => Promise<T>): () => Promise<T> {
 }
 
 export const pageModules = {
-  landing: withRetry(() => import("@/pages/Landing")),
-  auth: withRetry(() => import("@/pages/Auth")),
+  // Landing and Auth are imported directly by the entry file: they are what a
+  // first-time visitor loads, so they belong in the main bundle instead of
+  // behind a chunk request.
   shell: withRetry(() => import("@/components/AppShell")),
   dashboard: withRetry(() => import("@/pages/Dashboard")),
   album: withRetry(() => import("@/pages/Album")),

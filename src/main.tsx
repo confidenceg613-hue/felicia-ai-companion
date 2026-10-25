@@ -6,6 +6,8 @@ import AgeGate from "@/components/AgeGate";
 import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { pageModules, prefetchPages } from "@/lib/pageModules";
 import { resolveConvexUrl } from "@/lib/convexDeployment";
+import Landing from "@/pages/Landing";
+import AuthPage from "@/pages/Auth";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient, useConvexAuth } from "convex/react";
 import { Heart } from "lucide-react";
@@ -21,10 +23,11 @@ import {
 } from "react-router";
 import "./index.css";
 
-// Lazy load route components for better code splitting. The modules come from
-// one shared map so the prefetcher below warms exactly what the router needs.
-const Landing = lazy(pageModules.landing);
-const AuthPage = lazy(pageModules.auth);
+// The two public pages are part of the main bundle: they are the first thing
+// anyone sees, so a chunk request for them is a delay on the very first paint —
+// and, while the dev server is rebuilding, a request that can fail and leave a
+// blank screen behind. The signed-in pages stay lazy; the shell warms them the
+// moment a session exists.
 const AppShell = lazy(pageModules.shell);
 const Dashboard = lazy(pageModules.dashboard);
 const Memories = lazy(pageModules.memories);
@@ -194,33 +197,11 @@ function RoutePrefetcher() {
     // session goes straight to the dashboard, so its code is pulled at once —
     // waiting on the browser's idle time would show the heart during a chunk
     // request that could have been in flight already.
-    if (isAuthenticated) {
-      prefetchPages();
-      return;
-    }
-
-    const warmSignedOut = () => {
-      void pageModules.landing();
-      void pageModules.auth();
-    };
-
-    const scope = window as Window & {
-      requestIdleCallback?: (
-        callback: () => void,
-        options?: { timeout: number },
-      ) => number;
-      cancelIdleCallback?: (handle: number) => void;
-    };
-
-    if (scope.requestIdleCallback) {
-      const handle = scope.requestIdleCallback(warmSignedOut, {
-        timeout: 1500,
-      });
-      return () => scope.cancelIdleCallback?.(handle);
-    }
-
-    const timer = setTimeout(warmSignedOut, 250);
-    return () => clearTimeout(timer);
+    // Signed-out visitors already have both public pages in the main bundle. A
+    // signed session goes straight to the dashboard, so the rest is pulled at
+    // once — waiting on the browser's idle time would show the heart during a
+    // request that could have been in flight already.
+    if (isAuthenticated) prefetchPages();
   }, [isAuthenticated]);
 
   return null;
