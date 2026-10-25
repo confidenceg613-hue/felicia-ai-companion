@@ -18,15 +18,20 @@ import {
   type GalleryCandidate,
   type GalleryMatch,
 } from "../lib/galleryMatch";
-import { isGroqConfigured, isVeniceConfigured } from "./config";
+import {
+  isCloudflareConfigured,
+  isGroqConfigured,
+  isVeniceConfigured,
+} from "./config";
 import { isIntimate, isRefusal, isRefusalMessage } from "./mature";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { paginationOptsValidator } from "convex/server";
 
-// Her words, her voice and her memories come from Groq (`groq.ts`); her photos
-// and her eyes stay on Venice (`images.ts`, `vision.ts`). They are real Convex
-// actions rather than the placeholder action names this file used to pass to
+// Her words, her voice and her memories come from Groq (`groq.ts`); her eyes
+// run on Cloudflare Workers AI (`vision.ts`) and her photos on the same key
+// (`images.ts`), with Venice kept as a last resort. They are real Convex actions
+// rather than the placeholder action names this file used to pass to
 // ctx.runAction, which is what made her chat look connected but never reply.
 import {
   action,
@@ -782,9 +787,9 @@ export function extractScene(
  * Which of Felicia's backends are present on this deployment.
  *
  * Her words, her memories and her voice need Groq; her photos and her eyes
- * need Venice. They are reported separately because they really are separate
- * keys, and a banner that cannot say which one is missing leaves the same
- * guessing game.
+ * need Cloudflare (Venice is only a fallback for photos). They are reported
+ * separately because they really are separate keys, and a banner that cannot
+ * say which one is missing leaves the same guessing game.
  *
  * Environment variables are per-deployment, so a key added while working in
  * the preview is not on the published deployment.
@@ -796,7 +801,9 @@ export const connectorStatus = query({
     chatBackend: "groq",
     chatConfigured: isGroqConfigured(),
     voiceConfigured: isGroqConfigured(),
-    imageConfigured: isVeniceConfigured(),
+    // Photos go through Cloudflare first, so that key is what matters; Venice
+    // is only there to catch a Cloudflare outage.
+    imageConfigured: isCloudflareConfigured() || isVeniceConfigured(),
     imageFallbackConfigured: isVeniceConfigured(),
   }),
 });export const messages = query({

@@ -3,7 +3,11 @@
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { internalAction } from "./_generated/server";
-import { veniceApiKey } from "./config";
+import {
+  cloudflareAccountId,
+  cloudflareToken,
+  veniceApiKey,
+} from "./config";
 
 /**
  * Telling a retry from a cause worth reporting.
@@ -13,36 +17,34 @@ export function isRetryablePhotoFailure(error: unknown): boolean {
   return /time|stall|empty|unreadable|not finish|terminated|429/i.test(message);
 }
 
-const VENICE_IMAGE_URL = "https://api.venice.ai/api/v1/image/generate";
-const VENICE_WIDTH = 832;
-const VENICE_HEIGHT = 1216;
-const QV_ASPECT_RATIO = "2:3";
+// ---------------------------------------------------------------------------
+// Cloudflare Workers AI — her photographer
+// ---------------------------------------------------------------------------
+
+/** The endpoint is one path per model, on the account the key belongs to. */
+function cloudflareRun(accountId: string, model: string): string {
+  return `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${model}`;
+}
 
 /**
- * Her photographers, in order of preference.
- *
- * All three are Venice image models reached with the same key as her words and
- * her voice. qwen-image-3-pro is asked for first: it holds a description
- * together — body, hair, outfit and room all come back the way the prompt
- * asked. lustify-v8 and venice-sd35 sit behind it in case the first is ever
- * retired or rate-limited.
- *
- * The two families frame themselves differently, which is not optional: the
- * Qwen family wants an aspect ratio and answers png, and the SDXL family takes
- * pixels, steps and a style preset. Sending one family the other's sizing is
- * the mistake that 400s a request that had nothing else wrong with it.
+ * FLUX.1 [schnell] answers with the finished photo as base64 in JSON, in
+ * roughly a second. It is asked for first because it is both the cheapest and
+ * the most dependable of the models on Workers AI.
  */
-const VENICE_IMAGE_MODELS: Array<{
-  id: string;
-  aspectRatio: boolean;
-}> = [
-  { id: "qwen-image-3-pro", aspectRatio: true },
-  { id: "lustify-v8", aspectRatio: false },
-  { id: "venice-sd35", aspectRatio: false },
-];
+const FLUX_MODEL = "@cf/black-forest-labs/flux-1-schnell";
+
+/**
+ * SDXL base is the second shot: it takes a negative prompt and an explicit
+ * width and height, so it can frame her the tall way her gallery uses.
+ */
+const SDXL_MODEL = "@cf/stabilityai/stable-diffusion-xl-base-1.0";
+
+/** Tall framing, the way her roll is shot. */
+const PHOTO_WIDTH = 832;
+const PHOTO_HEIGHT = 1216;
 
 /** What is kept out of her photos. */
-const VENICE_NEGATIVE =
+const NEGATIVE_PROMPT =
   "close-up, headshot, cropped, cut off, portrait crop, bust shot, " +
   "out of frame, cropped legs, cropped feet, deformed, extra limbs, " +
   "digital art, illustration, painting, cgi, 3d render, plastic airbrushed " +
@@ -61,21 +63,154 @@ export const generate = internalAction({
     const trimmed = prompt.trim();
     if (!trimmed) throw new Error("A photo needs a scene to describe.");
 
-    const key = veniceApiKey();
-    if (!key) {
-      throw new Error(
-        "Her photos are taken by Venice, the same key as her chat — add it in " +
-          "this project's Keys settings and she starts shooting again.",
-      );
+    const token = cloudflareToken();
+    const account = cloudflareAccountId();
+    const venice = veniceApiKey();
+    const problems: string[] = [];
+
+    if (token && account) {
+      try {
+        return { storageId: await viaCloudflare(token, account, trimmed, ctx) };
+      } catch (error) {
+        problems.push(error instanceof Error ? error.message : String(error));
+        // A missing key or an exhausted quota is the same for every model, so
+        // there is no point trying the same provider again.
+        if (/rejected|no balance|not configured/i.test(problems.join(" "))) {
+          throw new Error(problems.join(" · "));
+        }
+      }
     }
 
-    return { storageId: await viaVenice(key, trimmed, ctx) };
+    if (venice) {
+      try {
+        return { storageId: await viaVenice(venice, trimmed, ctx) };
+      } catch (error) {
+        problems.push(error instanceof Error ? error.message : String(error));
+      }
+    }
+
+    if (problems.length === 0) {
+      throw new Error(
+        "Her photos need CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in " +
+          "this project's Keys settings — the same pair her eyes use.",
+      );
+    }
+    throw new Error(`Couldn't take that photo. ${problems.join(" · ")}`);
   },
 });
 
 /**
- * One round trip to Venice, stored as a Convex file.
+ * One round trip to Workers AI, stored as a Convex file.
+ *
+ * Two models, because they fail in different ways: FLUX answers JSON with the
+ * photo inline, SDXL streams the bytes back. Both are handled here so the
+ * caller never has to know which one actually took the picture.
  */
+async function viaCloudflare(
+  token: string,
+  account: string,
+  prompt: string,
+  ctx: StorageCtx,
+): Promise<Id<"_storage">> {
+  const failures: string[] = [];
+
+  const flux = await fetch(cloudflareRun(account, FLUX_MODEL), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      // Framing is not a parameter on this model, so it is asked for in words:
+      // without it the frame is square and her feet are what get cropped.
+      prompt: `${prompt} Vertical portrait framing, 3:4 frame, her whole figure in shot.`,
+      // Only `prompt` and `steps` are accepted here: this model rejects any
+      // other property outright with a 400, so a seed cannot be passed.
+      steps: 6,
+    }),
+  });
+
+  if (flux.ok) {
+    const payload = (await flux.json()) as {
+      result?: { image?: string };
+      success?: boolean;
+      errors?: Array<{ message?: string }>;
+    };
+    const base64 = payload.result?.image;
+    if (base64) return await storeBase64(base64, ctx, "image/jpeg");
+    const detail = payload.errors?.[0]?.message ?? "answered without an image";
+    failures.push(`FLUX.1 schnell: ${detail}`);
+  } else {
+    const detail = (await flux.text()).slice(0, 200);
+    failures.push(`FLUX.1 schnell (${flux.status}) ${detail}`);
+    if (flux.status === 401 || flux.status === 403) {
+      throw new Error(
+        `Cloudflare rejected the API token — re-add CLOUDFLARE_API_TOKEN in ` +
+          `this project's Keys settings. ${detail}`,
+      );
+    }
+  }
+
+  const sdxl = await fetch(cloudflareRun(account, SDXL_MODEL), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      prompt,
+      negative_prompt: NEGATIVE_PROMPT,
+      width: PHOTO_WIDTH,
+      height: PHOTO_HEIGHT,
+      num_steps: 20,
+      guidance: 7.5,
+      seed: Math.floor(Math.random() * 2 ** 31),
+    }),
+  });
+
+  if (sdxl.ok) {
+    const bytes = await sdxl.arrayBuffer();
+    if (bytes.byteLength === 0) {
+      failures.push("SDXL: finished with no image");
+    } else {
+      const type = sdxl.headers.get("content-type") ?? "image/png";
+      return await ctx.storage.store(
+        new Blob([bytes], { type: type.startsWith("image/") ? type : "image/png" }),
+      );
+    }
+  } else {
+    failures.push(`SDXL (${sdxl.status}) ${(await sdxl.text()).slice(0, 200)}`);
+  }
+
+  throw new Error(`Cloudflare couldn't take that photo. ${failures.join(" · ")}`);
+}
+
+// ---------------------------------------------------------------------------
+// Venice — kept as the last resort
+// ---------------------------------------------------------------------------
+
+const VENICE_IMAGE_URL = "https://api.venice.ai/api/v1/image/generate";
+const VENICE_WIDTH = 832;
+const VENICE_HEIGHT = 1216;
+const QV_ASPECT_RATIO = "2:3";
+
+/**
+ * Venice's own models, tried in order.
+ *
+ * qwen-image-3-pro holds a description together — body, hair, outfit and room
+ * all come back the way the prompt asked. The SDXL family behind it takes
+ * pixels, steps and a style preset instead of a ratio, which is why each entry
+ * carries how it wants to be sized.
+ */
+const VENICE_IMAGE_MODELS: Array<{
+  id: string;
+  aspectRatio: boolean;
+}> = [
+  { id: "qwen-image-3-pro", aspectRatio: true },
+  { id: "lustify-v8", aspectRatio: false },
+  { id: "venice-sd35", aspectRatio: false },
+];
+
 async function viaVenice(
   key: string,
   prompt: string,
@@ -93,11 +228,9 @@ async function viaVenice(
       body: JSON.stringify({
         model: model.id,
         prompt,
-        negative_prompt: VENICE_NEGATIVE,
+        negative_prompt: NEGATIVE_PROMPT,
         safe_mode: false,
         hide_watermark: true,
-        // The Qwen family asks for a ratio and its own resolution tier, and
-        // answers png; the SDXL family takes pixels, steps and a style preset.
         ...(model.aspectRatio
           ? {
               aspect_ratio: QV_ASPECT_RATIO,
@@ -109,8 +242,6 @@ async function viaVenice(
               height: VENICE_HEIGHT,
               steps: 30,
               cfg_scale: 7,
-              // Hyperrealism, not "Photographic": the preset steers the model
-              // away from the retouched-glamour look that reads as generated.
               style_preset: "Hyperrealism",
               format: "webp",
             }),
@@ -126,10 +257,8 @@ async function viaVenice(
       if (response.status === 401 || response.status === 402) {
         throw new Error(
           response.status === 402
-            ? "Venice has no balance on this account — add a little credit at " +
-              "venice.ai/settings/api and she takes photos again."
-            : `Venice rejected the API key — re-add it in this project's Keys ` +
-              `settings. ${detail}`,
+            ? "Venice has no balance on this account."
+            : `Venice rejected the API key. ${detail}`,
         );
       }
       continue;
@@ -148,10 +277,12 @@ async function viaVenice(
     );
   }
 
-  throw new Error(
-    `Venice couldn't take that photo. ${failures.join(" · ")} — add a key in the project's Keys settings`,
-  );
+  throw new Error(`Venice couldn't take that photo. ${failures.join(" · ")}`);
 }
+
+// ---------------------------------------------------------------------------
+// Shared
+// ---------------------------------------------------------------------------
 
 /** `data:image/...;base64,...` → the base64 part only. */
 function stripDataUrl(img: string): string {
@@ -161,7 +292,7 @@ function stripDataUrl(img: string): string {
 
 /** base64 to bytes, without assuming Buffer is available. */
 function fromBase64(base64: string): Uint8Array {
-  const binary = atob(base64);
+  const binary = atob(stripDataUrl(base64));
   const bytes = new Uint8Array(binary.length);
   for (let index = 0; index < binary.length; index += 1) {
     bytes[index] = binary.charCodeAt(index);

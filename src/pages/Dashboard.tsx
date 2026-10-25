@@ -297,7 +297,7 @@ export default function Dashboard() {
         connection.configured === false &&
           "GROQ_API_KEY — her chat, memory and voice",
         connection.imageConfigured === false &&
-          "a Venice key — her photos and her eyes",
+          "CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID — her photos and her eyes",
       ].filter((value): value is string => Boolean(value))
     : [];
 
