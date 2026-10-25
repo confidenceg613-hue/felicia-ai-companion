@@ -60,6 +60,40 @@ export function isCloudflareConfigured(): boolean {
 }
 
 /**
+ * Unsloth Studio, running on your own machine.
+ *
+ * Its server speaks an OpenAI-shaped image API on the port it was started on,
+ * and it will load the open-weight FLUX 3 models (`unsloth/flux-3-image-klein`
+ * GGUF), so photos can be taken locally with no per-photo cost. The address is
+ * whatever Unsloth prints — `http://localhost:8888` on the same machine, a LAN
+ * IP, or the free Cloudflare HTTPS URL that `unsloth studio --secure` publishes.
+ *
+ * Add `UNSLOTH_BASE_URL` and `UNSLOTH_API_KEY` in the Keys tab; the key is the
+ * `sk-unsloth-…` value from Settings → API. `UNSLOTH_IMAGE_MODEL` is optional —
+ * leave it out and whatever diffusion model is loaded gets used.
+ */
+export function unslothBaseUrl(): string | null {
+  return (
+    process.env.UNSLOTH_BASE_URL ??
+    process.env.UNSLOTH_URL ??
+    process.env.UNSLOTH_HOST ??
+    null
+  );
+}
+
+export function unslothApiKey(): string | null {
+  return (
+    process.env.UNSLOTH_API_KEY ??
+    process.env.UNSLOTH_KEY ??
+    null
+  );
+}
+
+export function unslothImageModel(): string | null {
+  return process.env.UNSLOTH_IMAGE_MODEL ?? null;
+}
+
+/**
  * Black Forest Labs: FLUX 3, the newest and most realistic of the family.
  *
  * Workers AI stops at FLUX.2, so this key is the only way to reach FLUX 3 at

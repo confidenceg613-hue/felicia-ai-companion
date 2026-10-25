@@ -7,6 +7,9 @@ import {
   bflApiKey,
   cloudflareAccountId,
   cloudflareToken,
+  unslothApiKey,
+  unslothBaseUrl,
+  unslothImageModel,
   veniceApiKey,
 } from "./config";
 
@@ -107,7 +110,30 @@ export const generate = internalAction({
     const account = cloudflareAccountId();
     const venice = veniceApiKey();
     const bfl = bflApiKey();
+    const unslothBase = unslothBaseUrl();
+    const unslothKey = unslothApiKey();
     const problems: string[] = [];
+
+    // Unsloth first when it is configured: it is FLUX 3 running on your own
+    // machine, so a photo costs nothing at all — no credits, no daily cap. It
+    // only answers while Unsloth is running, so every failure here falls
+    // through to the hosted providers rather than surfacing.
+    if (unslothBase && unslothKey) {
+      try {
+        return {
+          storageId: await viaUnsloth(
+            unslothBase,
+            unslothKey,
+            unslothImageModel(),
+            trimmed,
+            ctx,
+            referenceUrl ?? null,
+          ),
+        };
+      } catch (error) {
+        problems.push(error instanceof Error ? error.message : String(error));
+      }
+    }
 
     // FLUX 3 first when there is a Black Forest Labs key: it is the newest of
     // the FLUX family and the most realistic of them, and it takes her profile
@@ -334,6 +360,104 @@ async function fetchPortrait(url: string): Promise<Blob | null> {
     return blob;
   } catch {
     return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Unsloth Studio — FLUX 3 on your own hardware
+// ---------------------------------------------------------------------------
+
+/** The OpenAI-shaped image endpoint Unsloth serves next to its chat API. */
+const UNSLOTH_IMAGE_PATH = "/v1/images/generations";
+/** Unsloth can take a while to warm a diffusion model up on first use. */
+const UNSLOTH_TIMEOUT_MS = 180_000;
+
+/**
+ * What the stored file actually is, from its first bytes.
+ *
+ * Unsloth answers with base64 and does not always label it, and a PNG declared
+ * as a JPEG is a photo the browser refuses to draw.
+ */
+function sniffImageType(base64: string): string {
+  if (base64.startsWith("/9j/")) return "image/jpeg";
+  if (base64.startsWith("UklGR")) return "image/webp";
+  return "image/png";
+}
+
+/**
+ * One photo from Unsloth Studio.
+ *
+ * The server keeps the model between calls, so the first photo after loading
+ * FLUX 3 Klein is slow (the model warming up) and every one after it is quick.
+ * Both a base64 answer and a signed URL answer are handled, because the OpenAI
+ * shape allows either and Unsloth picks depending on the model.
+ *
+ * There is no reference-image field in this endpoint, so her identity rides on
+ * the prompt's words here; a FLUX LoRA trained on her gallery in Unsloth is the
+ * way to make it exact, and it needs no change in this file.
+ */
+async function viaUnsloth(
+  baseUrl: string,
+  key: string,
+  model: string | null,
+  prompt: string,
+  ctx: StorageCtx,
+  referenceUrl: string | null,
+): Promise<Id<"_storage">> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), UNSLOTH_TIMEOUT_MS);
+  try {
+    const response = await fetch(
+      `${baseUrl.trim().replace(/\/+$/, "")}${UNSLOTH_IMAGE_PATH}`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${key}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          prompt: referenceUrl
+            ? `${identity("the reference image")}${prompt}`
+            : prompt,
+          ...(model ? { model } : {}),
+          n: 1,
+          // The tall frame her gallery is shot in, in the spelling the OpenAI
+          // shape uses. A server that only knows its loaded model's own size
+          // ignores it.
+          size: `${PHOTO_WIDTH}x${PHOTO_HEIGHT}`,
+          response_format: "b64_json",
+        }),
+        signal: controller.signal,
+      },
+    );
+
+    if (!response.ok) {
+      const detail = (await response.text()).slice(0, 300);
+      throw new Error(`Unsloth (${response.status}) ${detail}`);
+    }
+
+    const payload = (await response.json()) as {
+      data?: Array<{ b64_json?: string; url?: string }>;
+      images?: string[];
+    };
+    const first = payload.data?.[0];
+    const base64 = first?.b64_json ?? payload.images?.[0];
+    if (base64) {
+      return await storeBase64(base64, ctx, sniffImageType(base64));
+    }
+    if (first?.url) {
+      const image = await fetch(first.url);
+      if (!image.ok) throw new Error("Unsloth's image link could not be opened");
+      const bytes = await image.arrayBuffer();
+      if (bytes.byteLength === 0) throw new Error("Unsloth returned an empty image");
+      const type = image.headers.get("content-type") ?? "image/png";
+      return await ctx.storage.store(
+        new Blob([bytes], { type: type.startsWith("image/") ? type : "image/png" }),
+      );
+    }
+    throw new Error("Unsloth finished without an image");
+  } finally {
+    clearTimeout(timer);
   }
 }
 
