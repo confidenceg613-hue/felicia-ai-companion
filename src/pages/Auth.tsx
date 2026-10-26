@@ -50,7 +50,7 @@ function resolveRedirectAfterAuth(
 }
 
 function Auth({ redirectAfterAuth }: AuthProps = {}) {
-  const { isLoading: authLoading, isAuthenticated, signIn } = useAuth();
+  const { isLoading: authLoading, isAuthenticated, user, signIn } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const redirect = resolveRedirectAfterAuth(
@@ -92,18 +92,22 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     }
   };
 
-  // Google sends the browser off-site and back, so its carry-over can't run in
-  // the click handler. The pending flag set at click time survives the round
-  // trip and lands us here once the new session is live.
+  // In upgrade mode the guest is signed in before they start, so "signed in"
+  // on its own does not mean the new account is live. A non-anonymous user is
+  // what marks it: Google lands here after its round trip, email after the code
+  // is accepted. Only then is the conversation moved onto the account, and only
+  // then may the page leave — carrying it over before that claims the guest
+  // session into itself and throws it away.
+  const upgradeCompleted =
+    upgradeMode && isAuthenticated && user !== undefined && user !== null && user.isAnonymous !== true;
   useEffect(() => {
-    if (!upgradeMode || authLoading || !isAuthenticated) return;
-    if (sessionStorage.getItem(GOOGLE_PENDING_KEY) !== "1") return;
+    if (!upgradeCompleted) return;
     sessionStorage.removeItem(GOOGLE_PENDING_KEY);
     void carryGuestOver().finally(() => navigate(redirect));
-    // carryGuestOver is re-created each render; the flag above makes re-runs
-    // harmless no-ops.
+    // carryGuestOver is re-created each render, and it clears its own key, so a
+    // second run would be a no-op anyway.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [upgradeMode, authLoading, isAuthenticated, navigate, redirect]);
+  }, [upgradeCompleted, navigate, redirect]);
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
@@ -120,7 +124,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     // lives in one. Handler the flow to a full tab of the same app: same origin,
     // so the session it creates is the one this preview uses, and the exit
     // screen loads where Google allows it.
-    if (window.self) {
+    if (window.self !== window.top) {
       const tab = window.open(`/auth?${params.toString()}&google=1`, "_blank");
       if (tab) {
         toast("Finishing Google sign-in in a new tab.");
@@ -176,7 +180,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       setError(
         error instanceof Error
           ? error.message
-          : "Failed to sent verification code. Please try again.",
+          : "Failed to send the verification code. Please try again.",
       );
       setIsLoading(false);
     }
@@ -189,7 +193,9 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     try {
       const formData = new FormData(event.currentTarget);
       await signIn("email-otp", formData);
-      navigate(redirect);
+      // Upgrade mode stays put: the effect above moves the guest conversation
+      // onto the account first, then leaves.
+      if (!upgradeMode) navigate(redirect);
     } catch (error) {
       console.error("OTP verification error:", error);
 
@@ -398,6 +404,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                       <p className="text-sm text-muted-foreground text-center mt-4">
                         Didn't receive a code?{" "}
                         <Button
+                          type="button"
                           variant="link"
                           className="p-0 h-auto"
                           onClick={() => setStep("signIn")}

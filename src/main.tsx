@@ -61,7 +61,7 @@ function RouteLoading() {
 }
 
 function Home() {
-  const { isLoading, isAuthenticated, signIn } = useAuth();
+  const { isLoading, isAuthenticated } = useAuth();
   const [authTimedOut, setAuthTimedOut] = useState(false);
 
   useEffect(() => {
@@ -69,11 +69,6 @@ function Home() {
     const timer = setTimeout(() => setAuthTimedOut(true), 4000);
     return () => clearTimeout(timer);
   }, [isLoading]);
-
-  useEffect(() => {
-    if (isLoading || isAuthenticated) return;
-    void signIn("anonymous");
-  }, [isLoading, isAuthenticated, signIn]);
 
   if (isAuthenticated) return <Navigate to="/dashboard" replace />;
   if (isLoading && !authTimedOut) return <RouteLoading />;
