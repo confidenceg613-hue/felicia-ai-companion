@@ -165,7 +165,7 @@ class RootErrorBoundary extends React.Component<
  * Signing out ends the session, so the landing page comes back on its own.
  */
 function Home() {
-  const { isLoading, isAuthenticated } = useAuth();
+  const { isLoading, isAuthenticated, signIn } = useAuth();
 
   /** The heart never owns the screen: if the backend is slow to answer, the
    *  landing page takes over after a few seconds instead of beating forever. */
@@ -175,6 +175,11 @@ function Home() {
     const timer = setTimeout(() => setAuthTimedOut(true), 4000);
     return () => clearTimeout(timer);
   }, [isLoading]);
+
+  useEffect(() => {
+    if (isLoading || isAuthenticated) return;
+    void signIn("anonymous");
+  }, [isLoading, isAuthenticated, signIn]);
 
   if (isAuthenticated) return <Navigate to="/dashboard" replace />;
   if (isLoading && !authTimedOut) return <RouteLoading />;
