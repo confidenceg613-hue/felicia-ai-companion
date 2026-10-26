@@ -150,7 +150,13 @@ root.render(
   </StrictMode>,
 );
 
-void resolveConvexUrl().then((url) => {
-  root.render(<App convex={new ConvexReactClient(url)} />);
-});
+void resolveConvexUrl()
+  .then((url) => {
+    root.render(<App convex={new ConvexReactClient(url)} />);
+  })
+  .catch((error) => {
+    // A missing deployment address is a configuration problem, not a crash:
+    // say so instead of leaving an unhandled rejection on a blank screen.
+    console.error("Could not reach the Convex deployment:", error);
+  });
 
