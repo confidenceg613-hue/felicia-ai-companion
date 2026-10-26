@@ -83,6 +83,13 @@ type QueueItem = {
 /** What the lightbox is currently showing, and what it can be used for. */
 type LightboxPhoto = {
   url: string;
+  /**
+   * Drawn in order if `url` fails to load. The permanent photos' originals
+   * live on an external host, and a copy that has gone missing there turns the
+   * lightbox into the host's "image not available" picture. The smaller hosted
+   * copy and, last, the tile that ships with the app still show her photo.
+   */
+  fallbacks?: string[];
   title: string;
   /** Set when the picture is one of her permanent gallery photos. */
   galleryId?: string;
@@ -710,6 +717,7 @@ export default function Album() {
                       onClick={() =>
                         setLightbox({
                           url: photo.fullUrl,
+                          fallbacks: [photo.url, photo.thumbUrl],
                           title: photo.title,
                           galleryId: photo.id,
                         })
@@ -944,6 +952,17 @@ export default function Album() {
                       // original upload, which is what the full-size frame
                       // needs to stay sharp.
                       url: galleryOriginal(photo.galleryId) ?? photo.url,
+                      // An original that has disappeared from its host still
+                      // has the smaller hosted copy and the local tile on file.
+                      fallbacks: photo.galleryId
+                        ? [
+                            photo.url,
+                            FELICIA_GALLERY.find(
+                              (entry: GalleryPhoto) =>
+                                entry.id === photo.galleryId,
+                            )?.thumbUrl,
+                          ].filter((candidate): candidate is string => !!candidate)
+                        : [],
                       title: photo.scene ?? `${FELICIA.name}'s photo`,
                     })
                   }
@@ -1003,8 +1022,20 @@ export default function Album() {
               />
             ) : (
               <img
+                /* The original is hosted elsewhere and can be gone; when the
+                   load fails, draw the copy that ships with the app instead of
+                   leaving the host's "image not available" in the frame. */
+                key={lightbox.url}
                 src={lightbox.url}
                 alt={lightbox.title}
+                onError={(event) => {
+                  const image = event.currentTarget;
+                  const tried = Number(image.dataset.fallbacksTried ?? "0");
+                  const next = lightbox.fallbacks?.[tried];
+                  if (!next) return;
+                  image.dataset.fallbacksTried = String(tried + 1);
+                  image.src = next;
+                }}
                 className="max-h-[72vh] w-full rounded-2xl object-contain"
               />
             ))}
