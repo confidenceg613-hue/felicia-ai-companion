@@ -49,6 +49,32 @@ function resolveRedirectAfterAuth(
   return fallback;
 }
 
+/**
+ * What to tell someone whose sign-in attempt failed.
+ *
+ * The OTP step used to answer every failure with "the code is incorrect", so a
+ * paused deployment, a rate limit or an expired code all looked like the user
+ * had mistyped six digits — and they kept retyping them. Only a code the server
+ * actually rejected gets that message now; everything else says what happened.
+ */
+function describeSignInError(error: unknown, fallback: string): string {
+  const raw = error instanceof Error ? error.message : String(error ?? "");
+
+  if (/exceeded a configured usage limit|deployment has been disabled/i.test(raw)) {
+    return "The backend is paused: this project's Convex deployment has hit its usage limit. Raise or remove that limit in the Convex dashboard, then try again.";
+  }
+  if (/too many|rate.?limit|\b429\b/i.test(raw)) {
+    return "Too many attempts just now — wait a minute, then ask for a fresh code.";
+  }
+  if (/expired/i.test(raw)) {
+    return "That code has expired — send yourself a new one.";
+  }
+  if (/could not verify code|invalid verification code|invalid code/i.test(raw)) {
+    return "That code didn't match — check the six digits and try again.";
+  }
+  return friendlyError(error, fallback);
+}
+
 function Auth({ redirectAfterAuth }: AuthProps = {}) {
   const { isLoading: authLoading, isAuthenticated, user, signIn } = useAuth();
   const navigate = useNavigate();
@@ -178,9 +204,10 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     } catch (error) {
       console.error("Email sign-in error:", error);
       setError(
-        error instanceof Error
-          ? error.message
-          : "Failed to send the verification code. Please try again.",
+        describeSignInError(
+          error,
+          "Couldn't send the verification code. Please try again.",
+        ),
       );
       setIsLoading(false);
     }
@@ -198,10 +225,21 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       if (!upgradeMode) navigate(redirect);
     } catch (error) {
       console.error("OTP verification error:", error);
-
-      setError("The verification code you entered is incorrect.");
+      setError(
+        describeSignInError(
+          error,
+          "Couldn't verify that code. Please try again.",
+        ),
+      );
       setIsLoading(false);
     }
+  };
+
+  /** Back to the email step, with nothing carried over from the last attempt. */
+  const backToEmail = () => {
+    setOtp("");
+    setError(null);
+    setStep("signIn");
   };
 
   const handleGuestLogin = async () => {
@@ -222,12 +260,9 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
         // dropped. Retrying the button usually just works.
         setError("Your device missed the server for a moment — refresh and it'll keep going.");
       } else {
-        // Session/endpoint mismatch, CORS, 4xx — not a retryable blip.
-        setError(
-          error instanceof Error
-            ? friendlyError(error, "Couldn't start a guest session.")
-            : "Failed to start a guest session.",
-        );
+        // Session/endpoint mismatch, CORS, 4xx, or a paused deployment — not a
+        // retryable blip, so say what it actually was.
+        setError(describeSignInError(error, "Couldn't start a guest session."));
       }
       setIsLoading(false);
     }
@@ -379,15 +414,6 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                           onChange={setOtp}
                           maxLength={6}
                           disabled={isLoading}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" && otp.length === 6 && !isLoading) {
-                              // Find the closest form and submit it
-                              const form = (e.target as HTMLElement).closest("form");
-                              if (form) {
-                                form.requestSubmit();
-                              }
-                            }
-                          }}
                         >
                           <InputOTPGroup>
                             {Array.from({ length: 6 }).map((_, index) => (
@@ -407,7 +433,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                           type="button"
                           variant="link"
                           className="p-0 h-auto"
-                          onClick={() => setStep("signIn")}
+                          onClick={backToEmail}
                         >
                           Try again
                         </Button>
@@ -434,7 +460,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                       <Button
                         type="button"
                         variant="ghost"
-                        onClick={() => setStep("signIn")}
+                        onClick={backToEmail}
                         disabled={isLoading}
                         className="w-full"
                       >
@@ -468,7 +494,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
 function GoogleMark({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-7.24-2.36 7.24-8.035-2.36 8.48-2.38z" />
+      <path d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z" />
     </svg>
   );
 }
