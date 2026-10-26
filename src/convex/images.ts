@@ -35,18 +35,6 @@ function cloudflareRun(accountId: string, model: string): string {
  */
 const FLUX2_MODEL = "@cf/black-forest-labs/flux-2-dev";
 
-/**
- * FLUX.1 [schnell] is the fast one, kept behind it: it answers with the photo
- * as base64 in JSON in about a second, on a fixed square frame.
- */
-const FLUX_MODEL = "@cf/black-forest-labs/flux-1-schnell";
-
-/**
- * SDXL base is the second shot: it takes a negative prompt and an explicit
- * width and height, so it can frame her the tall way her gallery uses.
- */
-const SDXL_MODEL = "@cf/stabilityai/stable-diffusion-xl-base-1.0";
-
 /** Tall framing, the way her roll is shot. */
 const PHOTO_WIDTH = 832;
 const PHOTO_HEIGHT = 1216;

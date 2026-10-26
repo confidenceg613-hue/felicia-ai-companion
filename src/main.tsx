@@ -1,4 +1,3 @@
-import { api } from "@/convex/_generated/api";
 import { useAuth } from "@/hooks/use-auth";
 import Landing from "@/pages/Landing";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
@@ -13,7 +12,6 @@ import {
   Route,
   Routes,
   useLocation,
-  useNavigate,
 } from "react-router";
 import "./index.css";
 import { resolveConvexUrl } from "@/lib/convexDeployment";
@@ -22,7 +20,6 @@ import { pageModules, prefetchPages } from "@/lib/pageModules";
 import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import AgeGate from "@/components/AgeGate";
-import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import AuthPage from "@/pages/Auth";
 
 const AppShell = lazy(pageModules.shell);

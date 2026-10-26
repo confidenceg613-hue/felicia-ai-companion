@@ -26,15 +26,12 @@ const GROQ_SPEECH_URL = "https://api.groq.com/openai/v1/audio/speech";
  * The models behind her everyday and intimate words, best first.
  *
  * `gpt-oss-120b` is the strongest model on the key; `gpt-oss-20b` sits behind
- * it for when the first is rate-limited. The Qwen build is last because this
- * project has it switched off: it answers 403, and asking it before a working
- * model just adds a wasted request to every fallback. Groq retires model ids
- * regularly, so the list is tried in order and a missing one simply moves on.
+ * it for when the first is rate-limited. Groq retires model ids regularly, so
+ * the list is tried in order and a missing one simply moves on.
  */
 const GROQ_MODELS = [
   "openai/gpt-oss-120b",
   "openai/gpt-oss-20b",
-  "qwen/qwen3.8-27b",
 ];
 
 /**
