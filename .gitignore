@@ -3,3 +3,5 @@ node_modules
 dist
 # Build output the deploy copies into before it is packaged; never source.
 isolate
+# One-off database snapshot taken off a deployment; holds real account data.
+tmp-recovery-export

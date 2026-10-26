@@ -7,19 +7,30 @@
  * sign-in fails and no conversation loads — while the same code in preview,
  * which reads the live value, is perfectly fine.
  *
- * So the configured address is checked with one cheap public query before the
- * app connects to it, and a deployment that cannot answer is replaced by this
- * project's live one. The choice is remembered per browser, so the check is one
- * request once, not on every page load.
+ * So every candidate address is checked with one cheap public query before the
+ * app connects to one, in order of preference. The choice is remembered per
+ * browser, so the check is one request once, not on every page load.
  */
 const CONFIGURED = (
   import.meta.env.VITE_CONVEX_URL as string | undefined
 )?.replace(/\/+$/, "");
 
-/** This project's live deployment. Only ever used if CONFIGURED is dead. */
-const KNOWN_GOOD = "https://ideal-impala-475.convex.cloud";
+/**
+ * Where this project lives now.
+ *
+ * The original deployment was disabled for exceeding its usage limit, so the
+ * project was moved here. It is tried first, and it is also what the app keeps
+ * if no candidate answers at all, so a stale build address can never quietly
+ * send people back to the dead one.
+ */
+const PRIMARY = "https://good-horse-880.convex.cloud";
 
-const CACHE_KEY = "felicia:convex-url";
+/** The old deployment, kept as a fallback in case it is ever un-paused. */
+const LEGACY = "https://ideal-impala-475.convex.cloud";
+
+// Bumped whenever the preferred deployment changes, so a browser that already
+// resolved the old one is checked again instead of keeping the stale answer.
+const CACHE_KEY = "felicia:convex-url:v2";
 const PROBE_TIMEOUT_MS = 3500;
 
 type Cached = { configured: string; resolved: string };
@@ -76,15 +87,17 @@ async function isHealthy(url: string): Promise<boolean> {
   }
 }
 
-/** The first deployment that actually answers; CONFIGURED if none does. */
+/** The first deployment that actually answers; PRIMARY if none does. */
 export async function resolveConvexUrl(): Promise<string> {
-  const configured = CONFIGURED ?? KNOWN_GOOD;
+  const configured = CONFIGURED ?? PRIMARY;
 
   const cached = readCache(configured);
   if (cached) return cached;
 
-  const candidates = [configured];
-  if (KNOWN_GOOD !== configured) candidates.push(KNOWN_GOOD);
+  const candidates = [PRIMARY];
+  for (const other of [configured, LEGACY]) {
+    if (!candidates.includes(other)) candidates.push(other);
+  }
 
   for (const candidate of candidates) {
     if (await isHealthy(candidate)) {
@@ -93,7 +106,7 @@ export async function resolveConvexUrl(): Promise<string> {
     }
   }
 
-  // Nothing answered: keep the configured deployment rather than guessing, so
-  // the app reports a connection problem instead of pointing somewhere random.
-  return configured;
+  // Nothing answered: stay on where the project actually lives, so once its
+  // functions are pushed the app is already talking to the right deployment.
+  return PRIMARY;
 }
