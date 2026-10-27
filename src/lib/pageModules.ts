@@ -1,6 +1,5 @@
-/**
- * Every page's module, in one place.
- *
+/** Every page's module, in one place.
+
  * The router's `lazy()` and the prefetcher both go through this map, so the
  * promise a click needs has usually already resolved by the time the click
  * happens — the module is in memory and the page paints on the first frame
@@ -10,9 +9,8 @@
  * lookup after the first call.
  */
 
-/**
- * Set once we have already reloaded this tab to pick up re-built chunks.
- *
+/** Set once we have already reloaded this tab to pick up re-built chunks.
+
  * The dev server re-optimises its dependencies and restarts while a session is
  * running, and a publish swaps every chunk hash at once. Anything already on
  * screen then holds URLs that no longer exist, and a lazy import of one fails
@@ -21,9 +19,8 @@
  */
 const RELOAD_KEY = "felicia:chunk-reload";
 
-/**
- * A dynamic import that survives the server moving under it.
- *
+/** A dynamic import that survives the server moving under it.
+
  * The Vite dev server restarts and re-optimises its chunk manifest while a
  * session is alive. After that, every chunk URL the page already holds is
  * stale: a lazy import of one fails with "Failed to fetch dynamically imported
@@ -100,9 +97,8 @@ function withRetry<T>(load: () => Promise<T>): () => Promise<T> {
   };
 }
 
-/**
- * The raw loaders, before any retrying.
- *
+/** The raw loaders, before any retrying.
+
  * The router wraps these in `withRetry` — a failed navigation has to be
  * recovered — while the prefetcher uses them as they are. Warming a module is
  * an optimisation, and an optimisation must never reload the tab: during a
@@ -134,9 +130,8 @@ export const pageModules = {
 
 export type PageModuleKey = keyof typeof pageModules;
 
-/**
- * Start loading every page's code. Idempotent, and safe to fire and forget.
- *
+/** Start loading every page's code. Idempotent, and safe to fire and forget.
+
  * Failures are swallowed on purpose: the browser caches a module once it has
  * been fetched, so a warm-up that misses only costs the click it was meant to
  * save, and the route's own `withRetry` loader covers the fetch afterwards.
@@ -146,3 +141,7 @@ export function prefetchPages() {
     void load().catch(() => undefined);
   }
 }
+
+/** The error message that indicates a stale chunk URL from a dev-server restart. */
+
+export { DYNAMIC_IMPORT_ERROR };

@@ -1,5 +1,6 @@
 import { useAuth } from "@/hooks/use-auth";
 import Landing from "@/pages/Landing";
+import { InstrumentationProvider } from "@/instrumentation";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient } from "convex/react";
 import { Heart } from "lucide-react";
@@ -37,22 +38,56 @@ function RouteLoading() {
         <motion.span
           aria-hidden
           className="absolute size-32 rounded-full bg-primary/30 blur-2xl"
-          animate={{ scale: [1, 1.16, 1.02, 1.09, 1], opacity: [0.45, 0.9, 0.5, 0.8, 0.45] }}
-          transition={{ duration: 1.5, times: [0, 0.12, 0.24, 0.36, 1], repeat: Infinity, ease: "easeInOut" }}
+          animate={{
+            scale: [1, 1.16, 1.02, 1.09, 1],
+            opacity: [0.45, 0.9, 0.5, 0.8, 0.45],
+          }}
+          transition={{
+            duration: 1.5,
+            times: [0, 0.12, 0.24, 0.36, 1],
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
         />
         <motion.span
           aria-hidden
           className="absolute size-24 rounded-full border border-primary/30"
-          animate={{ scale: [1, 1.45, 1.05, 1.3, 1], opacity: [0.5, 0, 0.35, 0, 0.5] }}
-          transition={{ duration: 1.5, times: [0, 0.12, 0.24, 0.36, 1], repeat: Infinity, ease: "easeInOut" }}
+          animate={{
+            scale: [1, 1.45, 1.05, 1.3, 1],
+            opacity: [0.5, 0, 0.35, 0, 0.5],
+          }}
+          transition={{
+            duration: 1.5,
+            times: [0, 0.12, 0.24, 0.36, 1],
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
         />
-        <motion.div initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}>
-          <motion.div animate={{ scale: [1, 1.16, 1.02, 1.09, 1] }} transition={{ duration: 1.5, times: [0, 0.12, 0.24, 0.36, 1], repeat: Infinity, ease: "easeInOut" }}>
-            <Heart aria-hidden className="size-16 fill-primary text-primary" strokeWidth={1.25} />
+        <motion.div
+          initial={{ scale: 0.6, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <motion.div
+            animate={{ scale: [1, 1.16, 1.02, 1.09, 1] }}
+            transition={{
+              duration: 1.5,
+              times: [0, 0.12, 0.24, 0.36, 1],
+              repeat: Infinity,
+              ease: "easeInOut",
+            }}
+          >
+            <Heart
+              aria-hidden
+              className="size-16 fill-primary text-primary"
+              strokeWidth={1.25}
+            />
           </motion.div>
         </motion.div>
       </div>
-      <p className="font-display text-xs tracking-[0.42em] text-muted-foreground/80 uppercase">Felicia</p>
+      <p className="font-display text-xs tracking-[0.42em] text-muted-foreground/80 uppercase">
+        Felicia
+      </p>
     </div>
   );
 }
@@ -83,7 +118,10 @@ function RoutePrefetcher() {
 function RouteSyncer() {
   const location = useLocation();
   useEffect(() => {
-    window.parent.postMessage({ type: "iframe-route-change", path: location.pathname }, "*");
+    window.parent.postMessage(
+      { type: "iframe-route-change", path: location.pathname },
+      "*",
+    );
   }, [location.pathname]);
 
   useEffect(() => {
@@ -111,7 +149,10 @@ function App({ convex }: { convex: ConvexReactClient }) {
             <Suspense fallback={<RouteLoading />}>
               <Routes>
                 <Route path="/" element={<Home />} />
-                <Route path="/auth" element={<AuthPage redirectAfterAuth="/dashboard" />} />
+                <Route
+                  path="/auth"
+                  element={<AuthPage redirectAfterAuth="/dashboard" />}
+                />
                 <Route
                   path="/dashboard"
                   element={
@@ -139,6 +180,18 @@ function App({ convex }: { convex: ConvexReactClient }) {
 }
 
 const root = createRoot(document.getElementById("root")!);
+
+function handleDynamicImportError(error: unknown) {
+  const message =
+    error instanceof Error ? error.message : String(error ?? "");
+  if (message.includes("Failed to fetch dynamically imported module")) {
+    console.warn(
+      "[Freebuff] Dynamic import failed — reloading to pick up fresh chunks.",
+    );
+    window.location.reload();
+  }
+}
+
 root.render(
   <StrictMode>
     <MotionConfig reducedMotion="user">
@@ -149,11 +202,17 @@ root.render(
 
 void resolveConvexUrl()
   .then((url) => {
-    root.render(<App convex={new ConvexReactClient(url)} />);
+    root.render(
+      <InstrumentationProvider>
+        <App convex={new ConvexReactClient(url)} />
+      </InstrumentationProvider>,
+    );
   })
   .catch((error) => {
-    // A missing deployment address is a configuration problem, not a crash:
-    // say so instead of leaving an unhandled rejection on a blank screen.
+    handleDynamicImportError(error);
     console.error("Could not reach the Convex deployment:", error);
   });
 
+window.addEventListener("unhandledrejection", (event: PromiseRejectionEvent) => {
+  handleDynamicImportError(event.reason);
+});
