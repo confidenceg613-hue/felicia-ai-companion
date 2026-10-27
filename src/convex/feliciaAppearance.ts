@@ -7,8 +7,16 @@ import { internalQuery, mutation, query } from "./_generated/server";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyCtx = any;
 
-/** The picture she has until an account chooses one of its own. */
-const FELICIA_AVATAR_DEFAULT_ID = "portrait-soft-light";
+/**
+ * The picture she has until an account chooses one of its own.
+ *
+ * Her close-up — face forward, filling the frame — rather than one of the
+ * full-length shots, because an avatar is a small circle and in a full-length
+ * frame her face is a handful of pixels. It is also the picture every new
+ * photo of her is drawn against, so a tight portrait gives the model the most
+ * of her face to hold on to.
+ */
+const FELICIA_AVATAR_DEFAULT_ID = "golden-hour-close";
 
 /** Where the user's chosen outfit / background / custom scene live. */
 export const feliciaAppearance = query({

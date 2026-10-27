@@ -3,6 +3,7 @@
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { internalAction } from "./_generated/server";
+import { Jimp } from "jimp";
 import {
   cloudflareAccountId,
   cloudflareToken,
@@ -38,6 +39,28 @@ const FLUX2_MODEL = "@cf/black-forest-labs/flux-2-dev";
 /** Tall framing, the way her roll is shot. */
 const PHOTO_WIDTH = 832;
 const PHOTO_HEIGHT = 1216;
+
+/**
+ * How many steps the sampler is given.
+ *
+ * This was set to 6 as a speed setting, and it is what made her photos look
+ * painted: the model stops while the picture is still half-denoised, which is
+ * the waxy, over-smooth finish people mean when they say an image looks fake.
+ * Cloudflare's own example for this model sends 25, and the skin texture, the
+ * fabric weave and the hair are all in the steps after the first few.
+ */
+const PHOTO_STEPS = 25;
+
+/**
+ * The size ceiling on a reference image: Cloudflare takes input images only
+ * smaller than 512×512.
+ *
+ * Her portrait is the original upload — 1086×1448 — so it is fitted down to
+ * this before it is sent. Left at full size it is the one part of the request
+ * that can be refused, and it is the part that keeps her face the same in
+ * every photo.
+ */
+const REFERENCE_MAX = 512;
 
 /** The only part of an action context this file needs. */
 type StorageCtx = {
@@ -117,7 +140,7 @@ async function viaCloudflare(
   form.set("prompt", referenceUrl ? `${identity("image 0")}${prompt}` : prompt);
   form.set("width", String(PHOTO_WIDTH));
   form.set("height", String(PHOTO_HEIGHT));
-  form.set("steps", "6");
+  form.set("steps", String(PHOTO_STEPS));
 
   if (referenceUrl) {
     try {
@@ -125,9 +148,10 @@ async function viaCloudflare(
       if (response.ok) {
         const bytes = await response.arrayBuffer();
         if (bytes.byteLength > 0) {
-          const blob = new Blob([bytes], {
-            type: response.headers.get("content-type") ?? "image/png",
-          });
+          const blob = await atReferenceSize(
+            bytes,
+            response.headers.get("content-type") ?? "image/png",
+          );
           form.set("input_image_0", blob, "her.png");
         }
       }
@@ -169,6 +193,37 @@ async function viaCloudflare(
 
   const detail = (await flux2.text()).slice(0, 300);
   throw new Error(`Cloudflare FLUX.2 [dev] (${flux2.status}) ${detail}`);
+}
+
+/**
+ * Her portrait, at the size the model accepts.
+ *
+ * The upload arrives at its original resolution — every pore and braid intact,
+ * and four times wider than the 512×512 limit on reference images. Scaling it
+ * down keeps the face and drops only the pixels the model would have thrown
+ * away itself. A picture already inside the limit is passed through untouched,
+ * and anything the decoder cannot read is sent as it came: a reference at the
+ * wrong size still beats no reference at all, since without her face every
+ * photo is a stranger.
+ */
+async function atReferenceSize(bytes: ArrayBuffer, mimeType: string): Promise<Blob> {
+  try {
+    const image = await Jimp.read(Buffer.from(bytes));
+    const { width, height } = image.bitmap;
+    if (width <= REFERENCE_MAX && height <= REFERENCE_MAX) {
+      return new Blob([bytes], { type: mimeType });
+    }
+
+    image.scaleToFit({ w: REFERENCE_MAX, h: REFERENCE_MAX });
+    const resized = await image.getBuffer("image/png");
+    const buffer = resized.buffer.slice(
+      resized.byteOffset,
+      resized.byteOffset + resized.byteLength,
+    ) as ArrayBuffer;
+    return new Blob([buffer], { type: "image/png" });
+  } catch {
+    return new Blob([bytes], { type: mimeType });
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -529,11 +529,13 @@ export const DEFAULT_SHARED_NOTES: Record<string, string> = {
 // bubbles, the call screen, settings. It is one of her own photos rather than
 // anything generated, so the face in the avatar is the face in her album — and
 // it is the local thumbnail rather than the original, because an avatar is a
-// small circle and the original is a multi-megabyte PNG.
+// small circle and the original is a multi-megabyte PNG. The close-up is the
+// one picked: in a full-length frame her face is a handful of pixels, and an
+// avatar that does not show her face is not her.
 // `FELICIA_IMAGE_URL` can still override it with a different photo.
 export const FELICIA_AVATAR_URL =
   (((globalThis as unknown as { process?: { env?: Record<string, string | undefined> } }).process?.env?.FELICIA_IMAGE_URL as string | undefined) ||
-    galleryPhoto("portrait-soft-light").thumbUrl);
+    galleryPhoto("golden-hour-close").thumbUrl);
 
 export const FELICIA = {
   name: "Felicia",
