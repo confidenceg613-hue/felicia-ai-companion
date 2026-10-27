@@ -42,6 +42,25 @@ export function friendlyError(error: unknown, fallback: string): string {
   if (/rate.?limit|too many requests|\b429\b/i.test(cleaned)) {
     return "She's a little overloaded right now — give it a few seconds and say it again.";
   }
+  // Cloudflare's API errors tend to be plain but can still be long or noisy, so
+  // most of them get a short, plain sentence instead of the raw response.
+  if (/rejected the key|refused the key|does not carry/i.test(cleaned)) {
+    return fallback;
+  }
+  if (
+    /no balance|empty balance|workers ai|cloudflare/i.test(cleaned)
+  ) {
+    return fallback;
+  }
+  if (/content.?filter|safety.?filter|blocked|flagged/i.test(cleaned)) {
+    return fallback;
+  }
+  if (/decoded an empty image|answered without an image/i.test(cleaned)) {
+    return fallback;
+  }
+  if (/used up your daily free allocation|please upgrade|neurons/i.test(cleaned)) {
+    return fallback;
+  }
   if (!cleaned) return fallback;
   return cleaned.length > 160 ? `${cleaned.slice(0, 157)}…` : cleaned;
 }
