@@ -177,8 +177,11 @@ async function viaCloudflare(
     const detail = payload.errors?.[0]?.message ?? "answered without an image";
     if (flux2.status === 401 || flux2.status === 403) {
       throw new Error(
-        `Cloudflare rejected the API token — re-add CLOUDFLARE_API_TOKEN in ` +
-          `this project's Keys settings. ${detail}`,
+        `Cloudflare refused the key: the token is valid but does not carry ` +
+          `Workers AI — Read and Workers AI — Write on this account. Both are ` +
+          `needed. Add them to the token in the Cloudflare dashboard (and ` +
+          `re-add CLOUDFLARE_API_TOKEN in this project's Keys settings if ` +
+          `rolling the token issued a new value). ${detail}`,
       );
     }
     throw new Error(`Cloudflare FLUX.2 [dev]: ${detail}`);
@@ -186,8 +189,11 @@ async function viaCloudflare(
 
   if (flux2.status === 401 || flux2.status === 403) {
     throw new Error(
-      `Cloudflare rejected the API token — re-add CLOUDFLARE_API_TOKEN in ` +
-        `this project's Keys settings.`,
+      `Cloudflare refused the key: the token is valid but does not carry ` +
+        `Workers AI — Read and Workers AI — Write on this account. Both are ` +
+        `needed. Add them to the token in the Cloudflare dashboard (and ` +
+        `re-add CLOUDFLARE_API_TOKEN in this project's Keys settings if ` +
+        `rolling the token issued a new value).`,
     );
   }
 
