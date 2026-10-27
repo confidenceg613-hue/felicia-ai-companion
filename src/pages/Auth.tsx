@@ -251,19 +251,20 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       console.log("Signed in with anonymous...");
       navigate(redirect);
     } catch (error) {
-
-      // Network blips in same page are retryable; when they clear
-      // the user should be told to try again, not shown the server's raw
-      // banner — the Dashboard already uses the same logic for the same reason.
-      if (isTransientError(error)) {
-        // Retryable transport files; the server didn't answer or the socket
-        // dropped. Retrying the button usually just works.
-        setError("Your device missed the server for a moment — refresh and it'll keep going.");
-      } else {
-        // Session/endpoint mismatch, CORS, 4xx, or a paused deployment — not a
-        // retryable blip, so say what it actually was.
-        setError(describeSignInError(error, "Couldn't start a guest session."));
-      }
+      // Say what the failure actually was. A paused or unreachable backend is
+      // not a transient blip the user can retry their way out of, so the
+      // deployment-paused message from describeSignInError is the right one for
+      // that case, and the transient-message fallback only covers a real network
+      // blip (socket drop / timeout) where pressing the button again usually
+      // just works.
+      setError(
+        describeSignInError(
+          error,
+          isTransientError(error)
+            ? "Your device missed the server for a moment — refresh and it'll keep going."
+            : "Couldn't start a guest session.",
+        ),
+      );
       setIsLoading(false);
     }
   };
@@ -382,7 +383,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                           A guest account is tied to this device: sign out and the
                           conversation is left behind, and a new guest sign-in starts
                           from nothing. Sign in with your email instead and it is kept
-                          permanentl — come back on any device and the whole chat is still
+                          permanently — come back on any device and the whole chat is still
                           there.
                         </p>
                       </div>
