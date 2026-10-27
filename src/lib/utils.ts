@@ -58,7 +58,7 @@ export function friendlyError(error: unknown, fallback: string): string {
   if (/decoded an empty image|answered without an image/i.test(cleaned)) {
     return fallback;
   }
-  if (/used up your daily free allocation|please upgrade|neurons/i.test(cleaned)) {
+  if (/used up your daily free allocation|please upgrade|neurons|workers paid/i.test(cleaned)) {
     return fallback;
   }
   if (!cleaned) return fallback;

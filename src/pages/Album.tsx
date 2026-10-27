@@ -63,7 +63,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
+import { cn, friendlyError } from "@/lib/utils";
 
 function timeLabel(ms: number) {
   return new Date(ms).toLocaleString([], {
@@ -304,9 +304,7 @@ export default function Album() {
       if (remaining > 0) await sleep(remaining);
       if (result.url) await preloadImage(result.url);
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Felicia couldn't send that.",
-      );
+      toast.error(friendlyError(error, "Felicia couldn't send that."));
     } finally {
       setDeveloping(false);
       setHiddenCount(null);
