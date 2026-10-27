@@ -24,11 +24,23 @@ const RELOAD_KEY = "felicia:chunk-reload";
 /**
  * A dynamic import that survives the server moving under it.
  *
- * Two attempts at the same URL cover a request that was cut off mid-restart.
- * If the URL itself is gone, retrying is pointless, so the tab reloads once to
- * pick up the live module graph. The guard is per tab, so a module that is
- * genuinely broken still surfaces its error instead of reload-looping.
+ * The Vite dev server restarts and re-optimises its chunk manifest while a
+ * session is alive. After that, every chunk URL the page already holds is
+ * stale: a lazy import of one fails with "Failed to fetch dynamically imported
+ * module" and the page has no route to render until it is reloaded by hand.
+ *
+ * Retrying the same URL never helps here — the timestamp/hash in it is gone
+ * and the dev server will not serve it again. So on the first failure of that
+ * specific kind we reload straight away, while a genuinely broken module still
+ * throws after one try so a real bug is not hidden behind a reload loop.
+ *
+ * The reload guard is per tab, so a module that is genuinely broken once still
+ * surfaces its error instead of reload-looping after the page has already
+ * reloaded itself once.
  */
+const DYNAMIC_IMPORT_ERROR =
+  "Failed to fetch dynamically imported module";
+
 function withRetry<T>(load: () => Promise<T>): () => Promise<T> {
   return async () => {
     for (let attempt = 0; ; attempt += 1) {
@@ -42,10 +54,36 @@ function withRetry<T>(load: () => Promise<T>): () => Promise<T> {
         }
         return module;
       } catch (error) {
+        const message =
+          error instanceof Error ? error.message : String(error ?? "");
+
+        // A stale chunk URL from a dev-server restart. Retrying is pointless and
+        // only costs a couple of seconds, so reload immediately on the first
+        // failure of this kind rather than waiting through three attempts.
+        if (
+          attempt === 0 &&
+          message.includes(DYNAMIC_IMPORT_ERROR) &&
+          typeof window !== "undefined"
+        ) {
+          let alreadyReloaded = false;
+          try {
+            alreadyReloaded = sessionStorage.getItem(RELOAD_KEY) === "1";
+            if (!alreadyReloaded)
+              sessionStorage.setItem(RELOAD_KEY, "1");
+          } catch {
+            // Storage blocked: fall through and report the error.
+          }
+          if (!alreadyReloaded) window.location.reload();
+          throw error;
+        }
+
         if (attempt < 2) {
-          await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+          await new Promise((resolve) =>
+            setTimeout(resolve, 250 * (attempt + 1)),
+          );
           continue;
         }
+
         let alreadyReloaded = false;
         try {
           alreadyReloaded = sessionStorage.getItem(RELOAD_KEY) === "1";
